@@ -1,41 +1,54 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
-# dependencies
+# === Dependencias / gestores ===
 node_modules/
+.pnpm-store/
+pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Expo
+# === Expo / React Native ===
 .expo/
+.expo-shared/
+.expo-web/
 dist/
 web-build/
 expo-env.d.ts
 
-# Native
+# === Metro bundler cache ===
+.metro-cache/
+.metro-health-check*
+
+# === Nativo generado (workflow gestionado) ===
+android/
+ios/
 .kotlin/
-*.orig.*
+
+# === Claves / credenciales ===
+*.keystore
 *.jks
 *.p8
 *.p12
 *.key
 *.mobileprovision
-
-# Metro
-.metro-health-check*
-
-# debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
-
-# macOS
-.DS_Store
 *.pem
 
-# local env files
+# === Variables de entorno ===
+.env
+.env.*
+!.env.example      # dejaremos un ejemplo versionado
+# (mantengo tu regla específica)
 .env*.local
 
-# typescript
+# === TypeScript ===
 *.tsbuildinfo
 
-# generated native folders
-/ios
-/android
+# === SO / editores ===
+.DS_Store
+Thumbs.db
+.vscode/
+
+# === Reportes / temporales ===
+coverage/
+*.log
+*.tmp
+

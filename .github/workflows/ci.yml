@@ -12,21 +12,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Instala Node y prepara el caché de pnpm
+      # Instala pnpm directamente
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10.17.1
+          run_install: false
+
+      # Instala Node con caché de pnpm
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'pnpm'
+          node-version: 22
+          cache: pnpm
 
-      # Activa Corepack y prepara pnpm (misma versión que usás localmente)
-      - name: Enable Corepack & install pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@10.17.1 --activate
-          pnpm -v
-
-      # Instala dependencias usando el lockfile
+      # Instala dependencias
       - name: Install deps
         run: pnpm install --frozen-lockfile
 

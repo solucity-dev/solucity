@@ -9,56 +9,27 @@ on:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    env:
-      CI: true
-      # Más verbosidad de Actions (útil para diagnosticar)
-      ACTIONS_RUNNER_DEBUG: true
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'pnpm'
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
         with:
-          version: 10.17.1
+          version: 10
           run_install: false
 
-      - name: Print tool versions
-        run: |
-          node -v
-          corepack --version || true
-          pnpm -v
+      - name: Install dependencies
+        run: pnpm install
 
-      - name: Show workspace and config files
-        run: |
-          echo "---- .npmrc ----"
-          [ -f .npmrc ] && cat .npmrc || echo "(no .npmrc)"
-          echo "---- package.json (name & scripts) ----"
-          jq '{name, scripts}' package.json
-          echo "---- pnpm config ----"
-          pnpm config list
-          echo "---- tree top-level ----"
-          ls -la
-
-      - name: Restore pnpm store cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.pnpm-store
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-
-      - name: Install deps
-        run: pnpm install --no-frozen-lockfile --reporter=append-only
-
-      - name: Type check
+      - name: TypeScript type check
         run: pnpm typecheck
 
       - name: Lint

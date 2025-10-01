@@ -2,34 +2,47 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
-  build:
+  quality:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
           cache: 'pnpm'
 
-      - name: Install pnpm
-        run: corepack enable
+      # Activa Corepack y PREPARA pnpm explícitamente (evita "pnpm: command not found")
+      - name: Enable Corepack & prepare pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+          pnpm --version
 
-      - name: Install dependencies
-        run: pnpm install
+      # (Opcional) cache de la store de pnpm para acelerar builds
+      - name: Restore pnpm store cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
-      - name: TypeScript type check
+      - name: Install deps
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Type check
         run: pnpm typecheck
 
-      - name: ESLint check
+      - name: Lint
         run: pnpm lint
 
       - name: Prettier check

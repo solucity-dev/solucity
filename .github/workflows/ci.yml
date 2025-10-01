@@ -2,34 +2,35 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
 
 jobs:
   quality:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      # Instala Node y prepara el caché de pnpm
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '22'
           cache: 'pnpm'
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 10
-          run_install: false
+      # Activa Corepack y prepara pnpm (misma versión que usás localmente)
+      - name: Enable Corepack & install pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.17.1 --activate
+          pnpm -v
 
-      - name: Install dependencies
-        run: pnpm install
+      # Instala dependencias usando el lockfile
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
 
-      - name: TypeScript type check
+      - name: Typecheck
         run: pnpm typecheck
 
       - name: Lint

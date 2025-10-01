@@ -6,6 +6,7 @@ on:
 
 jobs:
   quality:
+    name: Quality checks
     runs-on: ubuntu-latest
 
     steps:

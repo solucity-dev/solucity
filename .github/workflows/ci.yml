@@ -4,6 +4,18 @@ on:
   push:
   pull_request:
 
+# 🔒 Permisos mínimos para todo el workflow (recomendado por CodeQL)
+permissions:
+  contents: read
+
+# 🧠 Evita jobs duplicados si se empujan commits seguidos al mismo PR/rama
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: true
+
 jobs:
   quality:
     name: Quality checks

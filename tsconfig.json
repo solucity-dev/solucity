@@ -1,6 +1,21 @@
 {
-  "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
-  }
+    "target": "ES2020",
+    "lib": ["ES2020"], // 👈 sin "DOM" para evitar choques con RN
+    "jsx": "react-jsx", // 👈 habilita JSX en .tsx
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "allowJs": false,
+    "types": ["react", "react-native"], // 👈 sin "node" aquí
+    "skipLibCheck": true, // 👈 evita conflictos de tipos en dependencias
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "noErrorTruncation": true
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules", "babel.config.js", "metro.config.js", "jest.config.js"]
 }

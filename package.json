@@ -3,10 +3,11 @@
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web",
+    "start": "cross-env APP_ENV=development expo start",
+    "start:prod": "cross-env APP_ENV=production expo start",
+    "android": "cross-env APP_ENV=development expo start --android",
+    "ios": "cross-env APP_ENV=development expo start --ios",
+    "web": "cross-env APP_ENV=development expo start --web",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier . --write",
@@ -15,7 +16,7 @@
     "lint-staged": "lint-staged"
   },
   "dependencies": {
-    "expo": "~54.0.10",
+    "expo": "~54.0.12",
     "expo-status-bar": "~3.0.8",
     "react": "19.1.0",
     "react-native": "0.81.4"
@@ -26,6 +27,8 @@
     "@types/react": "~19.1.0",
     "@typescript-eslint/eslint-plugin": "^8.45.0",
     "@typescript-eslint/parser": "^8.45.0",
+    "cross-env": "^10.1.0",
+    "dotenv": "^17.2.3",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-config-universe": "^15.0.3",

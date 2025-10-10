@@ -13,6 +13,7 @@ concurrency:
 
 env:
   CI: true
+  PNPM_ALLOW_RUN_SCRIPTS: '@prisma/client' # 🔹 Permite ejecutar scripts de Prisma en CI
 
 jobs:
   quality:
@@ -38,7 +39,13 @@ jobs:
       - name: Install workspace deps
         run: pnpm install --frozen-lockfile
 
-      # ---- Mobile (@solucity/mobile)
+      # 👇 Prisma necesita un generate para el typecheck
+      - name: Backend - Prisma generate
+        run: pnpm --filter @solucity/backend exec prisma generate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/solucity?schema=public
+
+      # --- Mobile ---
       - name: Mobile - Typecheck
         run: pnpm --filter @solucity/mobile typecheck
 
@@ -46,10 +53,9 @@ jobs:
         run: pnpm --filter @solucity/mobile lint
 
       - name: Mobile - Prettier check
-        working-directory: apps/mobile
-        run: pnpm format:check
+        run: pnpm --filter @solucity/mobile format:check
 
-      # ---- Backend (@solucity/backend)
+      # --- Backend ---
       - name: Backend - Typecheck
         run: pnpm --filter @solucity/backend typecheck
 
@@ -57,5 +63,4 @@ jobs:
         run: pnpm --filter @solucity/backend lint
 
       - name: Backend - Prettier check
-        working-directory: apps/backend
-        run: pnpm format:check
+        run: pnpm --filter @solucity/backend format:check

@@ -2,39 +2,11 @@ name: CI
 
 on:
   push:
-    paths-ignore:
-      - '**/*.md'
-      - '**/*.MD'
-      - '**/*.png'
-      - '**/*.jpg'
-      - '**/*.jpeg'
-      - '**/*.svg'
-      - '**/*.gif'
-      - '**/*.ico'
-      - '**/*.webp'
-      - '**/*.mp4'
-      - '**/*.mov'
-      - '**/*.pdf'
   pull_request:
-    paths-ignore:
-      - '**/*.md'
-      - '**/*.MD'
-      - '**/*.png'
-      - '**/*.jpg'
-      - '**/*.jpeg'
-      - '**/*.svg'
-      - '**/*.gif'
-      - '**/*.ico'
-      - '**/*.webp'
-      - '**/*.mp4'
-      - '**/*.mov'
-      - '**/*.pdf'
 
-# 🔒 Permisos mínimos
 permissions:
   contents: read
 
-# 🧠 Cancelar runs anteriores
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -44,7 +16,7 @@ env:
 
 jobs:
   quality:
-    name: Quality checks
+    name: Quality checks (mobile + backend)
     runs-on: ubuntu-latest
 
     steps:
@@ -63,16 +35,27 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Install deps (workspace)
+      - name: Install workspace deps
         run: pnpm install --frozen-lockfile
 
-      # Si tus scripts de root ya delegan a @solucity/mobile, puedes llamar los de root.
-      # O explícitamente filtrar como abajo. Ambas opciones funcionan.
-      - name: Typecheck (mobile)
+      # ---- Mobile (@solucity/mobile)
+      - name: Mobile - Typecheck
         run: pnpm --filter @solucity/mobile typecheck
 
-      - name: Lint (mobile)
+      - name: Mobile - Lint
         run: pnpm --filter @solucity/mobile lint
 
-      - name: Prettier check (mobile)
-        run: pnpm --filter @solucity/mobile format:check
+      - name: Mobile - Prettier check
+        working-directory: apps/mobile
+        run: pnpm format:check
+
+      # ---- Backend (@solucity/backend)
+      - name: Backend - Typecheck
+        run: pnpm --filter @solucity/backend typecheck
+
+      - name: Backend - Lint
+        run: pnpm --filter @solucity/backend lint
+
+      - name: Backend - Prettier check
+        working-directory: apps/backend
+        run: pnpm format:check

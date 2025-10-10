@@ -2,13 +2,39 @@ name: CI
 
 on:
   push:
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.MD'
+      - '**/*.png'
+      - '**/*.jpg'
+      - '**/*.jpeg'
+      - '**/*.svg'
+      - '**/*.gif'
+      - '**/*.ico'
+      - '**/*.webp'
+      - '**/*.mp4'
+      - '**/*.mov'
+      - '**/*.pdf'
   pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.MD'
+      - '**/*.png'
+      - '**/*.jpg'
+      - '**/*.jpeg'
+      - '**/*.svg'
+      - '**/*.gif'
+      - '**/*.ico'
+      - '**/*.webp'
+      - '**/*.mp4'
+      - '**/*.mov'
+      - '**/*.pdf'
 
-# 🔒 Permisos mínimos para todo el workflow (recomendado por CodeQL)
+# 🔒 Permisos mínimos
 permissions:
   contents: read
 
-# 🧠 Evita jobs duplicados si se empujan commits seguidos al mismo PR/rama
+# 🧠 Cancelar runs anteriores
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -25,29 +51,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Instala pnpm directamente
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
         with:
           version: 10.17.1
           run_install: false
 
-      # Instala Node con caché de pnpm
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
 
-      # Instala dependencias
-      - name: Install deps
+      - name: Install deps (workspace)
         run: pnpm install --frozen-lockfile
 
-      - name: Typecheck
-        run: pnpm typecheck
+      # Si tus scripts de root ya delegan a @solucity/mobile, puedes llamar los de root.
+      # O explícitamente filtrar como abajo. Ambas opciones funcionan.
+      - name: Typecheck (mobile)
+        run: pnpm --filter @solucity/mobile typecheck
 
-      - name: Lint
-        run: pnpm lint
+      - name: Lint (mobile)
+        run: pnpm --filter @solucity/mobile lint
 
-      - name: Prettier check
-        run: pnpm format:check
+      - name: Prettier check (mobile)
+        run: pnpm --filter @solucity/mobile format:check

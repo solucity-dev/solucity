@@ -12,4 +12,15 @@ module.exports = {
   parserOptions: { ecmaVersion: 2021, sourceType: 'module' },
   settings: { react: { version: 'detect' } },
   ignorePatterns: ['node_modules/', 'dist/', 'web-build/', '.expo/'],
+
+  overrides: [
+    {
+      files: ['apps/mobile/metro.config.js'],
+      env: { node: true },
+      rules: {
+        '@typescript-eslint/no-require-imports': 'off',
+        'no-undef': 'off',
+      },
+    },
+  ],
 }

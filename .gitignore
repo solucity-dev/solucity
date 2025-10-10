@@ -35,9 +35,11 @@ ios/
 # === Variables de entorno ===
 .env
 .env.*
-!.env.example      # dejaremos un ejemplo versionado
-# (mantengo tu regla específica)
+apps/**/.env
+apps/**/.env.*
+!apps/**/.env.example
 .env*.local
+
 
 # === TypeScript ===
 *.tsbuildinfo
@@ -51,4 +53,10 @@ Thumbs.db
 coverage/
 *.log
 *.tmp
+
+# === Monorepo específico ===
+# Ignorar salidas de apps o libs si las generamos
+apps/*/dist
+packages/*/dist
+
 

@@ -1,0 +1,26 @@
+{
+  "name": "@solucity/mobile",
+  "private": true,
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "start": "cross-env APP_ENV=development expo start",
+    "start:prod": "cross-env APP_ENV=production expo start",
+    "android": "cross-env APP_ENV=development expo start --android",
+    "ios": "cross-env APP_ENV=development expo start --ios",
+    "web": "cross-env APP_ENV=development expo start --web",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check"
+  },
+  "dependencies": {
+    "expo": "~54.0.12",
+    "expo-status-bar": "~3.0.8",
+    "react": "19.1.0",
+    "react-native": "0.81.4"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.0"
+  }
+}

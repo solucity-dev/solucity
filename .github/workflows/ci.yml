@@ -4,50 +4,63 @@ on:
   push:
   pull_request:
 
-# 🔒 Permisos mínimos para todo el workflow (recomendado por CodeQL)
 permissions:
   contents: read
 
-# 🧠 Evita jobs duplicados si se empujan commits seguidos al mismo PR/rama
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   CI: true
+  PNPM_ALLOW_RUN_SCRIPTS: '@prisma/client' # 🔹 Permite ejecutar scripts de Prisma en CI
 
 jobs:
   quality:
-    name: Quality checks
+    name: Quality checks (mobile + backend)
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Instala pnpm directamente
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
         with:
           version: 10.17.1
           run_install: false
 
-      # Instala Node con caché de pnpm
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
 
-      # Instala dependencias
-      - name: Install deps
+      - name: Install workspace deps
         run: pnpm install --frozen-lockfile
 
-      - name: Typecheck
-        run: pnpm typecheck
+      # 👇 Prisma necesita un generate para el typecheck
+      - name: Backend - Prisma generate
+        run: pnpm --filter @solucity/backend exec prisma generate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/solucity?schema=public
 
-      - name: Lint
-        run: pnpm lint
+      # --- Mobile ---
+      - name: Mobile - Typecheck
+        run: pnpm --filter @solucity/mobile typecheck
 
-      - name: Prettier check
-        run: pnpm format:check
+      - name: Mobile - Lint
+        run: pnpm --filter @solucity/mobile lint
+
+      - name: Mobile - Prettier check
+        run: pnpm --filter @solucity/mobile format:check
+
+      # --- Backend ---
+      - name: Backend - Typecheck
+        run: pnpm --filter @solucity/backend typecheck
+
+      - name: Backend - Lint
+        run: pnpm --filter @solucity/backend lint
+
+      - name: Backend - Prettier check
+        run: pnpm --filter @solucity/backend format:check

@@ -1,0 +1,12 @@
+# Por defecto, todo el repo
+
+- @solucity
+
+# Dueños por app
+
+apps/mobile/ @solucity
+apps/backend/ @solucity
+
+# CI / workflows
+
+.github/workflows/ @solucity

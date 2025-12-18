@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "930842523298",
+    "project_id": "com-solucity-app",
+    "storage_bucket": "com-solucity-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:930842523298:android:57eb6a1f497129730549fb",
+        "android_client_info": {
+          "package_name": "com.solucity.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDy24dhsAFgrHHeuO_ff6y8tRzXYwpKr2o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

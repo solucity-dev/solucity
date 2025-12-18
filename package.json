@@ -11,7 +11,7 @@
     "start:prod": "pnpm --filter @solucity/mobile start:prod",
     "android": "pnpm --filter @solucity/mobile android",
     "ios": "pnpm --filter @solucity/mobile ios",
-    "web": "pnpm --filter @solucity/mobile web",
+    "web": "pnpm --filter @solucity/frontend dev",
     "typecheck": "pnpm --filter @solucity/mobile typecheck",
     "lint": "pnpm --filter @solucity/mobile lint",
     "format": "pnpm --filter @solucity/mobile format",
@@ -36,5 +36,14 @@
     "lint-staged": "^16.2.3",
     "prettier": "^3.6.2",
     "typescript": "~5.9.2"
-  }
+  },
+  "pnpm": {
+    "overrides": {
+      "@solucity/frontend>react": "18.3.1",
+      "@solucity/frontend>react-dom": "18.3.1",
+      "@solucity/frontend>@types/react": "18.3.8",
+      "@solucity/frontend>@types/react-dom": "18.3.0"
+    }
+  },
+  "packageManager": "pnpm@10.20.0+sha512.cf9998222162dd85864d0a8102e7892e7ba4ceadebbf5a31f9c2fce48dfce317a9c53b9f6464d1ef9042cba2e02ae02a9f7c143a2b438cd93c91840f0192b9dd"
 }

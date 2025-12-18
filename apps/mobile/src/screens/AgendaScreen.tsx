@@ -1,0 +1,277 @@
+// apps/mobile/src/screens/AgendaScreen.tsx
+import { useNavigation, useRoute } from '@react-navigation/native'
+import dayjs from 'dayjs'
+import 'dayjs/locale/es'
+import relativeTime from 'dayjs/plugin/relativeTime'
+import { LinearGradient } from 'expo-linear-gradient'
+import { useEffect, useMemo, useState } from 'react'
+import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useAuth } from '../auth/AuthProvider'
+import { useOrdersList } from '../hooks/useOrders'
+import type { AgendaSection } from '../types'
+
+dayjs.locale('es')
+dayjs.extend(relativeTime)
+
+type TabKey = 'pending' | 'confirmed' | 'finished' | 'cancelled'
+
+const TABS: Array<{ key: TabKey; label: string }> = [
+  { key: 'pending', label: 'Pendientes' },
+  { key: 'confirmed', label: 'Confirmados' },
+  { key: 'finished', label: 'Finalizados' },
+  { key: 'cancelled', label: 'Cancelados' },
+]
+
+// ✅ Mapea estados backend → tabs UI (solo para default navigation)
+function mapSectionToTab(section?: string): TabKey {
+  switch (section) {
+    case 'PENDING':
+      return 'pending'
+
+    case 'ASSIGNED':
+    case 'IN_PROGRESS':
+    case 'PAUSED':
+    case 'CONFIRMED_BY_CLIENT':
+    case 'IN_CLIENT_REVIEW':
+      return 'confirmed'
+
+    case 'FINISHED_BY_SPECIALIST':
+    case 'CLOSED':
+      return 'finished'
+
+    case 'CANCELLED_BY_CUSTOMER':
+    case 'CANCELLED_BY_SPECIALIST':
+    case 'CANCELLED_AUTO':
+      return 'cancelled'
+
+    default:
+      return 'pending'
+  }
+}
+
+// ✅ Lista dura de estados permitidos por tab (blindaje contra mezclas/cache)
+const TAB_ALLOWED_STATUSES: Record<TabKey, string[]> = {
+  pending: ['PENDING'],
+  confirmed: ['ASSIGNED', 'IN_PROGRESS', 'PAUSED', 'CONFIRMED_BY_CLIENT', 'IN_CLIENT_REVIEW'],
+  finished: ['FINISHED_BY_SPECIALIST', 'CLOSED'],
+  cancelled: ['CANCELLED_BY_CUSTOMER', 'CANCELLED_BY_SPECIALIST', 'CANCELLED_AUTO'],
+}
+
+export default function AgendaScreen() {
+  const insets = useSafeAreaInsets()
+  const navigation = useNavigation<any>()
+  const route = useRoute<any>()
+  const { user } = useAuth()
+
+// ✅ role REAL para API (NO depende de mode)
+const role: 'customer' | 'specialist' =
+  user?.role === 'SPECIALIST' ? 'specialist' : 'customer'
+
+
+  const incomingSection = route.params?.initialSection as AgendaSection | undefined
+  const needsRefresh = route.params?.refresh as boolean | undefined
+
+  const [tab, setTab] = useState<TabKey>(incomingSection ? mapSectionToTab(incomingSection) : 'pending')
+
+  const isClosed = tab === 'finished' || tab === 'cancelled'
+
+  const { data, isLoading, isFetching, refetch } = useOrdersList(
+    { role, status: isClosed ? 'closed' : 'open' },
+    tab
+  )
+
+  const list = useMemo(() => data ?? [], [data])
+
+  // ✅ Filtro duro por whitelist
+  const filteredList = useMemo(() => {
+    const allowed = TAB_ALLOWED_STATUSES[tab]
+    return list.filter((o: any) => {
+      const s = String(o.status ?? '').trim().toUpperCase()
+      return allowed.includes(s)
+    })
+  }, [list, tab])
+
+  // ✅ si nos mandan section nuevo, cambiamos al tab correcto
+  useEffect(() => {
+    if (incomingSection) {
+      const mapped = mapSectionToTab(incomingSection)
+      if (mapped !== tab) setTab(mapped)
+    }
+  }, [incomingSection])
+
+  // ✅ refetch al cambiar de tab (mata cache rara)
+  useEffect(() => {
+    refetch()
+  }, [tab, refetch])
+
+  // ✅ si vuelvo de OrderDetail con refresh
+  useEffect(() => {
+    if (needsRefresh) refetch()
+  }, [needsRefresh, refetch])
+
+  const getCounterpartName = (item: any) => {
+    if (role === 'specialist') return item.customer?.name ?? null
+    return item.specialist?.name ?? null
+  }
+
+  const getRubroText = (item: any) => {
+  // 1) si el hook ya lo trae directo
+  const direct =
+    item.categoryName ||
+    item.rubro ||
+    item.serviceCategoryName
+
+  if (typeof direct === 'string' && direct.trim()) return direct.trim()
+
+  // 2) si viene dentro de service
+  const fromService =
+    item.service?.categoryName ||
+    item.service?.category?.name ||
+    item.service?.category?.title ||
+    item.service?.categoryLabel
+
+  if (typeof fromService === 'string' && fromService.trim()) return fromService.trim()
+
+  // 3) último fallback (no ideal, pero evita vacío)
+  return item.service?.name ?? 'Sin rubro'
+}
+
+
+  const getWhenText = (item: any) => {
+    // 1) agendado
+    if (item.scheduledAt) return `Agendado: ${dayjs(item.scheduledAt).format('DD MMM, HH:mm')}`
+
+    // 2) urgente (si no hay scheduled)
+    if (item.isUrgent) return 'Urgente'
+
+    // 3) preferencia (si existe)
+    if (item.preferredAt) return `Preferencia: ${dayjs(item.preferredAt).format('DD MMM, HH:mm')}`
+
+    return 'Sin fecha definida'
+  }
+
+  const getCreatedAgo = (item: any) => {
+    if (!item.createdAt) return null
+    return dayjs(item.createdAt).fromNow()
+  }
+
+  return (
+    <LinearGradient colors={['#004d5d', '#003a47']} style={{ flex: 1 }}>
+      <View style={{ paddingTop: insets.top + 8, paddingBottom: 8 }}>
+        <FlatList
+          data={TABS}
+          keyExtractor={(i) => i.key}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 12, gap: 8 }}
+          renderItem={({ item }) => {
+            const active = item.key === tab
+            return (
+              <Pressable
+                onPress={() => setTab(item.key)}
+                style={{
+                  paddingHorizontal: 14,
+                  paddingVertical: 8,
+                  borderRadius: 18,
+                  backgroundColor: active ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.18)',
+                }}
+              >
+                <Text
+                  style={{
+                    color: active ? '#064e5b' : '#e8f5f7',
+                    fontWeight: active ? '700' : '500',
+                  }}
+                >
+                  {item.label}
+                </Text>
+              </Pressable>
+            )
+          }}
+        />
+      </View>
+
+      <View style={{ flex: 1, paddingHorizontal: 12, paddingBottom: 12 }}>
+        {(isLoading || isFetching) && (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <ActivityIndicator />
+          </View>
+        )}
+
+        {!isLoading && !isFetching && filteredList.length === 0 && (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: 'white', opacity: 0.9, fontWeight: '600' }}>
+              No hay órdenes en esta sección
+            </Text>
+            <Pressable
+              onPress={() => refetch()}
+              style={{
+                marginTop: 10,
+                paddingHorizontal: 14,
+                paddingVertical: 8,
+                borderRadius: 10,
+                backgroundColor: 'rgba(255,255,255,0.2)',
+              }}
+            >
+              <Text style={{ color: 'white', fontWeight: '600' }}>Recargar</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {!isLoading && !isFetching && filteredList.length > 0 && (
+          <FlatList
+            data={filteredList}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={{ paddingBottom: 24, gap: 10 }}
+            renderItem={({ item }) => {
+              const counterpartName = getCounterpartName(item)
+              const title = counterpartName ?? item.service?.name ?? 'Orden'
+              const rubro = getRubroText(item)
+
+              const createdAgo = getCreatedAgo(item)
+              const whenText = getWhenText(item)
+
+              // Línea final: "hace X • Agendado: ..."
+              const footerLine = createdAgo ? `${createdAgo} • ${whenText}` : whenText
+
+              return (
+                <Pressable
+                  onPress={() =>
+                    navigation.navigate('OrderDetail', {
+                      id: item.id,
+                      role,
+                      from: 'agenda',
+                    })
+                  }
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.9)',
+                    borderRadius: 14,
+                    padding: 12,
+                  }}
+                >
+                  {/* 1) Nombre contraparte */}
+                  <Text style={{ color: '#0b3d45', fontWeight: '700', marginBottom: 4 }}>
+                    {title}
+                  </Text>
+
+                  {/* 2) Rubro */}
+                  <Text style={{ color: '#0b3d45', opacity: 0.8 }}>{rubro}</Text>
+
+                  <View style={{ height: 6 }} />
+
+                  {/* 3) Hace cuánto + Agendado/Urgente */}
+                  <Text style={{ color: '#0b3d45', opacity: 0.7 }}>{footerLine}</Text>
+                </Pressable>
+              )
+            }}
+            onRefresh={refetch}
+            refreshing={isFetching}
+          />
+        )}
+      </View>
+    </LinearGradient>
+  )
+}
+
+
+

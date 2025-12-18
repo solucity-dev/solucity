@@ -59,4 +59,6 @@ coverage/
 apps/*/dist
 packages/*/dist
 
-
+# Firebase / Expo secrets
+keys/
+firebase-admin*.json

@@ -1,0 +1,61 @@
+import fetch from 'node-fetch'
+
+export type GeocodeResult = {
+  formatted: string
+  lat: number
+  lng: number
+  placeId?: string | null
+}
+
+const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search'
+
+// Acá fijamos ciudad base para el MVP
+const DEFAULT_CITY_CONTEXT = 'Río Cuarto, Córdoba, Argentina'
+
+export async function geocodeAddress(rawAddress: string): Promise<GeocodeResult | null> {
+  const q = rawAddress.trim()
+  if (!q) return null
+
+  // ✅ si el usuario no escribió ciudad/provincia, se la agregamos
+  const query =
+    /rio\s*cuarto|c[oó]rdoba|argentina/i.test(q)
+      ? q
+      : `${q}, ${DEFAULT_CITY_CONTEXT}`
+
+  const url =
+    `${NOMINATIM_URL}?format=jsonv2&limit=1&addressdetails=1&q=${encodeURIComponent(query)}`
+
+  const r = await fetch(url, {
+    headers: {
+      // Nominatim exige un User-Agent identificable
+      'User-Agent': 'solucity-backend/1.0 (contacto@solucity.app)',
+      'Accept-Language': 'es',
+    },
+  })
+
+  if (!r.ok) return null
+  const data: any[] = await r.json()
+  const hit = data?.[0]
+  if (!hit) return null
+
+  // ✅ filtro extra: solo aceptamos resultados en Río Cuarto
+  const city =
+    hit.address?.city ||
+    hit.address?.town ||
+    hit.address?.municipality ||
+    hit.address?.county ||
+    ''
+
+  if (!/rio\s*cuarto/i.test(String(city))) {
+    return null
+  }
+
+  return {
+    formatted: hit.display_name,
+    lat: Number(hit.lat),
+    lng: Number(hit.lon),
+    placeId: hit.place_id ? String(hit.place_id) : null,
+  }
+}
+
+

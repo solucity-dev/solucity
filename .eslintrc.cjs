@@ -8,6 +8,8 @@ module.exports = {
     'plugin:@typescript-eslint/recommended',
     'plugin:react-hooks/recommended',
     'prettier',
+    'some-base-configs',
+    'plugin:prettier/recommended',
   ],
   parserOptions: { ecmaVersion: 2021, sourceType: 'module' },
   settings: { react: { version: 'detect' } },

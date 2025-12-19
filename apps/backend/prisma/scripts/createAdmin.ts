@@ -1,44 +1,46 @@
-import { PrismaClient } from '@prisma/client'
+// apps/backend/prisma/scripts/createAdmin.ts
 import bcrypt from 'bcryptjs'
 import 'dotenv/config'
-
-const prisma = new PrismaClient()
+import { signToken } from '../../src/lib/jwt'
+import { prisma } from '../../src/lib/prisma'
 
 async function main() {
   const email = process.env.ADMIN_EMAIL
-  const pass = process.env.ADMIN_PASSWORD
+  const password = process.env.ADMIN_PASSWORD
+  if (!email || !password) throw new Error('Faltan ADMIN_EMAIL o ADMIN_PASSWORD en el .env')
 
-  if (!email || !pass) {
-    throw new Error('Set ADMIN_EMAIL and ADMIN_PASSWORD in .env')
-  }
+  const passwordHash = await bcrypt.hash(password, 10)
 
-  const exists = await prisma.user.findUnique({ where: { email } })
-  if (exists) {
-    console.log('Admin already exists:', exists.email)
-    return
-  }
-
-  const passwordHash = await bcrypt.hash(pass, 10)
-
-  const admin = await prisma.user.create({
-    data: {
+  const user = await prisma.user.upsert({
+    where: { email },
+    update: {
+      role: 'ADMIN',
+      status: 'ACTIVE',
+      passwordHash, // <- para que también actualice la clave si ya existía
+    },
+    create: {
       email,
-      passwordHash,
       role: 'ADMIN',
       status: 'ACTIVE',
       name: 'Admin',
       surname: 'Solucity',
+      passwordHash, // <- requerido
     },
+    select: { id: true, email: true, role: true },
   })
 
-  console.log('Admin created:', admin.email, admin.id)
+  const token = signToken({ sub: user.id, role: user.role })
+
+  console.log('✅ Admin listo:', user.email)
+  console.log('🔐 JWT (para probar admin):')
+  console.log(token)
 }
 
 main()
   .catch((e) => {
-    console.error(e)
+    console.error('❌', e)
     process.exit(1)
   })
-  .finally(async () => {
-    await prisma.$disconnect()
-  })
+  .finally(async () => prisma.$disconnect())
+
+

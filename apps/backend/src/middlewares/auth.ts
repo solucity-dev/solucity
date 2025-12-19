@@ -1,3 +1,4 @@
+// apps/backend/src/middlewares/auth.ts
 import { type NextFunction, type Request, type Response } from 'express'
 
 import { verifyToken } from '../lib/jwt'

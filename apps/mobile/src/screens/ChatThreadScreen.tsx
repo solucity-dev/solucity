@@ -1,16 +1,9 @@
 // apps/mobile/src/screens/ChatThreadScreen.tsx
-import { useChat } from '@/hooks/useChat'
-import type { ChatMessage, ChatStackParamList } from '@/types/chat'
-import { Ionicons } from '@expo/vector-icons'
-import {
-  RouteProp,
-  useFocusEffect,
-  useNavigation,
-  useRoute,
-} from '@react-navigation/native'
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { LinearGradient } from 'expo-linear-gradient'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Ionicons } from '@expo/vector-icons';
+import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
@@ -21,111 +14,103 @@ import {
   Text,
   TextInput,
   View,
-} from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-type RouteT = RouteProp<ChatStackParamList, 'ChatThread'>
-type Nav = NativeStackNavigationProp<ChatStackParamList, 'ChatThread'>
+import { useChat } from '@/hooks/useChat';
+import type { ChatMessage, ChatStackParamList } from '@/types/chat';
+
+type RouteT = RouteProp<ChatStackParamList, 'ChatThread'>;
+type Nav = NativeStackNavigationProp<ChatStackParamList, 'ChatThread'>;
 
 export default function ChatThreadScreen() {
-  const insets = useSafeAreaInsets()
-  const { params } = useRoute<RouteT>()
-  const nav = useNavigation<Nav>()
+  const insets = useSafeAreaInsets();
+  const { params } = useRoute<RouteT>();
+  const nav = useNavigation<Nav>();
 
-  const [text, setText] = useState('')
+  const [text, setText] = useState('');
 
-  const {
-    messages,
-    messagesQuery,
-    sendMessage,
-    sending,
-  } = useChat({
+  const { messages, messagesQuery, sendMessage, sending } = useChat({
     orderId: params.orderId,
     threadId: params.threadId,
-  } as any)
+  } as any);
 
-  const flatListRef = useRef<FlatList<ChatMessage> | null>(null)
+  const flatListRef = useRef<FlatList<ChatMessage> | null>(null);
 
   const handleSend = async () => {
-    const trimmed = text.trim()
-    if (!trimmed) return
-    setText('')
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setText('');
     try {
-      await sendMessage(trimmed)
+      await sendMessage(trimmed);
     } catch (e) {
-      console.warn('Error al enviar mensaje', e)
-      setText(trimmed)
+      console.warn('Error al enviar mensaje', e);
+      setText(trimmed);
     }
-  }
+  };
 
-  const title = params.title || 'Chat'
-  const hasMessages = (messages ?? []).length > 0
+  const title = params.title || 'Chat';
+  const hasMessages = (messages ?? []).length > 0;
 
   // 👉 función centralizada para "volver al listado de chats"
   const goBackToChatList = useCallback(() => {
-    const parent = (nav as any).getParent?.() // Tabs
+    const parent = (nav as any).getParent?.(); // Tabs
 
     if (parent?.navigate) {
       parent.navigate('Chat', {
         screen: 'ChatList',
-      })
-      return true
+      });
+      return true;
     }
 
     if (nav.canGoBack()) {
-      nav.goBack()
-      return true
+      nav.goBack();
+      return true;
     }
 
-    return false
-  }, [nav])
+    return false;
+  }, [nav]);
 
   // 👉 ir al detalle del pedido asociado (si hay orderId)
   const handleGoToOrderDetail = useCallback(() => {
-    if (!params.orderId) return
+    if (!params.orderId) return;
 
-    const parent = (nav as any).getParent?.() // Tabs
+    const parent = (nav as any).getParent?.(); // Tabs
 
     if (parent?.navigate) {
       parent.navigate('Agenda', {
         screen: 'OrderDetail',
         params: { id: params.orderId },
-      })
-      return
+      });
+      return;
     }
 
     // fallback ultra defensivo (no debería usarse casi nunca)
-    ;(nav as any).navigate('Agenda', {
+    (nav as any).navigate('Agenda', {
       screen: 'OrderDetail',
       params: { id: params.orderId },
-    })
-  }, [nav, params.orderId])
+    });
+  }, [nav, params.orderId]);
 
   // Autoscroll al final cuando hay mensajes nuevos
   useEffect(() => {
-    if (!hasMessages) return
-    flatListRef.current?.scrollToEnd({ animated: true })
-  }, [hasMessages, messages.length])
+    if (!hasMessages) return;
+    flatListRef.current?.scrollToEnd({ animated: true });
+  }, [hasMessages, messages.length]);
 
   // ✅ Interceptamos el botón físico de "back" en Android
   useFocusEffect(
     useCallback(() => {
-      const sub = BackHandler.addEventListener(
-        'hardwareBackPress',
-        () => goBackToChatList()
-      )
-      return () => sub.remove()
-    }, [goBackToChatList])
-  )
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => goBackToChatList());
+      return () => sub.remove();
+    }, [goBackToChatList]),
+  );
 
   // 👇 Usamos SOLO el safe area inferior (nada de tabBarHeight)
-  const bottomPadding = 8 + insets.bottom
+  const bottomPadding = 8 + insets.bottom;
 
   return (
-    <LinearGradient
-      colors={['#015A69', '#16A4AE']}
-      style={{ flex: 1 }}
-    >
+    <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -143,10 +128,7 @@ export default function ChatThreadScreen() {
           }}
         >
           {/* Back → siempre a ChatList */}
-          <Pressable
-            onPress={goBackToChatList}
-            style={{ padding: 4, marginRight: 8 }}
-          >
+          <Pressable onPress={goBackToChatList} style={{ padding: 4, marginRight: 8 }}>
             <Ionicons name="chevron-back" size={24} color="#E9FEFF" />
           </Pressable>
 
@@ -166,15 +148,8 @@ export default function ChatThreadScreen() {
 
           {/* Botón "Ver pedido" si hay orderId, sino un spacer para equilibrar */}
           {params.orderId ? (
-            <Pressable
-              onPress={handleGoToOrderDetail}
-              style={{ padding: 4, marginLeft: 8 }}
-            >
-              <Ionicons
-                name="document-text-outline"
-                size={22}
-                color="#E9FEFF"
-              />
+            <Pressable onPress={handleGoToOrderDetail} style={{ padding: 4, marginLeft: 8 }}>
+              <Ionicons name="document-text-outline" size={22} color="#E9FEFF" />
             </Pressable>
           ) : (
             <View style={{ width: 30 }} />
@@ -218,8 +193,7 @@ export default function ChatThreadScreen() {
                   textAlign: 'center',
                 }}
               >
-                Todavía no hay mensajes. Escribí el primero para empezar la
-                conversación.
+                Todavía no hay mensajes. Escribí el primero para empezar la conversación.
               </Text>
             </View>
           )}
@@ -231,12 +205,10 @@ export default function ChatThreadScreen() {
               keyExtractor={(item) => item.id}
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ paddingBottom: 8, gap: 6 }}
-              onContentSizeChange={() =>
-                flatListRef.current?.scrollToEnd({ animated: false })
-              }
+              onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
               renderItem={({ item }) => {
                 // Lado definido POR EL BACKEND
-                const isMine = (item as any).isMine === true
+                const isMine = (item as any).isMine === true;
 
                 return (
                   <View
@@ -265,7 +237,7 @@ export default function ChatThreadScreen() {
                       </Text>
                     </View>
                   </View>
-                )
+                );
               }}
             />
           )}
@@ -308,10 +280,7 @@ export default function ChatThreadScreen() {
               borderRadius: 20,
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor:
-                sending || !text.trim()
-                  ? 'rgba(233,254,255,0.4)'
-                  : '#E9FEFF',
+              backgroundColor: sending || !text.trim() ? 'rgba(233,254,255,0.4)' : '#E9FEFF',
             }}
           >
             {sending ? (
@@ -323,12 +292,5 @@ export default function ChatThreadScreen() {
         </View>
       </KeyboardAvoidingView>
     </LinearGradient>
-  )
+  );
 }
-
-
-
-
-
-
-

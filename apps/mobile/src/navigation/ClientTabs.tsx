@@ -1,31 +1,26 @@
 // apps/mobile/src/navigation/ClientTabs.tsx
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
-import { getFocusedRouteNameFromRoute } from '@react-navigation/native'
-import { createNativeStackNavigator } from '@react-navigation/native-stack'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import AgendaScreen from '../screens/AgendaScreen'
-import CategoryScreen from '../screens/CategoryScreen'
-import ClientHome from '../screens/ClientHome'
-import CreateOrderScreen from '../screens/CreateOrderScreen'
-import NotificationsScreen from '../screens/NotificationsScreen'
-import OrderDetailScreen from '../screens/OrderDetailScreen'
-import OrdersScreen from '../screens/OrdersScreen'
-import ProfileScreen from '../screens/ProfileScreen'
-import SpecialistProfileScreen from '../screens/SpecialistProfileScreen'
-import SpecialistsListScreen from '../screens/SpecialistsListScreen'
+import AgendaScreen from '../screens/AgendaScreen';
+import CategoryScreen from '../screens/CategoryScreen';
+import ClientHome from '../screens/ClientHome';
+import CreateOrderScreen from '../screens/CreateOrderScreen';
+import NotificationsScreen from '../screens/NotificationsScreen';
+import OrderDetailScreen from '../screens/OrderDetailScreen';
+import OrdersScreen from '../screens/OrdersScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+import SpecialistProfileScreen from '../screens/SpecialistProfileScreen';
+import SpecialistsListScreen from '../screens/SpecialistsListScreen';
+import type { AgendaStackParamList, ClientTabsParamList, HomeStackParamList } from '../types';
+import ChatStack from './ChatStack';
 
-import type {
-  AgendaStackParamList,
-  ClientTabsParamList,
-  HomeStackParamList,
-} from '../types'
-import ChatStack from './ChatStack'
-
-const Tab = createBottomTabNavigator<ClientTabsParamList>()
-const HomeStack = createNativeStackNavigator<HomeStackParamList>()
-const AgendaStack = createNativeStackNavigator<AgendaStackParamList>()
+const Tab = createBottomTabNavigator<ClientTabsParamList>();
+const HomeStack = createNativeStackNavigator<HomeStackParamList>();
+const AgendaStack = createNativeStackNavigator<AgendaStackParamList>();
 
 function HomeStackNavigator() {
   return (
@@ -44,7 +39,7 @@ function HomeStackNavigator() {
       <HomeStack.Screen name="Orders" component={OrdersScreen} />
       <HomeStack.Screen name="Notifications" component={NotificationsScreen} />
     </HomeStack.Navigator>
-  )
+  );
 }
 
 function ClientAgendaStackNavigator() {
@@ -53,12 +48,12 @@ function ClientAgendaStackNavigator() {
       <AgendaStack.Screen name="AgendaMain" component={AgendaScreen} />
       <AgendaStack.Screen name="OrderDetail" component={OrderDetailScreen} />
     </AgendaStack.Navigator>
-  )
+  );
 }
 
 export default function ClientTabs() {
-  const insets = useSafeAreaInsets()
-  const bottomGap = Math.max(12, insets.bottom + 12)
+  const insets = useSafeAreaInsets();
+  const bottomGap = Math.max(12, insets.bottom + 12);
 
   const baseTabBarStyle = {
     position: 'absolute' as const,
@@ -76,7 +71,7 @@ export default function ClientTabs() {
     shadowOffset: { width: 0, height: 6 },
     shadowRadius: 14,
     elevation: 16,
-  }
+  };
 
   return (
     <Tab.Navigator
@@ -87,16 +82,12 @@ export default function ClientTabs() {
         tabBarInactiveTintColor: '#6B7B87',
         tabBarLabelStyle: { fontSize: 12, marginBottom: 10 },
         tabBarIcon: ({ color, size, focused }) => {
-          size = 26
+          size = 26;
           switch (route.name) {
             case 'Home':
               return (
-                <Ionicons
-                  name={focused ? 'home' : 'home-outline'}
-                  size={size}
-                  color={color}
-                />
-              )
+                <Ionicons name={focused ? 'home' : 'home-outline'} size={size} color={color} />
+              );
             case 'Agenda':
               return (
                 <MaterialCommunityIcons
@@ -104,7 +95,7 @@ export default function ClientTabs() {
                   size={size}
                   color={color}
                 />
-              )
+              );
             case 'Chat':
               return (
                 <Ionicons
@@ -112,19 +103,14 @@ export default function ClientTabs() {
                   size={size}
                   color={color}
                 />
-              )
+              );
             case 'Perfil':
               return (
-              <Ionicons
-              name={focused ? 'person' : 'person-outline'}
-              size={size}
-              color={color}
-    />
-  )
-
+                <Ionicons name={focused ? 'person' : 'person-outline'} size={size} color={color} />
+              );
 
             default:
-              return null
+              return null;
           }
         },
       })}
@@ -151,21 +137,21 @@ export default function ClientTabs() {
         name="Chat"
         component={ChatStack}
         options={({ route }) => {
-          const routeName = getFocusedRouteNameFromRoute(route) ?? 'ChatList'
-          const isChatThread = routeName === 'ChatThread'
+          const routeName = getFocusedRouteNameFromRoute(route) ?? 'ChatList';
+          const isChatThread = routeName === 'ChatThread';
 
           return {
             tabBarStyle: isChatThread
               ? { display: 'none' } // 👉 oculta el menú dentro del chat
               : baseTabBarStyle,
-          }
+          };
         }}
         listeners={({ navigation }) => ({
           tabPress: (e) => {
-            e.preventDefault()
-            ;(navigation as any).navigate('Chat', {
+            e.preventDefault();
+            (navigation as any).navigate('Chat', {
               screen: 'ChatList',
-            })
+            });
           },
         })}
       />
@@ -178,21 +164,5 @@ export default function ClientTabs() {
         }}
       />
     </Tab.Navigator>
-  )
+  );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

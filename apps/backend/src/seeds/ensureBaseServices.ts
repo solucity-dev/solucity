@@ -1,8 +1,12 @@
 // apps/backend/src/seeds/ensureBaseServices.ts
 import { prisma } from '../lib/prisma';
 
-const CATEGORIES: Array<{ slug: string; serviceName: string; description?: string }> = [
-  { slug: 'albanileria', serviceName: 'Visita técnica', description: 'Relevamiento inicial del trabajo' },
+const CATEGORIES: { slug: string; serviceName: string; description?: string }[] = [
+  {
+    slug: 'albanileria',
+    serviceName: 'Visita técnica',
+    description: 'Relevamiento inicial del trabajo',
+  },
   { slug: 'plomeria', serviceName: 'Visita técnica' },
   { slug: 'yeseria-durlock', serviceName: 'Visita técnica' },
   { slug: 'herreria', serviceName: 'Visita técnica' },
@@ -18,21 +22,21 @@ const CATEGORIES: Array<{ slug: string; serviceName: string; description?: strin
   { slug: 'cerrajeria', serviceName: 'Visita técnica' },
   { slug: 'limpieza', serviceName: 'Visita técnica' },
   // …sumá los slugs que uses
-]
+];
 
 export async function main() {
   for (const item of CATEGORIES) {
-    const category = await prisma.serviceCategory.findUnique({ where: { slug: item.slug } })
+    const category = await prisma.serviceCategory.findUnique({ where: { slug: item.slug } });
     if (!category) {
-      console.warn(`⚠️  No existe la categoría: ${item.slug} — salteo`)
-      continue
+      console.warn(`⚠️  No existe la categoría: ${item.slug} — salteo`);
+      continue;
     }
 
     const exists = await prisma.service.findFirst({
       where: { categoryId: category.id, name: item.serviceName },
       select: { id: true },
-    })
-    if (exists) continue
+    });
+    if (exists) continue;
 
     await prisma.service.create({
       data: {
@@ -42,9 +46,7 @@ export async function main() {
         basePoints: 0,
         slaHours: 0,
       },
-    })
-    console.log(`✔ Service creado: ${item.serviceName} → ${item.slug}`)
+    });
+    console.log(`✔ Service creado: ${item.serviceName} → ${item.slug}`);
   }
 }
-
-

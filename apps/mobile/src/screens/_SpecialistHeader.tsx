@@ -1,9 +1,10 @@
-import { Ionicons } from '@expo/vector-icons'
-import { Image, StyleSheet, Text, View } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+//apps/mobile/src/screens
+import { Ionicons } from '@expo/vector-icons';
+import { Image, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function SpecialistHeader() {
-  const insets = useSafeAreaInsets()
+  const insets = useSafeAreaInsets();
   return (
     <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
       <View style={styles.brandRow}>
@@ -14,7 +15,7 @@ export default function SpecialistHeader() {
         <Ionicons name="notifications-outline" size={26} color="#E9FEFF" />
       </View>
     </View>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -29,4 +30,4 @@ const styles = StyleSheet.create({
   logo: { width: 30, height: 30 },
   brandText: { color: '#E9FEFF', fontWeight: '900', fontSize: 26, letterSpacing: 0.5 },
   bellWrap: { position: 'absolute', right: 18 },
-})
+});

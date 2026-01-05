@@ -1,5 +1,6 @@
-import { Prisma } from '@prisma/client'
-import { prisma } from '../lib/prisma'
+import { Prisma } from '@prisma/client';
+
+import { prisma } from '../lib/prisma';
 
 // 🔐 Tipos de notificación soportados
 export type NotificationType =
@@ -11,25 +12,28 @@ export type NotificationType =
   | 'NEW_CHAT_MESSAGE'
   | 'ORDER_FINISHED'
   | 'NEW_REVIEW_POSTED'
+  | 'KYC_STATUS'
+  | 'CERTIFICATION_APPROVED'
+  | 'CERTIFICATION_REJECTED';
 
 // Base común de data (se guarda como JSON)
 export interface BaseNotificationData extends Prisma.JsonObject {
-  orderId?: string
-  customerId?: string
-  specialistId?: string
-  serviceId?: string
+  orderId?: string;
+  customerId?: string;
+  specialistId?: string;
+  serviceId?: string;
 }
 
 // Card: Nueva solicitud
 export interface OrderNewRequestData extends BaseNotificationData {
-  type: 'ORDER_NEW_REQUEST'
-  categoryName: string
-  customerName: string
-  distanceKm?: number
-  scheduledAt?: string
-  shortDescription?: string
-  attachments?: string[]
-  isUrgent?: boolean
+  type: 'ORDER_NEW_REQUEST';
+  categoryName: string;
+  customerName: string;
+  distanceKm?: number;
+  scheduledAt?: string;
+  shortDescription?: string;
+  attachments?: string[];
+  isUrgent?: boolean;
 }
 
 /**
@@ -40,13 +44,13 @@ export interface OrderNewRequestData extends BaseNotificationData {
  *   viajar luego en el push como `notificationId`
  */
 export async function createNotification(params: {
-  userId: string
-  type: NotificationType
-  title: string
-  body: string
-  data?: any
+  userId: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  data?: Prisma.JsonValue;
 }) {
-  const { userId, type, title, body, data } = params
+  const { userId, type, title, body, data } = params;
 
   const notification = await prisma.notification.create({
     data: {
@@ -54,12 +58,9 @@ export async function createNotification(params: {
       type,
       title,
       body,
-      data,
+      data: data ?? undefined,
     },
-  })
+  });
 
-  return notification
+  return notification;
 }
-
-
-

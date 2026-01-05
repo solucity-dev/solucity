@@ -1,25 +1,26 @@
 // apps/mobile/App.tsx
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
-import { NavigationContainer } from '@react-navigation/native'
-import * as Font from 'expo-font'
-import { StatusBar } from 'expo-status-bar'
-import { useEffect, useState } from 'react'
-import { ActivityIndicator, AppState, View } from 'react-native'
-import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { NavigationContainer } from '@react-navigation/native';
+import { QueryClientProvider, focusManager } from '@tanstack/react-query';
+import * as Font from 'expo-font';
+import * as Notifications from 'expo-notifications';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, AppState, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { AuthProvider } from './src/auth/AuthProvider'
-import RootNavigator from './src/navigation/RootNavigator'
+import { AuthProvider } from './src/auth/AuthProvider';
+import { queryClient } from './src/lib/reactQuery';
+import RootNavigator from './src/navigation/RootNavigator';
 
 // React Query
-import { QueryClientProvider, focusManager } from '@tanstack/react-query'
-import { queryClient } from './src/lib/reactQuery'
 
 // 🔔 provider de notificaciones
-import * as Notifications from 'expo-notifications'
-import { NotificationsProvider } from './src/notifications/NotificationsProvider'
+
+import { flushPendingNav, navigationRef } from './src/navigation/navigationRef';
+import { NotificationsProvider } from './src/notifications/NotificationsProvider';
 
 // ✅ NUEVO: navigationRef global
-import { flushPendingNav, navigationRef } from './src/navigation/navigationRef'
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -29,41 +30,41 @@ Notifications.setNotificationHandler({
     shouldShowBanner: true,
     shouldShowList: true,
   }),
-})
+});
 
 export default function App() {
-  const [fontsReady, setFontsReady] = useState(false)
+  const [fontsReady, setFontsReady] = useState(false);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      focusManager.setFocused(state === 'active')
-    })
-    return () => sub.remove()
-  }, [])
+      focusManager.setFocused(state === 'active');
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
-    let cancelled = false
-    ;(async () => {
+    let cancelled = false;
+    (async () => {
       try {
         await Font.loadAsync({
           ...Ionicons.font,
           ...MaterialCommunityIcons.font,
-        })
+        });
       } finally {
-        if (!cancelled) setFontsReady(true)
+        if (!cancelled) setFontsReady(true);
       }
-    })()
+    })();
     return () => {
-      cancelled = true
-    }
-  }, [])
+      cancelled = true;
+    };
+  }, []);
 
   if (!fontsReady) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         <ActivityIndicator />
       </View>
-    )
+    );
   }
 
   return (
@@ -77,8 +78,8 @@ export default function App() {
             <NavigationContainer
               ref={navigationRef}
               onReady={() => {
-                if (__DEV__) console.log('[NAV] ready -> flushPendingNav()')
-                flushPendingNav()
+                if (__DEV__) console.log('[NAV] ready -> flushPendingNav()');
+                flushPendingNav();
               }}
             >
               <RootNavigator />
@@ -87,15 +88,5 @@ export default function App() {
         </NotificationsProvider>
       </AuthProvider>
     </QueryClientProvider>
-  )
+  );
 }
-
-
-
-
-
-
-
-
-
-

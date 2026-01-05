@@ -1,65 +1,73 @@
-import { useNavigation } from '@react-navigation/native'
-import axios from 'axios'
-import { LinearGradient } from 'expo-linear-gradient'
-import React, { useMemo, useState } from 'react'
-import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useNavigation } from '@react-navigation/native';
+import axios from 'axios';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useMemo, useState } from 'react';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useAuth } from '../auth/AuthProvider'
-import { api } from '../lib/api'
+import { useAuth } from '../auth/AuthProvider';
+import { api } from '../lib/api';
 
 type LoginResponse = {
-  ok: boolean
-  token: string
-  user: { id: string; email: string; role: 'CUSTOMER' | 'SPECIALIST' | 'ADMIN' }
-}
+  ok: boolean;
+  token: string;
+  user: { id: string; email: string; role: 'CUSTOMER' | 'SPECIALIST' | 'ADMIN' };
+};
 
 export default function LoginScreen() {
-  const insets = useSafeAreaInsets()
-  const nav = useNavigation()
-  const { login } = useAuth()
+  const insets = useSafeAreaInsets();
+  const nav = useNavigation();
+  const { login } = useAuth();
 
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-
-  const emailOk = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email.trim()), [email])
-  const passOk = password.length >= 8
+  const emailOk = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email.trim()), [email]);
+  const passOk = password.length >= 8;
 
   const onSubmit = async () => {
-    if (!emailOk || !passOk || loading) return
-    setLoading(true)
+    if (!emailOk || !passOk || loading) return;
+    setLoading(true);
     try {
-      const body = { email: email.trim().toLowerCase(), password }
-      const res = await api.post<LoginResponse>('/auth/login', body)
+      const body = { email: email.trim().toLowerCase(), password };
+      const res = await api.post<LoginResponse>('/auth/login', body);
 
       if (res.data?.ok && res.data.token) {
-        await login(res.data.token)
+        await login(res.data.token);
 
         // No navegamos manual: RootNavigator detecta token y dibuja Main
-        return
+        return;
       }
-      Alert.alert('No se pudo iniciar sesión', 'Verificá tus credenciales e intentá de nuevo.')
+      Alert.alert('No se pudo iniciar sesión', 'Verificá tus credenciales e intentá de nuevo.');
     } catch (err) {
       if (axios.isAxiosError(err)) {
-        const code = (err.response?.data as any)?.error
+        const code = (err.response?.data as any)?.error;
         const msg =
           code === 'invalid_credentials'
             ? 'Usuario o contraseña incorrectos.'
             : code === 'blocked'
-            ? 'Tu cuenta está bloqueada.'
-            : err.message ?? 'Ocurrió un error. Intentá nuevamente.'
-        Alert.alert('Error', msg)
+              ? 'Tu cuenta está bloqueada.'
+              : (err.message ?? 'Ocurrió un error. Intentá nuevamente.');
+        Alert.alert('Error', msg);
       } else {
-        Alert.alert('Error', 'No pude conectar con el servidor.')
+        Alert.alert('Error', 'No pude conectar con el servidor.');
       }
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
-  const goBack = () => nav.goBack()
+  const goBack = () => nav.goBack();
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
@@ -71,15 +79,32 @@ export default function LoginScreen() {
         >
           {/* Header */}
           <View style={{ paddingTop: 6, paddingBottom: 8 }}>
-            <Pressable onPress={goBack} style={({ pressed }) => [{ paddingVertical: 6, paddingRight: 16, paddingLeft: 2 }, pressed && { opacity: 0.75 }]}>
+            <Pressable
+              onPress={goBack}
+              style={({ pressed }) => [
+                { paddingVertical: 6, paddingRight: 16, paddingLeft: 2 },
+                pressed && { opacity: 0.75 },
+              ]}
+            >
               <Text style={{ color: '#E9FEFF', fontSize: 30, lineHeight: 30 }}>‹</Text>
             </Pressable>
-            <Text style={{ color: '#fff', fontSize: 26, fontWeight: '800', marginTop: 8 }}>Iniciar sesión</Text>
-            <Text style={{ color: 'rgba(233,254,255,0.92)', marginTop: 4 }}>Accedé con tu cuenta</Text>
+            <Text style={{ color: '#fff', fontSize: 26, fontWeight: '800', marginTop: 8 }}>
+              Iniciar sesión
+            </Text>
+            <Text style={{ color: 'rgba(233,254,255,0.92)', marginTop: 4 }}>
+              Accedé con tu cuenta
+            </Text>
           </View>
 
           {/* Card */}
-          <View style={{ backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 18, padding: 16, gap: 12 }}>
+          <View
+            style={{
+              backgroundColor: 'rgba(255,255,255,0.1)',
+              borderRadius: 18,
+              padding: 16,
+              gap: 12,
+            }}
+          >
             <LabeledInput
               label="E-mail"
               placeholder="tu@correo.com"
@@ -115,13 +140,19 @@ export default function LoginScreen() {
         </KeyboardAvoidingView>
       </SafeAreaView>
     </LinearGradient>
-  )
+  );
 }
 
-function LabeledInput({ label, style, ...rest }: React.ComponentProps<typeof TextInput> & { label: string }) {
+function LabeledInput({
+  label,
+  style,
+  ...rest
+}: React.ComponentProps<typeof TextInput> & { label: string }) {
   return (
     <View style={{ gap: 6 }}>
-      {label ? <Text style={{ color: 'rgba(255,255,255,0.9)', fontWeight: '700' }}>{label}</Text> : null}
+      {label ? (
+        <Text style={{ color: 'rgba(255,255,255,0.9)', fontWeight: '700' }}>{label}</Text>
+      ) : null}
       <TextInput
         {...rest}
         style={[
@@ -137,7 +168,7 @@ function LabeledInput({ label, style, ...rest }: React.ComponentProps<typeof Tex
         placeholderTextColor="rgba(255,255,255,0.7)"
       />
     </View>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -150,4 +181,4 @@ const styles = StyleSheet.create({
   },
   btnDisabled: { opacity: 0.5 },
   primaryText: { color: '#0B6B76', fontWeight: '800', letterSpacing: 0.5, fontSize: 16 },
-})
+});

@@ -1,4 +1,4 @@
-import { prisma } from '../src/lib/prisma'
+import { prisma } from '../src/lib/prisma';
 
 async function main() {
   // 1) buscar órdenes ya vencidas
@@ -6,22 +6,28 @@ async function main() {
     where: { status: 'CANCELLED_AUTO' },
     select: { id: true, customerId: true, specialistId: true, acceptDeadlineAt: true },
     take: 500,
-  })
+  });
 
-  let created = 0
+  let created = 0;
 
   for (const o of orders) {
     // 2) si ya existe notif para cliente, saltar
-    const customerUserId = await prisma.customerProfile.findUnique({
-      where: { id: o.customerId },
-      select: { userId: true },
-    }).then(r => r?.userId ?? null)
+    const customerUserId = await prisma.customerProfile
+      .findUnique({
+        where: { id: o.customerId },
+        select: { userId: true },
+      })
+      .then((r) => r?.userId ?? null);
 
     if (customerUserId) {
       const exists = await prisma.notification.findFirst({
-        where: { userId: customerUserId, type: 'ORDER_CANCELLED_AUTO', data: { path: ['orderId'], equals: o.id } as any },
+        where: {
+          userId: customerUserId,
+          type: 'ORDER_CANCELLED_AUTO',
+          data: { path: ['orderId'], equals: o.id } as any,
+        },
         select: { id: true },
-      })
+      });
 
       if (!exists) {
         await prisma.notification.create({
@@ -32,23 +38,29 @@ async function main() {
             body: 'La solicitud se canceló automáticamente porque venció el tiempo de aceptación.',
             data: { orderId: o.id } as any,
           },
-        })
-        created++
+        });
+        created++;
       }
     }
 
     // 3) notif especialista si había preasignado
     if (o.specialistId) {
-      const specUserId = await prisma.specialistProfile.findUnique({
-        where: { id: o.specialistId },
-        select: { userId: true },
-      }).then(r => r?.userId ?? null)
+      const specUserId = await prisma.specialistProfile
+        .findUnique({
+          where: { id: o.specialistId },
+          select: { userId: true },
+        })
+        .then((r) => r?.userId ?? null);
 
       if (specUserId) {
         const existsSpec = await prisma.notification.findFirst({
-          where: { userId: specUserId, type: 'ORDER_CANCELLED_AUTO', data: { path: ['orderId'], equals: o.id } as any },
+          where: {
+            userId: specUserId,
+            type: 'ORDER_CANCELLED_AUTO',
+            data: { path: ['orderId'], equals: o.id } as any,
+          },
           select: { id: true },
-        })
+        });
 
         if (!existsSpec) {
           await prisma.notification.create({
@@ -59,16 +71,16 @@ async function main() {
               body: 'Una solicitud pendiente fue cancelada automáticamente por falta de aceptación.',
               data: { orderId: o.id } as any,
             },
-          })
-          created++
+          });
+          created++;
         }
       }
     }
   }
 
-  console.log('Backfill done. Notifications created:', created)
+  console.log('Backfill done. Notifications created:', created);
 }
 
 main()
-  .catch(e => console.error(e))
-  .finally(async () => prisma.$disconnect())
+  .catch((e) => console.error(e))
+  .finally(async () => prisma.$disconnect());

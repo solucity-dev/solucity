@@ -1,52 +1,53 @@
 // apps/mobile/src/screens/AgendaScreen.tsx
-import { useNavigation, useRoute } from '@react-navigation/native'
-import dayjs from 'dayjs'
-import 'dayjs/locale/es'
-import relativeTime from 'dayjs/plugin/relativeTime'
-import { LinearGradient } from 'expo-linear-gradient'
-import { useEffect, useMemo, useState } from 'react'
-import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useAuth } from '../auth/AuthProvider'
-import { useOrdersList } from '../hooks/useOrders'
-import type { AgendaSection } from '../types'
+import { useNavigation, useRoute } from '@react-navigation/native';
+import dayjs from 'dayjs';
+import 'dayjs/locale/es';
+import relativeTime from 'dayjs/plugin/relativeTime';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-dayjs.locale('es')
-dayjs.extend(relativeTime)
+import { useAuth } from '../auth/AuthProvider';
+import { useOrdersList } from '../hooks/useOrders';
+import type { AgendaSection } from '../types';
 
-type TabKey = 'pending' | 'confirmed' | 'finished' | 'cancelled'
+dayjs.locale('es');
+dayjs.extend(relativeTime);
 
-const TABS: Array<{ key: TabKey; label: string }> = [
+type TabKey = 'pending' | 'confirmed' | 'finished' | 'cancelled';
+
+const TABS: { key: TabKey; label: string }[] = [
   { key: 'pending', label: 'Pendientes' },
   { key: 'confirmed', label: 'Confirmados' },
   { key: 'finished', label: 'Finalizados' },
   { key: 'cancelled', label: 'Cancelados' },
-]
+];
 
 // ✅ Mapea estados backend → tabs UI (solo para default navigation)
 function mapSectionToTab(section?: string): TabKey {
   switch (section) {
     case 'PENDING':
-      return 'pending'
+      return 'pending';
 
     case 'ASSIGNED':
     case 'IN_PROGRESS':
     case 'PAUSED':
     case 'CONFIRMED_BY_CLIENT':
     case 'IN_CLIENT_REVIEW':
-      return 'confirmed'
+      return 'confirmed';
 
     case 'FINISHED_BY_SPECIALIST':
     case 'CLOSED':
-      return 'finished'
+      return 'finished';
 
     case 'CANCELLED_BY_CUSTOMER':
     case 'CANCELLED_BY_SPECIALIST':
     case 'CANCELLED_AUTO':
-      return 'cancelled'
+      return 'cancelled';
 
     default:
-      return 'pending'
+      return 'pending';
   }
 }
 
@@ -56,105 +57,103 @@ const TAB_ALLOWED_STATUSES: Record<TabKey, string[]> = {
   confirmed: ['ASSIGNED', 'IN_PROGRESS', 'PAUSED', 'CONFIRMED_BY_CLIENT', 'IN_CLIENT_REVIEW'],
   finished: ['FINISHED_BY_SPECIALIST', 'CLOSED'],
   cancelled: ['CANCELLED_BY_CUSTOMER', 'CANCELLED_BY_SPECIALIST', 'CANCELLED_AUTO'],
-}
+};
 
 export default function AgendaScreen() {
-  const insets = useSafeAreaInsets()
-  const navigation = useNavigation<any>()
-  const route = useRoute<any>()
-  const { user } = useAuth()
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const { user } = useAuth();
 
-// ✅ role REAL para API (NO depende de mode)
-const role: 'customer' | 'specialist' =
-  user?.role === 'SPECIALIST' ? 'specialist' : 'customer'
+  // ✅ role REAL para API (NO depende de mode)
+  const role: 'customer' | 'specialist' = user?.role === 'SPECIALIST' ? 'specialist' : 'customer';
 
+  const incomingSection = route.params?.initialSection as AgendaSection | undefined;
+  const needsRefresh = route.params?.refresh as boolean | undefined;
 
-  const incomingSection = route.params?.initialSection as AgendaSection | undefined
-  const needsRefresh = route.params?.refresh as boolean | undefined
+  const [tab, setTab] = useState<TabKey>(
+    incomingSection ? mapSectionToTab(incomingSection) : 'pending',
+  );
 
-  const [tab, setTab] = useState<TabKey>(incomingSection ? mapSectionToTab(incomingSection) : 'pending')
-
-  const isClosed = tab === 'finished' || tab === 'cancelled'
+  const isClosed = tab === 'finished' || tab === 'cancelled';
 
   const { data, isLoading, isFetching, refetch } = useOrdersList(
     { role, status: isClosed ? 'closed' : 'open' },
-    tab
-  )
+    tab,
+  );
 
-  const list = useMemo(() => data ?? [], [data])
+  const list = useMemo(() => data ?? [], [data]);
 
   // ✅ Filtro duro por whitelist
   const filteredList = useMemo(() => {
-    const allowed = TAB_ALLOWED_STATUSES[tab]
+    const allowed = TAB_ALLOWED_STATUSES[tab];
     return list.filter((o: any) => {
-      const s = String(o.status ?? '').trim().toUpperCase()
-      return allowed.includes(s)
-    })
-  }, [list, tab])
+      const s = String(o.status ?? '')
+        .trim()
+        .toUpperCase();
+      return allowed.includes(s);
+    });
+  }, [list, tab]);
 
   // ✅ si nos mandan section nuevo, cambiamos al tab correcto
   useEffect(() => {
     if (incomingSection) {
-      const mapped = mapSectionToTab(incomingSection)
-      if (mapped !== tab) setTab(mapped)
+      const mapped = mapSectionToTab(incomingSection);
+      if (mapped !== tab) setTab(mapped);
     }
-  }, [incomingSection])
+  }, [incomingSection]);
 
   // ✅ refetch al cambiar de tab (mata cache rara)
   useEffect(() => {
-    refetch()
-  }, [tab, refetch])
+    refetch();
+  }, [tab, refetch]);
 
   // ✅ si vuelvo de OrderDetail con refresh
   useEffect(() => {
-    if (needsRefresh) refetch()
-  }, [needsRefresh, refetch])
+    if (needsRefresh) refetch();
+  }, [needsRefresh, refetch]);
 
   const getCounterpartName = (item: any) => {
-    if (role === 'specialist') return item.customer?.name ?? null
-    return item.specialist?.name ?? null
-  }
+    if (role === 'specialist') return item.customer?.name ?? null;
+    return item.specialist?.name ?? null;
+  };
 
   const getRubroText = (item: any) => {
-  // 1) si el hook ya lo trae directo
-  const direct =
-    item.categoryName ||
-    item.rubro ||
-    item.serviceCategoryName
+    // 1) si el hook ya lo trae directo
+    const direct = item.categoryName || item.rubro || item.serviceCategoryName;
 
-  if (typeof direct === 'string' && direct.trim()) return direct.trim()
+    if (typeof direct === 'string' && direct.trim()) return direct.trim();
 
-  // 2) si viene dentro de service
-  const fromService =
-    item.service?.categoryName ||
-    item.service?.category?.name ||
-    item.service?.category?.title ||
-    item.service?.categoryLabel
+    // 2) si viene dentro de service
+    const fromService =
+      item.service?.categoryName ||
+      item.service?.category?.name ||
+      item.service?.category?.title ||
+      item.service?.categoryLabel;
 
-  if (typeof fromService === 'string' && fromService.trim()) return fromService.trim()
+    if (typeof fromService === 'string' && fromService.trim()) return fromService.trim();
 
-  // 3) último fallback (no ideal, pero evita vacío)
-  return item.service?.name ?? 'Sin rubro'
-}
-
+    // 3) último fallback (no ideal, pero evita vacío)
+    return item.service?.name ?? 'Sin rubro';
+  };
 
   const getWhenText = (item: any) => {
     // 1) agendado
-    if (item.scheduledAt) return `Agendado: ${dayjs(item.scheduledAt).format('DD MMM, HH:mm')}`
+    if (item.scheduledAt) return `Agendado: ${dayjs(item.scheduledAt).format('DD MMM, HH:mm')}`;
 
     // 2) urgente (si no hay scheduled)
-    if (item.isUrgent) return 'Urgente'
+    if (item.isUrgent) return 'Urgente';
 
     // 3) preferencia (si existe)
-    if (item.preferredAt) return `Preferencia: ${dayjs(item.preferredAt).format('DD MMM, HH:mm')}`
+    if (item.preferredAt) return `Preferencia: ${dayjs(item.preferredAt).format('DD MMM, HH:mm')}`;
 
-    return 'Sin fecha definida'
-  }
+    return 'Sin fecha definida';
+  };
 
   const getCreatedAgo = (item: any) => {
-    if (!item.createdAt) return null
-    return dayjs(item.createdAt).fromNow()
-  }
+    if (!item.createdAt) return null;
+    return dayjs(item.createdAt).fromNow();
+  };
 
   return (
     <LinearGradient colors={['#004d5d', '#003a47']} style={{ flex: 1 }}>
@@ -166,7 +165,7 @@ const role: 'customer' | 'specialist' =
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 12, gap: 8 }}
           renderItem={({ item }) => {
-            const active = item.key === tab
+            const active = item.key === tab;
             return (
               <Pressable
                 onPress={() => setTab(item.key)}
@@ -186,7 +185,7 @@ const role: 'customer' | 'specialist' =
                   {item.label}
                 </Text>
               </Pressable>
-            )
+            );
           }}
         />
       </View>
@@ -224,15 +223,15 @@ const role: 'customer' | 'specialist' =
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingBottom: 24, gap: 10 }}
             renderItem={({ item }) => {
-              const counterpartName = getCounterpartName(item)
-              const title = counterpartName ?? item.service?.name ?? 'Orden'
-              const rubro = getRubroText(item)
+              const counterpartName = getCounterpartName(item);
+              const title = counterpartName ?? item.service?.name ?? 'Orden';
+              const rubro = getRubroText(item);
 
-              const createdAgo = getCreatedAgo(item)
-              const whenText = getWhenText(item)
+              const createdAgo = getCreatedAgo(item);
+              const whenText = getWhenText(item);
 
               // Línea final: "hace X • Agendado: ..."
-              const footerLine = createdAgo ? `${createdAgo} • ${whenText}` : whenText
+              const footerLine = createdAgo ? `${createdAgo} • ${whenText}` : whenText;
 
               return (
                 <Pressable
@@ -262,7 +261,7 @@ const role: 'customer' | 'specialist' =
                   {/* 3) Hace cuánto + Agendado/Urgente */}
                   <Text style={{ color: '#0b3d45', opacity: 0.7 }}>{footerLine}</Text>
                 </Pressable>
-              )
+              );
             }}
             onRefresh={refetch}
             refreshing={isFetching}
@@ -270,8 +269,5 @@ const role: 'customer' | 'specialist' =
         )}
       </View>
     </LinearGradient>
-  )
+  );
 }
-
-
-

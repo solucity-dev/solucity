@@ -1,15 +1,16 @@
-import { Router } from 'express'
-import { prisma } from '../lib/prisma'
-import { auth } from '../middlewares/auth'
+import { Router } from 'express';
 
-const router = Router()
+import { prisma } from '../lib/prisma';
+import { auth } from '../middlewares/auth';
+
+const router = Router();
 
 // GET /customers/me
 router.get('/me', auth, async (req: any, res) => {
   try {
-    const userId = req.user?.id as string | undefined
+    const userId = req.user?.id as string | undefined;
     if (!userId) {
-      return res.status(401).json({ ok: false, error: 'unauthorized' })
+      return res.status(401).json({ ok: false, error: 'unauthorized' });
     }
 
     const profile = await (prisma as any).customerProfile.findUnique({
@@ -22,17 +23,17 @@ router.get('/me', auth, async (req: any, res) => {
         // phone: true,
         // address: true,
       },
-    })
+    });
 
     if (!profile) {
-      return res.status(404).json({ ok: false, error: 'customer_profile_not_found' })
+      return res.status(404).json({ ok: false, error: 'customer_profile_not_found' });
     }
 
-    return res.json({ ok: true, profile })
+    return res.json({ ok: true, profile });
   } catch (e) {
-    console.error('[GET /customers/me] error', e)
-    return res.status(500).json({ ok: false, error: 'server_error' })
+    console.error('[GET /customers/me] error', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
   }
-})
+});
 
-export default router
+export default router;

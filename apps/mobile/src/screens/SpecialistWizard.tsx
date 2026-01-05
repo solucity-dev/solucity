@@ -1,27 +1,33 @@
 // apps/mobile/src/screens/SpecialistWizard.tsx
-import { LinearGradient } from 'expo-linear-gradient'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { LinearGradient } from 'expo-linear-gradient';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Props = {
   /** Cierra el asistente (RootNavigator te lo pasa). Si no viene, no hace nada. */
-  onClose?: () => void
-}
+  onClose?: () => void;
+};
 
 export default function SpecialistWizard({ onClose }: Props) {
-  const insets = useSafeAreaInsets()
+  const insets = useSafeAreaInsets();
 
   const handleClose = () => {
-    if (onClose) onClose()
-  }
+    if (onClose) onClose();
+  };
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={styles.container}>
-      <SafeAreaView style={[styles.safe, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}>
+      <SafeAreaView
+        style={[styles.safe, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}
+      >
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.brand}>solucity</Text>
-          <Pressable onPress={handleClose} hitSlop={8} style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.8 }]}>
+          <Pressable
+            onPress={handleClose}
+            hitSlop={8}
+            style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.8 }]}
+          >
             <Text style={styles.closeText}>Cerrar</Text>
           </Pressable>
         </View>
@@ -30,7 +36,8 @@ export default function SpecialistWizard({ onClose }: Props) {
         <View style={styles.body}>
           <Text style={styles.title}>Configurar perfil de especialista</Text>
           <Text style={styles.subtitle}>
-            Este es un asistente inicial (placeholder). Acá irán los pasos para completar{"\n"}tu perfil profesional, zonas de trabajo y verificación.
+            Este es un asistente inicial (placeholder). Acá irán los pasos para completar{'\n'}tu
+            perfil profesional, zonas de trabajo y verificación.
           </Text>
 
           <View style={styles.card}>
@@ -48,13 +55,16 @@ export default function SpecialistWizard({ onClose }: Props) {
             <Text style={styles.cardText}>Documentación y validación de identidad.</Text>
           </View>
 
-          <Pressable onPress={handleClose} style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.95 }]}>
+          <Pressable
+            onPress={handleClose}
+            style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.95 }]}
+          >
             <Text style={styles.primaryText}>Entendido</Text>
           </Pressable>
         </View>
       </SafeAreaView>
     </LinearGradient>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -98,5 +108,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   primaryText: { color: '#0B6B76', fontWeight: '800', letterSpacing: 0.5, fontSize: 16 },
-})
-
+});

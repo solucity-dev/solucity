@@ -1,8 +1,8 @@
 // apps/mobile/src/screens/RegisterClient.tsx
-import { useNavigation } from '@react-navigation/native'
-import axios from 'axios'
-import { LinearGradient } from 'expo-linear-gradient'
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigation } from '@react-navigation/native';
+import axios from 'axios';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -12,96 +12,98 @@ import {
   Text,
   TextInput,
   View,
-} from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useAuth } from '../auth/AuthProvider'
-import { api } from '../lib/api'
+import { useAuth } from '../auth/AuthProvider';
+import { api } from '../lib/api';
 
-type Step = 1 | 2 | 3
+type Step = 1 | 2 | 3;
 
 type ZodDetails = {
-  fieldErrors?: Partial<Record<string, string[]>>
-  formErrors?: string[]
-}
-type ApiError = { ok?: boolean; error?: string; details?: ZodDetails }
+  fieldErrors?: Partial<Record<string, string[]>>;
+  formErrors?: string[];
+};
+type ApiError = { ok?: boolean; error?: string; details?: ZodDetails };
 type VerifyOk = {
-  ok: true
-  user: { id: string; email: string; role: string; name?: string | null; phone?: string | null }
-  token: string
-}
+  ok: true;
+  user: { id: string; email: string; role: string; name?: string | null; phone?: string | null };
+  token: string;
+};
 
 function msgFromZod(details?: ZodDetails): string | null {
-  const f = details?.fieldErrors ?? {}
-  const passErr = f.password?.join(' ') ?? ''
-  if (passErr && /at least\s*8|mín|minimum|8/i.test(passErr)) return 'La contraseña es muy corta (mínimo 8 caracteres).'
-  const codeErr = f.code?.join(' ') ?? ''
-  if (codeErr && /(6.*digits?|regex|formato)/i.test(codeErr)) return 'El código debe tener 6 dígitos.'
-  const emailErr = f.email?.join(' ') ?? ''
-  if (emailErr) return 'Ingresá un e-mail válido.'
-  const nameErr = f.name?.join(' ') ?? ''
-  if (nameErr) return 'El nombre es demasiado corto.'
-  const phoneErr = f.phone?.join(' ') ?? ''
-  if (phoneErr) return 'El teléfono no tiene un formato válido.'
-  if (details?.formErrors?.length) return details.formErrors.join(' ')
-  return null
+  const f = details?.fieldErrors ?? {};
+  const passErr = f.password?.join(' ') ?? '';
+  if (passErr && /at least\s*8|mín|minimum|8/i.test(passErr))
+    return 'La contraseña es muy corta (mínimo 8 caracteres).';
+  const codeErr = f.code?.join(' ') ?? '';
+  if (codeErr && /(6.*digits?|regex|formato)/i.test(codeErr))
+    return 'El código debe tener 6 dígitos.';
+  const emailErr = f.email?.join(' ') ?? '';
+  if (emailErr) return 'Ingresá un e-mail válido.';
+  const nameErr = f.name?.join(' ') ?? '';
+  if (nameErr) return 'El nombre es demasiado corto.';
+  const phoneErr = f.phone?.join(' ') ?? '';
+  if (phoneErr) return 'El teléfono no tiene un formato válido.';
+  if (details?.formErrors?.length) return details.formErrors.join(' ');
+  return null;
 }
 
 export default function RegisterClient() {
-  const nav = useNavigation()
-  const insets = useSafeAreaInsets()
-  const { signIn } = useAuth()
+  const nav = useNavigation();
+  const insets = useSafeAreaInsets();
+  const { signIn } = useAuth();
 
-  const [step, setStep] = useState<Step>(1)
-  const [fullName, setFullName] = useState('')
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('') // opcional
-  const [otp, setOtp] = useState('')
-  const [password, setPassword] = useState('')
-  const [password2, setPassword2] = useState('')
+  const [step, setStep] = useState<Step>(1);
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState(''); // opcional
+  const [otp, setOtp] = useState('');
+  const [password, setPassword] = useState('');
+  const [password2, setPassword2] = useState('');
 
-  const [loading, setLoading] = useState(false)
-  const [cooldown, setCooldown] = useState(0)
-  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [loading, setLoading] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const emailRegex = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i, [])
-  const nameOk = fullName.trim().length >= 2
-  const emailOk = emailRegex.test(email.trim())
-  const otpOk = otp.trim().length === 6
-  const passOk = password.length >= 8
-  const passMatch = passOk && password === password2
+  const emailRegex = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i, []);
+  const nameOk = fullName.trim().length >= 2;
+  const emailOk = emailRegex.test(email.trim());
+  const otpOk = otp.trim().length === 6;
+  const passOk = password.length >= 8;
+  const passMatch = passOk && password === password2;
 
   // Ping inicial
   useEffect(() => {
-    ;(async () => {
+    (async () => {
       try {
-        const res = await api.get('/health')
-        console.log('[health OK]', res.data)
+        const res = await api.get('/health');
+        console.log('[health OK]', res.data);
       } catch (e) {
         if (axios.isAxiosError(e)) {
-          console.log('[health ERROR]', e.code, e.response?.status, e.message)
+          console.log('[health ERROR]', e.code, e.response?.status, e.message);
         } else {
-          console.log('[health ERROR]', e)
+          console.log('[health ERROR]', e);
         }
-        Alert.alert('Error', 'No puedo contactar la API desde la app.')
+        Alert.alert('Error', 'No puedo contactar la API desde la app.');
       }
-    })()
-  }, [])
+    })();
+  }, []);
 
   // Paso 1: enviar OTP
   const sendEmailOtp = async () => {
-    if (!nameOk || !emailOk || cooldown > 0 || loading) return
-    setLoading(true)
+    if (!nameOk || !emailOk || cooldown > 0 || loading) return;
+    setLoading(true);
     try {
-      console.log('[register/start] POST ->', { email: email.trim() })
-      const res = await api.post('/auth/register/start', { email: email.trim() })
-      console.log('[register/start] RES <-', res.status, res.data)
+      console.log('[register/start] POST ->', { email: email.trim() });
+      const res = await api.post('/auth/register/start', { email: email.trim() });
+      console.log('[register/start] RES <-', res.status, res.data);
       if (res.data?.ok) {
-        setCooldown(45)
-        setStep(2)
+        setCooldown(45);
+        setStep(2);
       } else {
-        const msg = typeof res.data === 'string' ? res.data : (res.data?.error ?? 'unknown')
-        Alert.alert('No se pudo enviar el código', String(msg))
+        const msg = typeof res.data === 'string' ? res.data : (res.data?.error ?? 'unknown');
+        Alert.alert('No se pudo enviar el código', String(msg));
       }
     } catch (err) {
       if (axios.isAxiosError<ApiError>(err)) {
@@ -110,30 +112,32 @@ export default function RegisterClient() {
           data: err.response?.data,
           code: err.code,
           message: err.message,
-        })
-        const code = err.response?.data?.error
-        if (code === 'email_in_use') Alert.alert('E-mail en uso', 'Ya existe una cuenta registrada con ese e-mail.')
-        else if (code === 'too_many_requests') Alert.alert('Demasiados intentos', 'Esperá un momento antes de volver a intentar.')
-        else Alert.alert('Error', code ?? err.message ?? 'No se pudo enviar el código.')
+        });
+        const code = err.response?.data?.error;
+        if (code === 'email_in_use')
+          Alert.alert('E-mail en uso', 'Ya existe una cuenta registrada con ese e-mail.');
+        else if (code === 'too_many_requests')
+          Alert.alert('Demasiados intentos', 'Esperá un momento antes de volver a intentar.');
+        else Alert.alert('Error', code ?? err.message ?? 'No se pudo enviar el código.');
       } else {
-        console.log('[register/start] UNK ERR', err)
-        Alert.alert('Error', 'No se pudo enviar el código. Verificá tu conexión.')
+        console.log('[register/start] UNK ERR', err);
+        Alert.alert('Error', 'No se pudo enviar el código. Verificá tu conexión.');
       }
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   // Paso 2: pasar a contraseñas
   const proceedAfterOtp = () => {
-    if (!otpOk) return Alert.alert('Código inválido', 'Revisá que sean 6 dígitos.')
-    setStep(3)
-  }
+    if (!otpOk) return Alert.alert('Código inválido', 'Revisá que sean 6 dígitos.');
+    setStep(3);
+  };
 
   // Paso 3: verificar OTP + crear usuario
   const finish = async () => {
-    if (!passMatch || !otpOk) return
-    setLoading(true)
+    if (!passMatch || !otpOk) return;
+    setLoading(true);
     try {
       const body = {
         email: email.trim(),
@@ -141,17 +145,17 @@ export default function RegisterClient() {
         name: fullName.trim(),
         password,
         phone: phone.trim() ? phone.trim() : null,
-      }
-      console.log('[register/verify] POST ->', body)
-      const res = await api.post<VerifyOk>('/auth/register/verify', body)
-      console.log('[register/verify] RES <-', res.status, res.data)
+      };
+      console.log('[register/verify] POST ->', body);
+      const res = await api.post<VerifyOk>('/auth/register/verify', body);
+      console.log('[register/verify] RES <-', res.status, res.data);
 
       if (res.data?.ok && res.data.token) {
         // 👉 Esto setea axios + AsyncStorage y dispara re-render del RootNavigator → Main
-        await signIn(res.data.token)
-        return
+        await signIn(res.data.token);
+        return;
       }
-      Alert.alert('No se pudo crear la cuenta', 'Intentá nuevamente.')
+      Alert.alert('No se pudo crear la cuenta', 'Intentá nuevamente.');
     } catch (err) {
       if (axios.isAxiosError<ApiError>(err)) {
         console.log('[register/verify] AXIOS ERR', {
@@ -159,36 +163,44 @@ export default function RegisterClient() {
           data: err.response?.data,
           code: err.code,
           message: err.message,
-        })
-        const code = err.response?.data?.error
-        const details = err.response?.data?.details
+        });
+        const code = err.response?.data?.error;
+        const details = err.response?.data?.details;
         const msg =
-          code === 'otp_invalid' ? 'El código es incorrecto.' :
-          code === 'otp_expired' ? 'El código expiró. Volvé al paso 1 para reenviar.' :
-          code === 'otp_blocked' ? 'Demasiados intentos. Esperá antes de reintentar.' :
-          code === 'weak_password' ? 'La contraseña es muy corta (mín. 8).' :
-          code === 'email_in_use' ? 'Ese e-mail ya está en uso.' :
-          code === 'invalid_input' ? (msgFromZod(details) ?? 'Revisá los datos ingresados.') :
-          (code ?? err.message ?? 'Ocurrió un error. Intentá de nuevo.')
-        Alert.alert('Error', msg)
+          code === 'otp_invalid'
+            ? 'El código es incorrecto.'
+            : code === 'otp_expired'
+              ? 'El código expiró. Volvé al paso 1 para reenviar.'
+              : code === 'otp_blocked'
+                ? 'Demasiados intentos. Esperá antes de reintentar.'
+                : code === 'weak_password'
+                  ? 'La contraseña es muy corta (mín. 8).'
+                  : code === 'email_in_use'
+                    ? 'Ese e-mail ya está en uso.'
+                    : code === 'invalid_input'
+                      ? (msgFromZod(details) ?? 'Revisá los datos ingresados.')
+                      : (code ?? err.message ?? 'Ocurrió un error. Intentá de nuevo.');
+        Alert.alert('Error', msg);
       } else {
-        console.log('[register/verify] UNK ERR', err)
-        Alert.alert('Error', 'No se pudo verificar/crear la cuenta.')
+        console.log('[register/verify] UNK ERR', err);
+        Alert.alert('Error', 'No se pudo verificar/crear la cuenta.');
       }
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   // cooldown timer
   useEffect(() => {
-    if (cooldown <= 0) return
-    cooldownRef.current = setInterval(() => setCooldown(c => (c > 0 ? c - 1 : 0)), 1000)
-    return () => { if (cooldownRef.current) clearInterval(cooldownRef.current) }
-  }, [cooldown])
+    if (cooldown <= 0) return;
+    cooldownRef.current = setInterval(() => setCooldown((c) => (c > 0 ? c - 1 : 0)), 1000);
+    return () => {
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+    };
+  }, [cooldown]);
 
-  const bottomPad = Math.max(16, insets.bottom + 6)
-  const goBack = () => nav.goBack()
+  const bottomPad = Math.max(16, insets.bottom + 6);
+  const goBack = () => nav.goBack();
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={styles.container}>
@@ -342,22 +354,26 @@ export default function RegisterClient() {
         </KeyboardAvoidingView>
       </SafeAreaView>
     </LinearGradient>
-  )
+  );
 }
 
 /* ---------- UI helpers ---------- */
 function LinedNote({ text }: { text: string }) {
-  return <Text style={styles.note}>{text}</Text>
+  return <Text style={styles.note}>{text}</Text>;
 }
 
-type InputProps = React.ComponentProps<typeof TextInput> & { label: string }
+type InputProps = React.ComponentProps<typeof TextInput> & { label: string };
 function LabeledInput({ label, style, ...rest }: InputProps) {
   return (
     <View style={styles.inputWrap}>
       {label ? <Text style={styles.inputLabel}>{label}</Text> : null}
-      <TextInput {...rest} style={[styles.input, style]} placeholderTextColor="rgba(255,255,255,0.7)" />
+      <TextInput
+        {...rest}
+        style={[styles.input, style]}
+        placeholderTextColor="rgba(255,255,255,0.7)"
+      />
     </View>
-  )
+  );
 }
 
 /* ---------- Estilos ---------- */
@@ -405,8 +421,4 @@ const styles = StyleSheet.create({
   linkText: { color: 'rgba(255,255,255,0.95)', textDecorationLine: 'underline' },
 
   note: { color: 'rgba(255,255,255,0.75)', marginTop: 8, marginBottom: -4 },
-})
-
-
-
-
+});

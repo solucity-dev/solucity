@@ -1,9 +1,9 @@
 // apps/mobile/src/screens/ProfileScreen.tsx
-import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons'
-import { useNavigation } from '@react-navigation/native'
-import * as ImagePicker from 'expo-image-picker'
-import { LinearGradient } from 'expo-linear-gradient'
-import React, { useEffect, useState } from 'react'
+import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,130 +15,163 @@ import {
   Text,
   TextInput,
   View,
-} from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useAuth } from '../auth/AuthProvider'
-import { api } from '../lib/api'
-import { getMySubscription, type SubscriptionInfo } from '../lib/subscriptionApi'
+import { useAuth } from '../auth/AuthProvider';
+import { api } from '../lib/api';
+import { getMySubscription, type SubscriptionInfo } from '../lib/subscriptionApi';
 
-type UserRole = 'ADMIN' | 'CUSTOMER' | 'SPECIALIST'
+type UserRole = 'ADMIN' | 'CUSTOMER' | 'SPECIALIST';
+type KycStatus = 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'REJECTED';
 
 type MeResponse = {
-  ok: boolean
+  ok: boolean;
   user: {
-    id: string
-    email: string
-    name?: string | null
-    surname?: string | null
-    phone?: string | null
-    role?: UserRole
-  }
-}
+    id: string;
+    email: string;
+    name?: string | null;
+    surname?: string | null;
+    phone?: string | null;
+    role?: UserRole;
+  };
+};
 
 // 👇 misma función que en SpecialistHome
 function absoluteUrl(u?: string | null): string | undefined {
-  if (!u) return undefined
-  if (/^https?:\/\//i.test(u)) return u
+  if (!u) return undefined;
+  if (/^https?:\/\//i.test(u)) return u;
   if (u.startsWith('/')) {
-    const base = api.defaults.baseURL ?? ''
-    return `${base.replace(/\/+$/, '')}${u}`
+    const base = api.defaults.baseURL ?? '';
+    return `${base.replace(/\/+$/, '')}${u}`;
   }
-  return u
+  return u;
 }
 
 function formatDate(dateStr?: string | null) {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
 }
 
 function renderSubscriptionMainText(sub: SubscriptionInfo) {
   if (sub.status === 'TRIALING') {
     if (typeof sub.daysRemaining === 'number') {
-      if (sub.daysRemaining <= 0) return 'Tu prueba termina hoy.'
-      if (sub.daysRemaining === 1) return 'Te queda 1 día de prueba.'
-      return `Te quedan ${sub.daysRemaining} días de prueba.`
+      if (sub.daysRemaining <= 0) return 'Tu prueba termina hoy.';
+      if (sub.daysRemaining === 1) return 'Te queda 1 día de prueba.';
+      return `Te quedan ${sub.daysRemaining} días de prueba.`;
     }
-    return 'Tenés una prueba activa.'
+    return 'Tenés una prueba activa.';
   }
-  if (sub.status === 'ACTIVE') {
-    return 'Tu suscripción está activa.'
+  if (sub.status === 'ACTIVE') return 'Tu suscripción está activa.';
+  if (sub.status === 'PAST_DUE') return 'Tu suscripción tiene un pago pendiente.';
+  return 'Tu suscripción está inactiva.';
+}
+
+function kycLabel(status?: KycStatus | null) {
+  switch (status) {
+    case 'VERIFIED':
+      return 'Verificado';
+    case 'PENDING':
+      return 'En revisión';
+    case 'REJECTED':
+      return 'Rechazado';
+    case 'UNVERIFIED':
+    default:
+      return 'Pendiente';
   }
-  if (sub.status === 'PAST_DUE') {
-    return 'Tu suscripción tiene un pago pendiente.'
+}
+
+function kycIcon(status?: KycStatus | null): keyof typeof Ionicons.glyphMap {
+  switch (status) {
+    case 'VERIFIED':
+      return 'checkmark-circle-outline';
+    case 'PENDING':
+      return 'time-outline';
+    case 'REJECTED':
+      return 'close-circle-outline';
+    default:
+      return 'alert-circle-outline';
   }
-  return 'Tu suscripción está inactiva.'
 }
 
 export default function ProfileScreen() {
-  const insets = useSafeAreaInsets()
-  const nav = useNavigation()
-  const auth = useAuth() as any
-  const signOut = auth?.signOut ?? auth?.logout ?? auth?.signOutAsync
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>(); // ✅ usamos navigation para evitar warning ESLint
+  const auth = useAuth() as any;
+  const signOut = auth?.signOut ?? auth?.logout ?? auth?.signOutAsync;
 
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const [role, setRole] = useState<UserRole | null>(null)
+  const [role, setRole] = useState<UserRole | null>(null);
 
-  const [name, setName] = useState('')
-  const [surname, setSurname] = useState('')
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
+  const [name, setName] = useState('');
+  const [surname, setSurname] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
 
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+  // ✅ KYC status (solo specialist)
+  const [kycStatus, setKycStatus] = useState<KycStatus | null>(null);
 
   // suscripción (solo specialist)
-  const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null)
-  const [subscriptionLoading, setSubscriptionLoading] = useState(false)
+  const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
 
   // cambio de contraseña
-  const [showPasswordForm, setShowPasswordForm] = useState(false)
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [newPassword2, setNewPassword2] = useState('')
-  const [changingPassword, setChangingPassword] = useState(false)
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newPassword2, setNewPassword2] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
 
   // notificaciones (por ahora local)
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true)
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
-  const isSpecialist = role === 'SPECIALIST'
-  const isCustomer = role === 'CUSTOMER'
+  const isSpecialist = role === 'SPECIALIST';
+  const isCustomer = role === 'CUSTOMER';
 
   const loadProfile = async () => {
     try {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
 
       const res = await api.get<MeResponse>('/auth/me', {
         headers: { 'Cache-Control': 'no-cache' },
-      })
+      });
 
-      const u = res.data.user
-      const r = u.role ?? null
-      setRole(r)
+      const u = res.data.user;
+      const r = u.role ?? null;
+      setRole(r);
 
-      setName(u.name ?? '')
-      setSurname(u.surname ?? '')
-      setEmail(u.email)
-      setPhone(u.phone ?? '')
+      setName(u.name ?? '');
+      setSurname(u.surname ?? '');
+      setEmail(u.email);
+      setPhone(u.phone ?? '');
+
+      // reset
+      setKycStatus(null);
 
       // Avatar preload por ROLE real
       try {
         if (r === 'SPECIALIST') {
           const rr = await api.get<any>('/specialists/me', {
             headers: { 'Cache-Control': 'no-cache' },
-          })
-          const p = rr.data?.profile ?? rr.data
-          setAvatarUrl(p?.avatarUrl ?? null)
+          });
+          const p = rr.data?.profile ?? rr.data;
+          setAvatarUrl(p?.avatarUrl ?? null);
+
+          // ✅ leemos KYC (si existe)
+          setKycStatus((p?.kycStatus ?? null) as KycStatus | null);
         } else if (r === 'CUSTOMER') {
           const rr = await api.get<any>('/customers/me', {
             headers: { 'Cache-Control': 'no-cache' },
-          })
-          const cust = rr.data?.profile ?? rr.data?.customer ?? rr.data
+          });
+          const cust = rr.data?.profile ?? rr.data?.customer ?? rr.data;
           const maybeAvatar =
             cust?.avatarUrl ??
             cust?.avatar_url ??
@@ -147,170 +180,155 @@ export default function ProfileScreen() {
             rr.data?.avatarUrl ??
             rr.data?.profile?.avatarUrl ??
             rr.data?.customer?.avatarUrl ??
-            null
-          setAvatarUrl(maybeAvatar)
+            null;
+          setAvatarUrl(maybeAvatar);
         } else {
-          setAvatarUrl(null)
+          setAvatarUrl(null);
         }
       } catch (err) {
-        console.log('[Profile] avatar preload error', err)
-        setAvatarUrl(null)
+        if (__DEV__) console.log('[Profile] avatar preload error', err);
+        setAvatarUrl(null);
       }
 
       // Suscripción (solo specialist)
       if (r === 'SPECIALIST') {
         try {
-          setSubscriptionLoading(true)
-          const sub = await getMySubscription()
-          setSubscription(sub)
+          setSubscriptionLoading(true);
+          const sub = await getMySubscription();
+          setSubscription(sub);
         } catch (e) {
-          if (__DEV__) console.log('[Profile] error cargando suscripción', e)
-          setSubscription(null)
+          if (__DEV__) console.log('[Profile] error cargando suscripción', e);
+          setSubscription(null);
         } finally {
-          setSubscriptionLoading(false)
+          setSubscriptionLoading(false);
         }
       } else {
-        setSubscription(null)
+        setSubscription(null);
       }
     } catch (e: any) {
-      console.error('[Profile] /auth/me error', e?.response?.data ?? e)
-      setError(e?.message ?? 'No se pudo cargar el perfil')
+      if (__DEV__) console.log('[Profile] /auth/me error', e?.response?.data ?? e);
+      setError(e?.message ?? 'No se pudo cargar el perfil');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    loadProfile()
+    loadProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, []);
 
   const onSave = async () => {
     try {
-      setSaving(true)
-      setError(null)
+      setSaving(true);
+      setError(null);
       await api.patch('/auth/profile', {
         name: name.trim(),
         surname: surname.trim(),
         phone: phone.trim() || undefined,
-      })
-      Alert.alert('Listo', 'Perfil actualizado correctamente')
+      });
+      Alert.alert('Listo', 'Perfil actualizado correctamente');
     } catch (e: any) {
-      console.error('[Profile] PATCH /auth/profile error', e?.response?.data ?? e)
-      setError(
-        e?.response?.data?.error ??
-          e?.message ??
-          'No se pudo actualizar el perfil',
-      )
-      Alert.alert('Error', 'No se pudo actualizar el perfil')
+      if (__DEV__) console.log('[Profile] PATCH /auth/profile error', e?.response?.data ?? e);
+      setError(e?.response?.data?.error ?? e?.message ?? 'No se pudo actualizar el perfil');
+      Alert.alert('Error', 'No se pudo actualizar el perfil');
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
 
   const onChangePassword = async () => {
     if (!currentPassword || !newPassword || !newPassword2) {
-      return Alert.alert('Atención', 'Completá todos los campos.')
+      return Alert.alert('Atención', 'Completá todos los campos.');
     }
     if (newPassword !== newPassword2) {
-      return Alert.alert('Atención', 'La nueva contraseña no coincide.')
+      return Alert.alert('Atención', 'La nueva contraseña no coincide.');
     }
     if (newPassword.length < 6) {
-      return Alert.alert(
-        'Atención',
-        'La nueva contraseña debe tener al menos 6 caracteres.',
-      )
+      return Alert.alert('Atención', 'La nueva contraseña debe tener al menos 6 caracteres.');
     }
 
     try {
-      setChangingPassword(true)
+      setChangingPassword(true);
       const res = await api.patch('/auth/password', {
         currentPassword,
         newPassword,
-      })
+      });
       if (res.data?.ok) {
-        Alert.alert('Listo', 'Contraseña actualizada correctamente.')
-        setCurrentPassword('')
-        setNewPassword('')
-        setNewPassword2('')
-        setShowPasswordForm(false)
+        Alert.alert('Listo', 'Contraseña actualizada correctamente.');
+        setCurrentPassword('');
+        setNewPassword('');
+        setNewPassword2('');
+        setShowPasswordForm(false);
       } else {
-        Alert.alert('Error', 'No se pudo actualizar la contraseña.')
+        Alert.alert('Error', 'No se pudo actualizar la contraseña.');
       }
     } catch (e: any) {
-  const serverErr = e?.response?.data?.error
+      const serverErr = e?.response?.data?.error;
 
-  // ✅ Evitamos LogBox “pegajoso” por console.error en Expo
-  if (__DEV__) {
-    console.log('[Profile] PATCH /auth/password failed:', e?.response?.data ?? e)
-  }
+      if (__DEV__) {
+        console.log('[Profile] PATCH /auth/password failed:', e?.response?.data ?? e);
+      }
 
-  if (serverErr === 'invalid_current_password') {
-    Alert.alert('Error', 'La contraseña actual no es correcta.')
-  } else {
-    Alert.alert(
-      'Error',
-      serverErr ?? e?.message ?? 'No se pudo actualizar la contraseña.',
-    )
-  }
-} finally {
-
-      setChangingPassword(false)
+      if (serverErr === 'invalid_current_password') {
+        Alert.alert('Error', 'La contraseña actual no es correcta.');
+      } else {
+        Alert.alert('Error', serverErr ?? e?.message ?? 'No se pudo actualizar la contraseña.');
+      }
+    } finally {
+      setChangingPassword(false);
     }
-  }
+  };
 
   // subir avatar (especialista o cliente)
   const uploadAvatarFromAsset = async (asset: ImagePicker.ImagePickerAsset) => {
-    if (!asset?.uri) return
+    if (!asset?.uri) return;
 
     if (!isSpecialist && !isCustomer) {
-      Alert.alert('Atención', 'No se pudo determinar tu rol para subir la foto.')
-      return
+      Alert.alert('Atención', 'No se pudo determinar tu rol para subir la foto.');
+      return;
     }
 
     try {
-      const uri = asset.uri
-      const nameFile = uri.split('/').pop() ?? 'avatar.jpg'
-      const type = (asset as any).mimeType ?? 'image/jpeg'
+      const uri = asset.uri;
+      const nameFile = uri.split('/').pop() ?? 'avatar.jpg';
+      const type = (asset as any).mimeType ?? 'image/jpeg';
 
-      const form = new FormData()
+      const form = new FormData();
       form.append('avatar', {
         uri,
         name: nameFile,
         type,
-      } as any)
+      } as any);
 
-      const endpoint = isSpecialist ? '/specialists/me/avatar' : '/customers/me/avatar'
+      const endpoint = isSpecialist ? '/specialists/me/avatar' : '/customers/me/avatar';
 
       const res = await api.post(endpoint, form, {
         headers: { 'Content-Type': 'multipart/form-data' },
-      })
+      });
 
       const newUrl = isSpecialist
         ? (res.data?.avatarUrl as string | undefined)
-        : (res.data?.profile?.avatarUrl as string | undefined)
+        : (res.data?.profile?.avatarUrl as string | undefined);
 
       if (res.data?.ok && newUrl) {
-        setAvatarUrl(newUrl)
-        Alert.alert('Listo', 'Foto de perfil actualizada.')
+        setAvatarUrl(newUrl);
+        Alert.alert('Listo', 'Foto de perfil actualizada.');
       } else {
-        Alert.alert('Error', 'No se pudo actualizar la foto de perfil.')
+        Alert.alert('Error', 'No se pudo actualizar la foto de perfil.');
       }
     } catch (e: any) {
-      console.error('[Profile] upload avatar error', e?.response?.data ?? e)
-      Alert.alert(
-        'Error',
-        e?.response?.data?.error ?? e?.message ?? 'No se pudo subir la imagen.',
-      )
+      if (__DEV__) console.log('[Profile] upload avatar error', e?.response?.data ?? e);
+      Alert.alert('Error', e?.response?.data?.error ?? e?.message ?? 'No se pudo subir la imagen.');
     }
-  }
+  };
 
   const onPickAvatar = async () => {
     if (!isSpecialist && !isCustomer) {
       return Alert.alert(
         'Atención',
         'La foto de perfil está disponible para especialistas y clientes.',
-      )
+      );
     }
 
     Alert.alert(
@@ -321,58 +339,54 @@ export default function ProfileScreen() {
         {
           text: 'Tomar foto',
           onPress: async () => {
-            const { status } = await ImagePicker.requestCameraPermissionsAsync()
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
             if (status !== 'granted') {
               return Alert.alert(
                 'Permiso requerido',
                 'Necesitamos acceso a la cámara para tomar una foto.',
-              )
+              );
             }
 
             const result = await ImagePicker.launchCameraAsync({
               mediaTypes: ImagePicker.MediaTypeOptions.Images,
               quality: 0.8,
-            })
+            });
 
-            if (result.canceled) return
-            const asset = result.assets?.[0]
-            if (!asset) return
-            await uploadAvatarFromAsset(asset)
+            if (result.canceled) return;
+            const asset = result.assets?.[0];
+            if (!asset) return;
+            await uploadAvatarFromAsset(asset);
           },
         },
         {
           text: 'Elegir de la galería',
           onPress: async () => {
-            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (status !== 'granted') {
               return Alert.alert(
                 'Permiso requerido',
                 'Necesitamos acceso a tu galería para cambiar la foto de perfil.',
-              )
+              );
             }
 
             const result = await ImagePicker.launchImageLibraryAsync({
               mediaTypes: ImagePicker.MediaTypeOptions.Images,
               quality: 0.8,
-            })
+            });
 
-            if (result.canceled) return
-            const asset = result.assets?.[0]
-            if (!asset) return
-            await uploadAvatarFromAsset(asset)
+            if (result.canceled) return;
+            const asset = result.assets?.[0];
+            if (!asset) return;
+            await uploadAvatarFromAsset(asset);
           },
         },
       ],
       { cancelable: true },
-    )
-  }
+    );
+  };
 
   const roleLabel =
-    role === 'SPECIALIST'
-      ? 'Especialista'
-      : role === 'CUSTOMER'
-      ? 'Cliente'
-      : 'Usuario'
+    role === 'SPECIALIST' ? 'Especialista' : role === 'CUSTOMER' ? 'Cliente' : 'Usuario';
 
   if (loading) {
     return (
@@ -382,7 +396,7 @@ export default function ProfileScreen() {
           <Text style={{ color: '#E9FEFF', marginTop: 8 }}>Cargando perfil…</Text>
         </SafeAreaView>
       </LinearGradient>
-    )
+    );
   }
 
   if (error) {
@@ -396,15 +410,14 @@ export default function ProfileScreen() {
           </Pressable>
         </SafeAreaView>
       </LinearGradient>
-    )
+    );
   }
 
   const initials =
-    (name?.trim()?.[0] ?? '').toUpperCase() +
-    (surname?.trim()?.[0] ?? '').toUpperCase()
+    (name?.trim()?.[0] ?? '').toUpperCase() + (surname?.trim()?.[0] ?? '').toUpperCase();
 
-  const abs = absoluteUrl(avatarUrl)
-  const avatarSrc = abs ? { uri: abs } : require('../assets/avatar-placeholder.png')
+  const abs = absoluteUrl(avatarUrl);
+  const avatarSrc = abs ? { uri: abs } : require('../assets/avatar-placeholder.png');
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
@@ -512,6 +525,26 @@ export default function ProfileScreen() {
             </View>
           </View>
 
+          {/* ✅ Verificación KYC (solo especialista) */}
+          {isSpecialist ? (
+            <View style={styles.card}>
+              <View style={styles.sectionHeader}>
+                <MDI name="account-check-outline" size={18} color="#E9FEFF" />
+                <Text style={styles.sectionTitle}>Verificación (KYC)</Text>
+              </View>
+
+              <ProfileRow
+                icon={<Ionicons name={kycIcon(kycStatus)} size={20} color="#E9FEFF" />}
+                label={`Estado: ${kycLabel(kycStatus)}`}
+                onPress={() => navigation.navigate('KycStatus')}
+              />
+
+              <Text style={styles.muted}>
+                Verificá tu identidad para operar sin limitaciones y generar más confianza.
+              </Text>
+            </View>
+          ) : null}
+
           {/* ✅ Suscripción (solo especialista) */}
           {isSpecialist ? (
             <View style={styles.card}>
@@ -523,9 +556,7 @@ export default function ProfileScreen() {
               {subscriptionLoading ? (
                 <View style={{ paddingVertical: 8 }}>
                   <ActivityIndicator color="#E9FEFF" />
-                  <Text style={[styles.muted, { marginTop: 8 }]}>
-                    Cargando suscripción…
-                  </Text>
+                  <Text style={[styles.muted, { marginTop: 8 }]}>Cargando suscripción…</Text>
                 </View>
               ) : subscription ? (
                 <View style={{ marginTop: 4, gap: 6 }}>
@@ -534,16 +565,14 @@ export default function ProfileScreen() {
                       {subscription.status === 'TRIALING'
                         ? 'Período de prueba'
                         : subscription.status === 'ACTIVE'
-                        ? 'Suscripción activa'
-                        : subscription.status === 'PAST_DUE'
-                        ? 'Pago pendiente'
-                        : 'Suscripción inactiva'}
+                          ? 'Suscripción activa'
+                          : subscription.status === 'PAST_DUE'
+                            ? 'Pago pendiente'
+                            : 'Suscripción inactiva'}
                     </Text>
                   </View>
 
-                  <Text style={styles.subMainText}>
-                    {renderSubscriptionMainText(subscription)}
-                  </Text>
+                  <Text style={styles.subMainText}>{renderSubscriptionMainText(subscription)}</Text>
 
                   {subscription.status === 'TRIALING' &&
                   typeof subscription.daysRemaining === 'number' ? (
@@ -643,7 +672,7 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* ✅ Ayuda y legal (recuperado) */}
+          {/* Ayuda y legal */}
           <View style={styles.card}>
             <View style={styles.sectionHeader}>
               <MDI name="help-circle-outline" size={18} color="#E9FEFF" />
@@ -682,10 +711,10 @@ export default function ProfileScreen() {
                     text: 'Cerrar sesión',
                     style: 'destructive',
                     onPress: async () => {
-                      await (signOut?.() ?? Promise.resolve())
+                      await (signOut?.() ?? Promise.resolve());
                     },
                   },
-                ])
+                ]);
               }}
             >
               <Ionicons name="log-out-outline" size={20} color="#fff" />
@@ -695,14 +724,10 @@ export default function ProfileScreen() {
         </ScrollView>
       </SafeAreaView>
     </LinearGradient>
-  )
+  );
 }
 
-function ProfileRow(props: {
-  icon: React.ReactNode
-  label: string
-  onPress?: () => void
-}) {
+function ProfileRow(props: { icon: React.ReactNode; label: string; onPress?: () => void }) {
   return (
     <Pressable
       onPress={props.onPress}
@@ -717,7 +742,7 @@ function ProfileRow(props: {
       </View>
       <Ionicons name="chevron-forward" size={18} color="#E9FEFF" />
     </Pressable>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -845,18 +870,4 @@ const styles = StyleSheet.create({
     backgroundColor: '#ff3b30',
   },
   logoutText: { color: '#fff', fontWeight: '800' },
-})
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+});

@@ -7,15 +7,15 @@ import {
   SubscriptionStatus,
   UserStatus,
   VerificationStatus,
-} from '@prisma/client'
+} from '@prisma/client';
 
-const prisma = new PrismaClient()
+const prisma = new PrismaClient();
 
 type GroupSeed = {
-  name: string
-  slug: string
-  rubros: string[]
-}
+  name: string;
+  slug: string;
+  rubros: string[];
+};
 
 const groups: GroupSeed[] = [
   {
@@ -46,23 +46,14 @@ const groups: GroupSeed[] = [
   {
     name: 'Seguridad',
     slug: 'seguridad',
-    rubros: [
-      'Cámaras y alarmas',
-      'Cerrajería',
-      'Personal de seguridad',
-    ],
+    rubros: ['Cámaras y alarmas', 'Cerrajería', 'Personal de seguridad'],
   },
   {
     name: 'Servicios',
     slug: 'servicios',
-    rubros: [
-      'Limpieza',
-      'Acompañante terapéutico',
-      'Clases particulares',
-      'Paseador de perros',
-    ],
+    rubros: ['Limpieza', 'Acompañante terapéutico', 'Clases particulares', 'Paseador de perros'],
   },
-]
+];
 
 // Slugify igual que estás usando en mobile
 function slugify(name: string) {
@@ -74,25 +65,25 @@ function slugify(name: string) {
     .replace(/[^a-z0-9\s-]/g, '')
     .trim()
     .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
+    .replace(/-+/g, '-');
 }
 
 async function upsertCategories() {
   for (let i = 0; i < groups.length; i++) {
-    const g = groups[i]
+    const g = groups[i];
     const group = await prisma.serviceCategoryGroup.upsert({
       where: { slug: g.slug },
       update: { sortOrder: i + 1, isActive: true },
       create: { name: g.name, slug: g.slug, sortOrder: i + 1, isActive: true },
-    })
+    });
 
     for (const r of g.rubros) {
-      const slug = slugify(r)
+      const slug = slugify(r);
       await prisma.serviceCategory.upsert({
         where: { slug },
         update: { isActive: true },
         create: { name: r, slug, groupId: group.id, isActive: true },
-      })
+      });
     }
   }
 }
@@ -111,13 +102,13 @@ async function createDemoUsers() {
       role: Role.CUSTOMER,
       status: UserStatus.ACTIVE,
     },
-  })
+  });
 
   const customer = await prisma.customerProfile.upsert({
     where: { userId: userCustomer.id },
     update: {},
     create: { userId: userCustomer.id },
-  })
+  });
 
   // Dirección demo
   const addr = await prisma.address.create({
@@ -127,12 +118,12 @@ async function createDemoUsers() {
       lng: -64.1833,
       placeId: 'demo_place',
     },
-  })
+  });
 
   await prisma.customerProfile.update({
     where: { id: customer.id },
     data: { defaultAddressId: addr.id },
-  })
+  });
 
   // Especialista demo (único, lo dejamos para compat y pruebas)
   const userSpec = await prisma.user.upsert({
@@ -147,13 +138,13 @@ async function createDemoUsers() {
       role: Role.SPECIALIST,
       status: UserStatus.ACTIVE,
     },
-  })
+  });
 
   const availability: Prisma.JsonArray = [
     { weekday: 1, startTime: '09:00', endTime: '13:00' },
     { weekday: 1, startTime: '15:00', endTime: '19:00' },
     { weekday: 3, startTime: '09:00', endTime: '13:00' },
-  ]
+  ];
 
   const specialist = await prisma.specialistProfile.upsert({
     where: { userId: userSpec.id },
@@ -173,12 +164,12 @@ async function createDemoUsers() {
       radiusKm: 10,
       availability,
     },
-  })
+  });
 
   // Rubro Electricista
   const electricista = await prisma.serviceCategory.findUnique({
     where: { slug: 'electricidad' }, // 👈 ojo: ahora el slug correcto de tu seed es "electricidad"
-  })
+  });
 
   if (electricista) {
     await prisma.specialistSpecialty.upsert({
@@ -190,7 +181,7 @@ async function createDemoUsers() {
       },
       update: {},
       create: { specialistId: specialist.id, categoryId: electricista.id },
-    })
+    });
 
     // Suscripción demo
     await prisma.subscription.upsert({
@@ -203,7 +194,7 @@ async function createDemoUsers() {
         currentPeriodEnd: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
         trialEnd: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
       },
-    })
+    });
 
     // Servicio + orden demo
     const service = await prisma.service.upsert({
@@ -219,7 +210,7 @@ async function createDemoUsers() {
         slaHours: 24,
         basePrice: 15000,
       },
-    })
+    });
 
     const order = await prisma.serviceOrder.create({
       data: {
@@ -235,7 +226,7 @@ async function createDemoUsers() {
         autoCancelAt: null,
         agreedPrice: 15000,
       },
-    })
+    });
 
     await prisma.orderEvent.create({
       data: {
@@ -244,9 +235,9 @@ async function createDemoUsers() {
         type: 'ASSIGNED',
         payload: { note: 'Aceptada por especialista demo' },
       },
-    })
+    });
   } else {
-    console.warn("⚠️ No se encontró el rubro 'electricidad' (revisar slug en seed).")
+    console.warn("⚠️ No se encontró el rubro 'electricidad' (revisar slug en seed).");
   }
 }
 
@@ -256,18 +247,18 @@ async function createDemoUsers() {
 async function createDemoSpecialists() {
   const allCats = await prisma.serviceCategory.findMany({
     include: { group: true },
-  })
+  });
   if (!allCats.length) {
-    console.warn('⚠️ Aún no hay categorías. Llamá a upsertCategories() antes.')
-    return
+    console.warn('⚠️ Aún no hay categorías. Llamá a upsertCategories() antes.');
+    return;
   }
 
-  const baseLat = -33.1489
-  const baseLng = -64.3333
+  const baseLat = -33.1489;
+  const baseLng = -64.3333;
 
   for (const cat of allCats) {
     for (let i = 0; i < 2; i++) {
-      const email = `spec.${cat.slug}.${i + 1}@demo.solucity.dev`
+      const email = `spec.${cat.slug}.${i + 1}@demo.solucity.dev`;
 
       // 👇 upsert por email (idempotente) y sin phone
       const user = await prisma.user.upsert({
@@ -280,23 +271,23 @@ async function createDemoSpecialists() {
           status: 'ACTIVE',
           name: `${cat.name} Demo ${i + 1}`,
         },
-      })
+      });
 
       // Si ya tenía perfil, seguimos con el siguiente
       const existingSpec = await prisma.specialistProfile.findUnique({
         where: { userId: user.id },
-      })
-      if (existingSpec) continue
+      });
+      if (existingSpec) continue;
 
-      const lat = baseLat + (Math.random() - 0.5) * 0.08
-      const lng = baseLng + (Math.random() - 0.5) * 0.08
-      const rating = 3.6 + Math.random() * 1.4
-      const visits = 10 + Math.floor(Math.random() * 160)
-      const price = 8000 + Math.floor(Math.random() * 22000)
-      const badgeList = ['BRONZE','SILVER','GOLD','PLATINUM'] as const
-      const badge = badgeList[Math.floor(Math.random()*badgeList.length)]
-      const availableNow = Math.random() > 0.35
-      const verified = Math.random() > 0.5
+      const lat = baseLat + (Math.random() - 0.5) * 0.08;
+      const lng = baseLng + (Math.random() - 0.5) * 0.08;
+      const rating = 3.6 + Math.random() * 1.4;
+      const visits = 10 + Math.floor(Math.random() * 160);
+      const price = 8000 + Math.floor(Math.random() * 22000);
+      const badgeList = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM'] as const;
+      const badge = badgeList[Math.floor(Math.random() * badgeList.length)];
+      const availableNow = Math.random() > 0.35;
+      const verified = Math.random() > 0.5;
 
       const specialist = await prisma.specialistProfile.create({
         data: {
@@ -318,11 +309,11 @@ async function createDemoSpecialists() {
             { weekday: 5, startTime: '09:00', endTime: '18:00' },
           ] as any,
         },
-      })
+      });
 
       await prisma.specialistSpecialty.create({
         data: { specialistId: specialist.id, categoryId: cat.id },
-      })
+      });
 
       await prisma.specialistSearchIndex.create({
         data: {
@@ -339,7 +330,7 @@ async function createDemoSpecialists() {
           availableNow,
           verified,
         },
-      })
+      });
     }
   }
 }
@@ -349,18 +340,17 @@ async function createDemoSpecialists() {
  * Está al final del archivo (acá 👇). Acá llamás lo necesario.
  */
 async function main() {
-  await upsertCategories()
-  await createDemoUsers()
-  await createDemoSpecialists() // 👈 importante
-  console.log('✅ Seed completado')
+  await upsertCategories();
+  await createDemoUsers();
+  await createDemoSpecialists(); // 👈 importante
+  console.log('✅ Seed completado');
 }
 
 main()
   .catch((e) => {
-    console.error(e)
-    process.exit(1)
+    console.error(e);
+    process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect()
-  })
-
+    await prisma.$disconnect();
+  });

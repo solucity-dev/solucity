@@ -1,0 +1,257 @@
+/* apps/admin-web/src/pages/dashboard.css */
+
+/* Fondo y base */
+.dashboardShell {
+  min-height: calc(100vh - 48px);
+  padding: 24px;
+
+  /* Fondo Solucity (azulado) */
+  background:
+    radial-gradient(1200px 700px at 10% 10%, rgba(0, 201, 167, 0.22), transparent 55%),
+    radial-gradient(900px 600px at 90% 20%, rgba(20, 120, 255, 0.22), transparent 55%),
+    linear-gradient(180deg, #062a36 0%, #083545 45%, #062a36 100%);
+
+  color: #eef6ff;
+}
+
+/* Header */
+.dashboardTop {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.dashboardTitle {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: #f3f8ff;
+}
+
+.dashboardSubtitle {
+  margin: 8px 0 0;
+  color: rgba(243, 248, 255, 0.72);
+  font-size: 14px;
+}
+
+/* Botón */
+.refreshBtn {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.10);
+  color: #f3f8ff;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.22);
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.refreshBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 30px rgba(2, 6, 23, 0.28);
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.26);
+}
+
+.refreshBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Estados */
+.stateBox {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.10);
+  color: #f3f8ff;
+  box-shadow: 0 12px 24px rgba(2, 6, 23, 0.20);
+}
+
+.stateError {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.10);
+}
+
+/* Secciones */
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 14px;
+}
+
+.section {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.10);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 14px 30px rgba(2, 6, 23, 0.25);
+  backdrop-filter: blur(10px);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  color: #f3f8ff;
+}
+
+.sectionSubtitle {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: rgba(243, 248, 255, 0.70);
+}
+
+/* Grid de cards */
+.cardsGrid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 12px;
+}
+
+/* Card base: glass + glow + degradado */
+.cardMetric {
+  grid-column: span 4;
+  border-radius: 16px;
+  padding: 14px 14px 12px;
+
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(255, 255, 255, 0.78) 100%
+  );
+
+  border: 1px solid rgba(255, 255, 255, 0.22);
+
+  box-shadow:
+    0 14px 30px rgba(2, 6, 23, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+
+  position: relative;
+  overflow: hidden;
+  color: #0b1220;
+
+  backdrop-filter: blur(10px);
+}
+
+.cardMetric::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background:
+    radial-gradient(820px 260px at 20% 10%, rgba(0, 201, 167, 0.18), transparent 55%),
+    radial-gradient(720px 240px at 85% 25%, rgba(20, 120, 255, 0.16), transparent 60%);
+  pointer-events: none;
+}
+
+/* Layout interno */
+.metricTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.metricLabel {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: rgba(2, 6, 23, 0.72);
+}
+
+.metricValue {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: #0b1220;
+}
+
+.metricHint {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(2, 6, 23, 0.55);
+  position: relative;
+  z-index: 1;
+}
+
+/* Cards clickeables */
+.cardMetric.isClickable {
+  cursor: pointer;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    border-color 120ms ease,
+    filter 120ms ease;
+}
+
+.cardMetric.isClickable:hover {
+  transform: translateY(-1px);
+  filter: saturate(1.03);
+  border-color: rgba(0, 201, 167, 0.38);
+  box-shadow:
+    0 18px 40px rgba(2, 6, 23, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58);
+}
+
+/* Tonos por estado (con más vida, pero sin “gritar”) */
+.cardMetric.tone-good {
+  border-color: rgba(16, 185, 129, 0.28);
+  box-shadow:
+    0 14px 30px rgba(2, 6, 23, 0.22),
+    0 0 0 1px rgba(16, 185, 129, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.cardMetric.tone-warn {
+  border-color: rgba(245, 158, 11, 0.30);
+  box-shadow:
+    0 14px 30px rgba(2, 6, 23, 0.22),
+    0 0 0 1px rgba(245, 158, 11, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.cardMetric.tone-bad {
+  border-color: rgba(239, 68, 68, 0.28);
+  box-shadow:
+    0 14px 30px rgba(2, 6, 23, 0.22),
+    0 0 0 1px rgba(239, 68, 68, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+@media (max-width: 1100px) {
+  .cardMetric {
+    grid-column: span 6;
+  }
+}
+
+@media (max-width: 720px) {
+  .dashboardShell {
+    padding: 18px;
+  }
+
+  .cardMetric {
+    grid-column: span 12;
+  }
+}
+
+
+

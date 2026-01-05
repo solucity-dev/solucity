@@ -1,9 +1,10 @@
 // SpecialistNavigation.tsx
-import { createNativeStackNavigator } from '@react-navigation/native-stack'
-import SpecialistSettings from '../screens/SpecialistSettings'
-import SpecialistTabs from './SpecialistTabs'
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-const Stack = createNativeStackNavigator()
+import SpecialistTabs from './SpecialistTabs';
+import SpecialistSettings from '../screens/SpecialistSettings';
+
+const Stack = createNativeStackNavigator();
 
 export default function SpecialistNavigator() {
   return (
@@ -13,5 +14,5 @@ export default function SpecialistNavigator() {
       {/* Pantalla “Ajustes de cuenta” (no es tab) */}
       <Stack.Screen name="SpecialistSettings" component={SpecialistSettings} />
     </Stack.Navigator>
-  )
+  );
 }

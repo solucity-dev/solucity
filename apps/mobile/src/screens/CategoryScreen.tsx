@@ -1,38 +1,39 @@
 // apps/mobile/src/screens/CategoryScreen.tsx
-import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons'
-import type { RouteProp } from '@react-navigation/native'
-import { useNavigation, useRoute } from '@react-navigation/native'
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { LinearGradient } from 'expo-linear-gradient'
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ROOT_CATEGORY_MAP, SUBCATEGORIES } from '../data/categories'
-import type { CategorySlug, HomeStackParamList, RootCategoryId } from '../types'
+import { ROOT_CATEGORY_MAP, SUBCATEGORIES } from '../data/categories';
+
+import type { RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { CategorySlug, HomeStackParamList, RootCategoryId } from '../types';
 
 // 👇 alias de slugs → ids raíz
 const CATEGORY_ALIAS: Record<string, RootCategoryId> = {
-  'albañileria': 'construccion-mantenimiento',
-  'albanileria': 'construccion-mantenimiento',
-  'albañilería': 'construccion-mantenimiento',
+  albañileria: 'construccion-mantenimiento',
+  albanileria: 'construccion-mantenimiento',
+  albañilería: 'construccion-mantenimiento',
   // sumá otros alias si usás
-}
+};
 
 type SubcatItem = {
-  id: string
-  title: string
-  icon: { set: 'ion' | 'mdi'; name: string }
-}
+  id: string;
+  title: string;
+  icon: { set: 'ion' | 'mdi'; name: string };
+};
 
 export default function CategoryScreen() {
-  const { params } = useRoute<RouteProp<HomeStackParamList, 'Category'>>()
-  const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>()
+  const { params } = useRoute<RouteProp<HomeStackParamList, 'Category'>>();
+  const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
 
-  const raw = params.id as CategorySlug
-  const rootId: RootCategoryId = (CATEGORY_ALIAS[raw] ?? raw) as RootCategoryId
+  const raw = params.id as CategorySlug;
+  const rootId: RootCategoryId = (CATEGORY_ALIAS[raw] ?? raw) as RootCategoryId;
 
-  const cat = ROOT_CATEGORY_MAP[rootId]
-  const rubros = (SUBCATEGORIES[rootId] || []) as SubcatItem[]
+  const cat = ROOT_CATEGORY_MAP[rootId];
+  const rubros = (SUBCATEGORIES[rootId] || []) as SubcatItem[];
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
@@ -40,21 +41,23 @@ export default function CategoryScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.brandRow}>
-            <Image source={require('../assets/logo.png')} style={styles.logo} resizeMode="contain" />
+            <Image
+              source={require('../assets/logo.png')}
+              style={styles.logo}
+              resizeMode="contain"
+            />
             <Text style={styles.brandText}>solucity</Text>
-          </View>
-          <View style={styles.bellWrap}>
-            <Ionicons name="notifications-outline" size={26} color="#E9FEFF" />
-            <View style={styles.badge}><Text style={styles.badgeText}>1</Text></View>
           </View>
         </View>
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {/* Título */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-            {cat.icon.set === 'ion'
-              ? <Ionicons name={cat.icon.name as any} size={22} color="#E9FEFF" />
-              : <MDI name={cat.icon.name as any} size={22} color="#E9FEFF" />}
+            {cat.icon.set === 'ion' ? (
+              <Ionicons name={cat.icon.name as any} size={22} color="#E9FEFF" />
+            ) : (
+              <MDI name={cat.icon.name as any} size={22} color="#E9FEFF" />
+            )}
             <Text style={styles.title}>{cat.title}</Text>
           </View>
           <Text style={styles.subtitle}>Elegí un rubro</Text>
@@ -64,16 +67,23 @@ export default function CategoryScreen() {
             {rubros.map((r: SubcatItem) => (
               <Pressable
                 key={r.id}
-                onPress={() => nav.navigate('SpecialistsList', {
-                  categorySlug: r.id as CategorySlug,
-                  title: r.title,
-                })}
-                style={({ pressed }) => [styles.card, pressed && { transform: [{ scale: 0.98 }], opacity: 0.98 }]}
+                onPress={() =>
+                  nav.navigate('SpecialistsList', {
+                    categorySlug: r.id as CategorySlug,
+                    title: r.title,
+                  })
+                }
+                style={({ pressed }) => [
+                  styles.card,
+                  pressed && { transform: [{ scale: 0.98 }], opacity: 0.98 },
+                ]}
               >
                 <View style={styles.iconWrap}>
-                  {r.icon.set === 'ion'
-                    ? <Ionicons name={r.icon.name as any} size={32} color="#fff" />
-                    : <MDI name={r.icon.name as any} size={32} color="#fff" />}
+                  {r.icon.set === 'ion' ? (
+                    <Ionicons name={r.icon.name as any} size={32} color="#fff" />
+                  ) : (
+                    <MDI name={r.icon.name as any} size={32} color="#fff" />
+                  )}
                 </View>
                 <Text style={styles.cardText}>{r.title}</Text>
               </Pressable>
@@ -82,30 +92,42 @@ export default function CategoryScreen() {
         </ScrollView>
       </SafeAreaView>
     </LinearGradient>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  header: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 6, alignItems: 'center', justifyContent: 'center' },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingBottom: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   logo: { width: 26, height: 26 },
   brandText: { color: '#E9FEFF', fontWeight: '800', fontSize: 22, letterSpacing: 0.5 },
-  bellWrap: { position: 'absolute', right: 18, top: 6 },
-  badge: { position: 'absolute', top: -6, right: -8, backgroundColor: '#ff3b30', minWidth: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
-  badgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
 
   content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 120 },
   title: { color: '#fff', fontSize: 22, fontWeight: '800', marginTop: 6 },
   subtitle: { color: 'rgba(233,254,255,0.9)', marginTop: 6, marginBottom: 16 },
 
-  grid: { flexDirection: 'row', flexWrap: 'wrap', columnGap: '4%', rowGap: 14, justifyContent: 'space-between' },
-  card: { width: '48%', height: 110, borderRadius: 24, backgroundColor: 'rgba(0, 35, 40, 0.32)', padding: 16, alignItems: 'center', justifyContent: 'center' },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: '4%',
+    rowGap: 14,
+    justifyContent: 'space-between',
+  },
+  card: {
+    width: '48%',
+    height: 110,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0, 35, 40, 0.32)',
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   iconWrap: { marginBottom: 10, alignItems: 'center', justifyContent: 'center' },
   cardText: { color: '#fff', fontWeight: '800', fontSize: 14, textAlign: 'center', lineHeight: 18 },
-})
-
-
-
-
-
+});

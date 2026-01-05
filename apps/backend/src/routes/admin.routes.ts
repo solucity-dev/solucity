@@ -1,55 +1,180 @@
-import { Router } from "express";
-import { prisma } from "../lib/prisma";
-import { auth } from "../middlewares/auth";
-import { requireAdmin } from "../middlewares/requireAdmin";
+// apps/backend/src/routes/admin.routes.ts
+import { Router } from 'express';
+import jwt, { type Secret, type SignOptions } from 'jsonwebtoken';
+import { z } from 'zod';
+
+import { prisma } from '../lib/prisma';
+import { auth } from '../middlewares/auth';
+import { requireAdmin } from '../middlewares/requireAdmin';
+import { notifyCertificationStatus } from '../services/notifyCertification';
+import { notifyKycStatus } from '../services/notifyKyc';
+import { sendExpoPush } from '../services/pushExpo';
 
 const adminRouter = Router();
 
-// 🔐 Todo lo admin requiere auth + admin
+/** Util: normalizar URL absoluta a partir de /uploads/... */
+function toAbsoluteUrl(u: string | null | undefined): string | null {
+  if (!u) return null;
+  if (/^https?:\/\//i.test(u)) return u;
+
+  const base =
+    process.env.PUBLIC_BASE_URL?.replace(/\/+$/, '') ||
+    `http://localhost:${process.env.PORT || 3000}`;
+
+  return `${base}${u.startsWith('/') ? '' : '/'}${u}`;
+}
+
+/**
+ * POST /admin/auth/login
+ * Login de admin contra variables de entorno (ADMIN_EMAIL / ADMIN_PASSWORD).
+ * Devuelve un JWT con role ADMIN.
+ */
+adminRouter.post('/auth/login', async (req, res) => {
+  const email = String(req.body?.email ?? '')
+    .trim()
+    .toLowerCase();
+  const password = String(req.body?.password ?? '');
+
+  const envEmail = String(process.env.ADMIN_EMAIL ?? '')
+    .trim()
+    .toLowerCase();
+  const envPass = String(process.env.ADMIN_PASSWORD ?? '');
+  const JWT_SECRET = process.env.JWT_SECRET;
+
+  if (!envEmail || !envPass || !JWT_SECRET) {
+    return res.status(500).json({ code: 'admin_auth_not_configured' });
+  }
+
+  if (email !== envEmail || password !== envPass) {
+    return res.status(401).json({ code: 'invalid_credentials' });
+  }
+
+  // Nos aseguramos de tener (o crear) un usuario ADMIN en DB.
+  const adminUser = await prisma.user.upsert({
+    where: { email: envEmail },
+    update: { role: 'ADMIN', status: 'ACTIVE' },
+    create: {
+      email: envEmail,
+      passwordHash: 'ENV_ADMIN',
+      role: 'ADMIN',
+      status: 'ACTIVE',
+      name: 'Solucity',
+      surname: 'Admin',
+    },
+    select: { id: true, email: true, role: true },
+  });
+
+  const expiresIn: SignOptions['expiresIn'] = (process.env.JWT_EXPIRES_IN ?? '7d') as
+    | SignOptions['expiresIn']
+    | undefined;
+
+  const token = jwt.sign(
+    { sub: adminUser.id, role: 'ADMIN', email: adminUser.email },
+    JWT_SECRET as Secret,
+    { expiresIn },
+  );
+
+  return res.json({ token });
+});
+
+// 🔐 Todo lo admin (menos login) requiere auth + admin
 adminRouter.use(auth, requireAdmin);
 
 /**
  * GET /admin/metrics
  */
-adminRouter.get("/metrics", async (_req, res) => {
+adminRouter.get('/metrics', async (_req, res) => {
   const [
+    usersTotal,
+    adminsTotal,
+    customersTotal,
     specialistsTotal,
+
+    ordersTotal,
+    ordersPending,
+    ordersActive,
+    ordersFinished,
+    ordersCancelled,
+
     subsByStatus,
     kycPending,
   ] = await Promise.all([
-    prisma.user.count({ where: { role: "SPECIALIST" } }),
+    prisma.user.count(),
+    prisma.user.count({ where: { role: 'ADMIN' } }),
+    prisma.user.count({ where: { role: 'CUSTOMER' } }),
+    prisma.user.count({ where: { role: 'SPECIALIST' } }),
+
+    prisma.serviceOrder.count(),
+    prisma.serviceOrder.count({ where: { status: 'PENDING' } }),
+    prisma.serviceOrder.count({
+      where: {
+        status: {
+          in: ['ASSIGNED', 'IN_PROGRESS', 'PAUSED', 'FINISHED_BY_SPECIALIST', 'IN_CLIENT_REVIEW'],
+        },
+      },
+    }),
+    prisma.serviceOrder.count({
+      where: { status: { in: ['CONFIRMED_BY_CLIENT', 'CLOSED'] } },
+    }),
+    prisma.serviceOrder.count({
+      where: {
+        status: {
+          in: [
+            'CANCELLED_BY_CUSTOMER',
+            'CANCELLED_BY_SPECIALIST',
+            'CANCELLED_AUTO',
+            'REJECTED_BY_CLIENT',
+          ],
+        },
+      },
+    }),
+
     prisma.subscription.groupBy({
-      by: ["status"],
+      by: ['status'],
       _count: { _all: true },
     }),
-    prisma.kycSubmission.count({ where: { status: "PENDING" } }),
+
+    prisma.kycSubmission.count({ where: { status: 'PENDING' } }),
   ]);
 
-  const subs = Object.fromEntries(
-    subsByStatus.map((x) => [x.status, x._count._all])
-  );
+  const subs = Object.fromEntries(subsByStatus.map((x) => [x.status, x._count._all]));
 
   res.json({
-    specialistsTotal,
-    subscriptions: {
-      TRIALING: subs.TRIALING ?? 0,
-      ACTIVE: subs.ACTIVE ?? 0,
-      PAST_DUE: subs.PAST_DUE ?? 0,
-      CANCELLED: subs.CANCELLED ?? 0,
+    users: {
+      total: usersTotal,
+      admins: adminsTotal,
+      customers: customersTotal,
+      specialists: specialistsTotal,
     },
-    kycPending,
+    orders: {
+      total: ordersTotal,
+      pending: ordersPending,
+      active: ordersActive,
+      finished: ordersFinished,
+      cancelled: ordersCancelled,
+    },
+    specialists: {
+      total: specialistsTotal,
+      subscriptions: {
+        TRIALING: subs.TRIALING ?? 0,
+        ACTIVE: subs.ACTIVE ?? 0,
+        PAST_DUE: subs.PAST_DUE ?? 0,
+        CANCELLED: subs.CANCELLED ?? 0,
+      },
+      kycPending,
+    },
   });
 });
 
 /**
  * GET /admin/specialists
  */
-adminRouter.get("/specialists", async (_req, res) => {
+adminRouter.get('/specialists', async (_req, res) => {
   const now = new Date();
 
   const users = await prisma.user.findMany({
-    where: { role: "SPECIALIST" },
-    orderBy: { createdAt: "desc" },
+    where: { role: 'SPECIALIST' },
+    orderBy: { createdAt: 'desc' },
     select: {
       id: true,
       email: true,
@@ -65,6 +190,9 @@ adminRouter.get("/specialists", async (_req, res) => {
           ratingAvg: true,
           ratingCount: true,
           avatarUrl: true,
+          specialties: {
+            select: { category: { select: { slug: true, name: true } } },
+          },
           subscription: {
             select: {
               status: true,
@@ -82,28 +210,33 @@ adminRouter.get("/specialists", async (_req, res) => {
     const sub = u.specialist?.subscription;
     const end = sub?.trialEnd ?? sub?.currentPeriodEnd ?? null;
 
-    const daysLeft =
-      end
-        ? Math.max(
-            0,
-            Math.ceil(
-              (end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-            )
-          )
-        : null;
+    const daysLeft = end
+      ? Math.max(0, Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+      : null;
+
+    const specSpecialties = u.specialist?.specialties ?? [];
+
+    const specialties = specSpecialties.map((s) => ({
+      slug: s.category.slug,
+      name: s.category.name,
+    }));
+
+    const specialtySlugs = specialties.map((s) => s.slug);
 
     return {
       userId: u.id,
       specialistId: u.specialist?.id,
       email: u.email,
-      name: `${u.name ?? ""} ${u.surname ?? ""}`.trim(),
+      name: `${u.name ?? ''} ${u.surname ?? ''}`.trim(),
       status: u.status,
       createdAt: u.createdAt,
-      kycStatus: u.specialist?.kycStatus ?? "UNVERIFIED",
-      badge: u.specialist?.badge ?? "BRONZE",
+
+      kycStatus: u.specialist?.kycStatus ?? 'UNVERIFIED',
+      badge: u.specialist?.badge ?? 'BRONZE',
       ratingAvg: u.specialist?.ratingAvg ?? 0,
       ratingCount: u.specialist?.ratingCount ?? 0,
       avatarUrl: u.specialist?.avatarUrl ?? null,
+
       subscription: sub
         ? {
             status: sub.status,
@@ -111,7 +244,12 @@ adminRouter.get("/specialists", async (_req, res) => {
             currentPeriodEnd: sub.currentPeriodEnd,
           }
         : null,
+
       daysLeft,
+
+      // ✅ NUEVO
+      specialties,
+      specialtySlugs,
     };
   });
 
@@ -119,62 +257,736 @@ adminRouter.get("/specialists", async (_req, res) => {
 });
 
 /**
- * PATCH /admin/specialists/:specialistId/grant-days
+ * GET /admin/specialists/:id
+ * ✅ FIX: ahora incluye spec.certifications y lo devuelve en el JSON
  */
-adminRouter.patch(
-  "/specialists/:specialistId/grant-days",
-  async (req, res) => {
-    const { specialistId } = req.params;
-    const days = Number(req.body?.days ?? 0);
+adminRouter.get('/specialists/:id', async (req, res) => {
+  const { id } = req.params;
 
-    if (!Number.isFinite(days) || days <= 0 || days > 365) {
-      return res.status(400).json({ message: "days inválido (1..365)" });
-    }
+  const specialistSelect = {
+    id: true,
+    bio: true,
+    visitPrice: true,
+    currency: true,
+    availableNow: true,
+    radiusKm: true,
 
-    const spec = await prisma.specialistProfile.findUnique({
-      where: { id: specialistId },
-      include: { subscription: true },
+    kycStatus: true,
+    badge: true,
+    ratingAvg: true,
+    ratingCount: true,
+    avatarUrl: true,
+
+    subscription: {
+      select: { status: true, trialEnd: true, currentPeriodEnd: true },
+    },
+
+    specialties: {
+      select: { category: { select: { id: true, name: true, slug: true } } },
+    },
+
+    kycSubmissions: {
+      orderBy: { createdAt: 'desc' as const },
+      take: 1,
+      select: {
+        id: true,
+        status: true,
+        dniFrontUrl: true,
+        dniBackUrl: true,
+        selfieUrl: true,
+        rejectionReason: true,
+        createdAt: true,
+        reviewedAt: true,
+      },
+    },
+
+    // ✅ LO QUE FALTABA: matrículas/certificaciones
+    certifications: {
+      orderBy: { createdAt: 'desc' as const },
+      select: {
+        id: true,
+        status: true,
+        fileUrl: true,
+        number: true,
+        issuer: true,
+        expiresAt: true,
+        rejectionReason: true,
+        reviewedAt: true,
+        createdAt: true,
+        category: { select: { id: true, slug: true, name: true } },
+      },
+    },
+  } as const;
+
+  // 1) intentar por specialistId
+  let user = await prisma.user.findFirst({
+    where: { role: 'SPECIALIST', specialist: { is: { id } } },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      surname: true,
+      status: true,
+      createdAt: true,
+      specialist: { select: specialistSelect },
+    },
+  });
+
+  // 2) fallback por userId
+  if (!user) {
+    user = await prisma.user.findFirst({
+      where: { id, role: 'SPECIALIST' },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        surname: true,
+        status: true,
+        createdAt: true,
+        specialist: { select: specialistSelect },
+      },
     });
+  }
 
-    if (!spec)
-      return res.status(404).json({ message: "Especialista no encontrado" });
+  if (!user || !user.specialist) {
+    return res.status(404).json({ ok: false, error: 'Not Found' });
+  }
 
-    const ms = days * 24 * 60 * 60 * 1000;
-    const now = new Date();
+  const spec = user.specialist;
+  const lastKyc = spec.kycSubmissions?.[0] ?? null;
 
-    if (!spec.subscription) {
-      const created = await prisma.subscription.create({
-        data: {
-          specialistId,
-          status: "TRIALING",
-          currentPeriodStart: now,
-          currentPeriodEnd: new Date(now.getTime() + ms),
-          trialEnd: new Date(now.getTime() + ms),
+  const specialties = (spec.specialties ?? []).map((s) => ({
+    id: s.category.id,
+    name: s.category.name,
+    slug: s.category.slug,
+  }));
+
+  const now = new Date();
+  const sub = spec.subscription;
+  const end = sub?.trialEnd ?? sub?.currentPeriodEnd ?? null;
+  const daysLeft = end
+    ? Math.max(0, Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+    : null;
+
+  const certifications = (spec.certifications ?? []).map((c) => ({
+    id: c.id,
+    status: c.status,
+    fileUrl: c.fileUrl ? c.fileUrl : null, // el admin-web usa absoluteMediaUrl() con VITE_API_URL
+    number: c.number ?? null,
+    issuer: c.issuer ?? null,
+    expiresAt: c.expiresAt ? c.expiresAt.toISOString() : null,
+
+    rejectionReason: c.rejectionReason ?? null,
+    reviewedAt: c.reviewedAt ? c.reviewedAt.toISOString() : null,
+    createdAt: c.createdAt ? c.createdAt.toISOString() : null,
+
+    category: c.category
+      ? { id: c.category.id, slug: c.category.slug, name: c.category.name }
+      : null,
+  }));
+
+  return res.json({
+    userId: user.id,
+    specialistId: spec.id,
+
+    email: user.email,
+    name: `${user.name ?? ''} ${user.surname ?? ''}`.trim(),
+    status: user.status,
+    createdAt: user.createdAt ? user.createdAt.toISOString() : null,
+
+    kycStatus: spec.kycStatus ?? 'UNVERIFIED',
+    badge: spec.badge ?? 'BRONZE',
+    ratingAvg: spec.ratingAvg ?? 0,
+    ratingCount: spec.ratingCount ?? 0,
+    avatarUrl: spec.avatarUrl ?? null,
+
+    availableNow: spec.availableNow ?? false,
+    radiusKm: spec.radiusKm ?? null,
+    visitPrice: spec.visitPrice ?? null,
+    currency: spec.currency ?? null,
+    bio: spec.bio ?? null,
+
+    specialties,
+
+    kyc: lastKyc
+      ? {
+          id: lastKyc.id,
+          status: lastKyc.status,
+          dniFrontUrl: lastKyc.dniFrontUrl ?? null,
+          dniBackUrl: lastKyc.dniBackUrl ?? null,
+          selfieUrl: lastKyc.selfieUrl ?? null,
+          rejectionReason: lastKyc.rejectionReason ?? null,
+          createdAt: lastKyc.createdAt ? lastKyc.createdAt.toISOString() : null,
+          reviewedAt: lastKyc.reviewedAt ? lastKyc.reviewedAt.toISOString() : null,
+        }
+      : null,
+
+    subscription: sub
+      ? {
+          status: sub.status,
+          trialEnd: sub.trialEnd ? sub.trialEnd.toISOString() : null,
+          currentPeriodEnd: sub.currentPeriodEnd ? sub.currentPeriodEnd.toISOString() : null,
+          daysLeft,
+        }
+      : null,
+
+    // ✅ CLAVE: ahora el admin-web puede listar/aprobar/rechazar
+    certifications,
+  });
+});
+
+/**
+ * ✅ KYC ADMIN
+ */
+
+/** GET /admin/kyc/pending */
+adminRouter.get('/kyc/pending', async (_req, res) => {
+  const items = await prisma.kycSubmission.findMany({
+    where: { status: 'PENDING' },
+    orderBy: { createdAt: 'asc' },
+    take: 200,
+    select: {
+      id: true,
+      status: true,
+      dniFrontUrl: true,
+      dniBackUrl: true,
+      selfieUrl: true,
+      rejectionReason: true,
+      createdAt: true,
+      specialistId: true,
+      specialist: {
+        select: {
+          userId: true,
+          user: { select: { email: true, name: true, surname: true } },
         },
-      });
-      return res.json({ ok: true, subscription: created });
-    }
+      },
+    },
+  });
 
+  return res.json({
+    ok: true,
+    count: items.length,
+    items: items.map((x) => ({
+      id: x.id,
+      status: x.status,
+      createdAt: x.createdAt,
+      dniFrontUrl: x.dniFrontUrl,
+      dniBackUrl: x.dniBackUrl,
+      selfieUrl: x.selfieUrl,
+      rejectionReason: x.rejectionReason ?? null,
+      specialistId: x.specialistId,
+      userId: x.specialist?.userId ?? null,
+      email: x.specialist?.user?.email ?? null,
+      name: `${x.specialist?.user?.name ?? ''} ${x.specialist?.user?.surname ?? ''}`.trim() || null,
+    })),
+  });
+});
+
+const ApproveKycSchema = z.object({
+  reviewerId: z.string().optional().nullable(),
+});
+
+const RejectKycSchema = z.object({
+  reason: z.string().min(2).max(500),
+  reviewerId: z.string().optional().nullable(),
+});
+
+/** PATCH /admin/kyc/:submissionId/approve */
+adminRouter.patch('/kyc/:submissionId/approve', async (req, res) => {
+  const submissionId = String(req.params.submissionId ?? '').trim();
+  if (!submissionId) return res.status(400).json({ ok: false, error: 'submissionId_required' });
+
+  const parsed = ApproveKycSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res
+      .status(400)
+      .json({ ok: false, error: 'invalid_input', details: parsed.error.flatten() });
+  }
+
+  const submission = await prisma.kycSubmission.findUnique({
+    where: { id: submissionId },
+    select: {
+      id: true,
+      specialistId: true,
+      specialist: { select: { userId: true } },
+    },
+  });
+  if (!submission) return res.status(404).json({ ok: false, error: 'not_found' });
+
+  const userId = submission.specialist?.userId;
+  if (!userId) return res.status(400).json({ ok: false, error: 'user_not_found' });
+
+  await prisma.$transaction([
+    prisma.kycSubmission.update({
+      where: { id: submissionId },
+      data: {
+        status: 'VERIFIED',
+        rejectionReason: null,
+        reviewerId: parsed.data.reviewerId ?? null,
+        reviewedAt: new Date(),
+      },
+    }),
+    prisma.specialistProfile.update({
+      where: { id: submission.specialistId },
+      data: { kycStatus: 'VERIFIED' },
+    }),
+  ]);
+
+  try {
+    await notifyKycStatus({ userId, status: 'VERIFIED', submissionId });
+  } catch (e) {
+    console.warn('[admin] notifyKycStatus VERIFIED failed', e);
+  }
+
+  return res.json({ ok: true, submissionId, status: 'VERIFIED' });
+});
+
+/** PATCH /admin/kyc/:submissionId/reject */
+adminRouter.patch('/kyc/:submissionId/reject', async (req, res) => {
+  const submissionId = String(req.params.submissionId ?? '').trim();
+  if (!submissionId) return res.status(400).json({ ok: false, error: 'submissionId_required' });
+
+  const parsed = RejectKycSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res
+      .status(400)
+      .json({ ok: false, error: 'invalid_input', details: parsed.error.flatten() });
+  }
+
+  const submission = await prisma.kycSubmission.findUnique({
+    where: { id: submissionId },
+    select: {
+      id: true,
+      specialistId: true,
+      specialist: { select: { userId: true } },
+    },
+  });
+  if (!submission) return res.status(404).json({ ok: false, error: 'not_found' });
+
+  const userId = submission.specialist?.userId;
+  if (!userId) return res.status(400).json({ ok: false, error: 'user_not_found' });
+
+  await prisma.$transaction([
+    prisma.kycSubmission.update({
+      where: { id: submissionId },
+      data: {
+        status: 'REJECTED',
+        rejectionReason: parsed.data.reason,
+        reviewerId: parsed.data.reviewerId ?? null,
+        reviewedAt: new Date(),
+      },
+    }),
+    prisma.specialistProfile.update({
+      where: { id: submission.specialistId },
+      data: { kycStatus: 'REJECTED' },
+    }),
+  ]);
+
+  try {
+    await notifyKycStatus({
+      userId,
+      status: 'REJECTED',
+      reason: parsed.data.reason,
+      submissionId,
+    });
+  } catch (e) {
+    console.warn('[admin] notifyKycStatus REJECTED failed', e);
+  }
+
+  return res.json({ ok: true, submissionId, status: 'REJECTED' });
+});
+
+/**
+ * ✅ helper push (mismo patrón que orders.routes)
+ * (se usa para grant-days)
+ */
+async function pushToUser(params: { userId: string; title: string; body: string; data: any }) {
+  const tokens = await prisma.pushToken.findMany({
+    where: { userId: params.userId, enabled: true },
+    select: { token: true },
+  });
+
+  const toList = tokens.map((t) => t.token).filter(Boolean);
+  if (!toList.length) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[push] no tokens for user', params.userId);
+    }
+    return;
+  }
+
+  await sendExpoPush(
+    toList.map((to) => ({
+      to,
+      sound: 'default',
+      priority: 'high',
+      channelId: 'default',
+      title: params.title,
+      body: params.body,
+      data: params.data,
+    })),
+  );
+}
+
+/**
+ * ✅ CERTIFICACIONES ADMIN
+ */
+
+const ApproveCertSchema = z.object({
+  reviewerId: z.string().optional().nullable(),
+});
+
+const RejectCertSchema = z.object({
+  reason: z.string().min(2).max(500),
+  reviewerId: z.string().optional().nullable(),
+});
+
+/** GET /admin/certifications/pending */
+adminRouter.get('/certifications/pending', async (_req, res) => {
+  const items = await prisma.specialistCertification.findMany({
+    where: { status: 'PENDING' },
+    orderBy: { createdAt: 'asc' },
+    take: 200,
+    select: {
+      id: true,
+      status: true,
+      fileUrl: true,
+      number: true,
+      issuer: true,
+      expiresAt: true,
+      createdAt: true,
+
+      reviewerId: true,
+      rejectionReason: true,
+      reviewedAt: true,
+
+      category: { select: { id: true, name: true, slug: true } },
+      specialist: {
+        select: {
+          id: true,
+          userId: true,
+          user: { select: { email: true, name: true, surname: true } },
+        },
+      },
+    },
+  });
+
+  return res.json({
+    ok: true,
+    count: items.length,
+    items: items.map((c) => ({
+      id: c.id,
+      status: c.status,
+      fileUrl: toAbsoluteUrl(c.fileUrl),
+      number: c.number ?? null,
+      issuer: c.issuer ?? null,
+      expiresAt: c.expiresAt ? c.expiresAt.toISOString() : null,
+      createdAt: c.createdAt.toISOString(),
+
+      reviewerId: c.reviewerId ?? null,
+      rejectionReason: c.rejectionReason ?? null,
+      reviewedAt: c.reviewedAt ? c.reviewedAt.toISOString() : null,
+
+      category: c.category
+        ? { id: c.category.id, name: c.category.name, slug: c.category.slug }
+        : null,
+      specialist: c.specialist
+        ? {
+            id: c.specialist.id,
+            userId: c.specialist.userId,
+            email: c.specialist.user?.email ?? null,
+            name:
+              `${c.specialist.user?.name ?? ''} ${c.specialist.user?.surname ?? ''}`.trim() || null,
+          }
+        : null,
+    })),
+  });
+});
+
+/** PATCH /admin/certifications/:certId/approve */
+adminRouter.patch('/certifications/:certId/approve', async (req, res) => {
+  const certId = String(req.params.certId ?? '').trim();
+  if (!certId) return res.status(400).json({ ok: false, error: 'certId_required' });
+
+  const parsed = ApproveCertSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res
+      .status(400)
+      .json({ ok: false, error: 'invalid_input', details: parsed.error.flatten() });
+  }
+
+  // leer para userId + category
+  const cert = await prisma.specialistCertification.findUnique({
+    where: { id: certId },
+    select: {
+      id: true,
+      status: true,
+      specialist: { select: { userId: true } },
+      category: { select: { slug: true, name: true } },
+    },
+  });
+  if (!cert) return res.status(404).json({ ok: false, error: 'not_found' });
+
+  const userId = cert.specialist?.userId;
+  if (!userId) return res.status(400).json({ ok: false, error: 'user_not_found' });
+
+  // ✅ anti-duplicado: solo si estaba PENDING
+  const result = await prisma.specialistCertification.updateMany({
+    where: { id: certId, status: 'PENDING' },
+    data: {
+      status: 'APPROVED',
+      reviewerId: parsed.data.reviewerId ?? null,
+      rejectionReason: null,
+      reviewedAt: new Date(),
+    },
+  });
+
+  if (result.count === 0) {
+    return res.status(409).json({ ok: false, error: 'already_reviewed' });
+  }
+
+  const updated = await prisma.specialistCertification.findUnique({
+    where: { id: certId },
+    select: { id: true, status: true, reviewedAt: true },
+  });
+
+  // ✅ notificación + push centralizado
+  try {
+    await notifyCertificationStatus({
+      userId,
+      status: 'APPROVED',
+      certificationId: certId,
+      categorySlug: cert.category?.slug ?? null,
+      categoryName: cert.category?.name ?? null,
+    });
+  } catch (e) {
+    console.warn('[admin] notifyCertificationStatus APPROVED failed', e);
+  }
+
+  return res.json({
+    ok: true,
+    certId: updated?.id ?? certId,
+    status: updated?.status ?? 'APPROVED',
+    reviewedAt: updated?.reviewedAt ? updated.reviewedAt.toISOString() : null,
+  });
+});
+
+/** PATCH /admin/certifications/:certId/reject */
+adminRouter.patch('/certifications/:certId/reject', async (req, res) => {
+  const certId = String(req.params.certId ?? '').trim();
+  if (!certId) return res.status(400).json({ ok: false, error: 'certId_required' });
+
+  const parsed = RejectCertSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res
+      .status(400)
+      .json({ ok: false, error: 'invalid_input', details: parsed.error.flatten() });
+  }
+
+  // leer para userId + category
+  const cert = await prisma.specialistCertification.findUnique({
+    where: { id: certId },
+    select: {
+      id: true,
+      status: true,
+      specialist: { select: { userId: true } },
+      category: { select: { slug: true, name: true } },
+    },
+  });
+  if (!cert) return res.status(404).json({ ok: false, error: 'not_found' });
+
+  const userId = cert.specialist?.userId;
+  if (!userId) return res.status(400).json({ ok: false, error: 'user_not_found' });
+
+  // ✅ anti-duplicado: solo si estaba PENDING
+  const result = await prisma.specialistCertification.updateMany({
+    where: { id: certId, status: 'PENDING' },
+    data: {
+      status: 'REJECTED',
+      reviewerId: parsed.data.reviewerId ?? null,
+      rejectionReason: parsed.data.reason,
+      reviewedAt: new Date(),
+    },
+  });
+
+  if (result.count === 0) {
+    return res.status(409).json({ ok: false, error: 'already_reviewed' });
+  }
+
+  const updated = await prisma.specialistCertification.findUnique({
+    where: { id: certId },
+    select: { id: true, status: true, reviewedAt: true, rejectionReason: true },
+  });
+
+  // ✅ notificación + push centralizado
+  try {
+    await notifyCertificationStatus({
+      userId,
+      status: 'REJECTED',
+      certificationId: certId,
+      categorySlug: cert.category?.slug ?? null,
+      categoryName: cert.category?.name ?? null,
+      reason: parsed.data.reason,
+    });
+  } catch (e) {
+    console.warn('[admin] notifyCertificationStatus REJECTED failed', e);
+  }
+
+  return res.json({
+    ok: true,
+    certId: updated?.id ?? certId,
+    status: updated?.status ?? 'REJECTED',
+    rejectionReason: updated?.rejectionReason ?? parsed.data.reason,
+    reviewedAt: updated?.reviewedAt ? updated.reviewedAt.toISOString() : null,
+  });
+});
+
+/**
+ * PATCH /admin/specialists/:specialistId/grant-days
+ * Body: { days: number }
+ *
+ * ✅ Además de extender suscripción, crea Notification + Push.
+ */
+adminRouter.patch('/specialists/:specialistId/grant-days', async (req, res) => {
+  const { specialistId } = req.params;
+  const days = Number(req.body?.days ?? 0);
+
+  if (!Number.isFinite(days) || days <= 0 || days > 365) {
+    return res.status(400).json({ message: 'days inválido (1..365)' });
+  }
+
+  const spec = await prisma.specialistProfile.findUnique({
+    where: { id: specialistId },
+    include: {
+      user: { select: { id: true, name: true, surname: true } },
+      subscription: true,
+    },
+  });
+
+  if (!spec) return res.status(404).json({ message: 'Especialista no encontrado' });
+
+  const ms = days * 24 * 60 * 60 * 1000;
+  const now = new Date();
+
+  let updatedSub: {
+    id: string;
+    status: any;
+    trialEnd: Date | null;
+    currentPeriodEnd: Date;
+    currentPeriodStart: Date;
+  } | null = null;
+
+  if (!spec.subscription) {
+    updatedSub = await prisma.subscription.create({
+      data: {
+        specialistId,
+        status: 'TRIALING',
+        currentPeriodStart: now,
+        currentPeriodEnd: new Date(now.getTime() + ms),
+        trialEnd: new Date(now.getTime() + ms),
+      },
+      select: {
+        id: true,
+        status: true,
+        trialEnd: true,
+        currentPeriodEnd: true,
+        currentPeriodStart: true,
+      },
+    });
+  } else {
     const sub = spec.subscription;
 
-    if (sub.status === "TRIALING" && sub.trialEnd) {
-      const updated = await prisma.subscription.update({
+    if (sub.status === 'TRIALING' && sub.trialEnd) {
+      updatedSub = await prisma.subscription.update({
         where: { specialistId },
         data: { trialEnd: new Date(sub.trialEnd.getTime() + ms) },
+        select: {
+          id: true,
+          status: true,
+          trialEnd: true,
+          currentPeriodEnd: true,
+          currentPeriodStart: true,
+        },
       });
-      return res.json({ ok: true, subscription: updated });
+    } else {
+      const baseEnd = sub.currentPeriodEnd ?? now;
+      updatedSub = await prisma.subscription.update({
+        where: { specialistId },
+        data: { currentPeriodEnd: new Date(baseEnd.getTime() + ms) },
+        select: {
+          id: true,
+          status: true,
+          trialEnd: true,
+          currentPeriodEnd: true,
+          currentPeriodStart: true,
+        },
+      });
     }
-
-    const baseEnd = sub.currentPeriodEnd ?? now;
-    const updated = await prisma.subscription.update({
-      where: { specialistId },
-      data: { currentPeriodEnd: new Date(baseEnd.getTime() + ms) },
-    });
-
-    res.json({ ok: true, subscription: updated });
   }
-);
+
+  const fullName = `${spec.user?.name ?? ''} ${spec.user?.surname ?? ''}`.trim();
+  const title = '¡Felicitaciones! Ganaste días extra 🎉';
+  const body =
+    days === 1
+      ? `Se te acreditó 1 día extra en tu suscripción.`
+      : `Se te acreditaron ${days} días extra en tu suscripción.`;
+
+  const notif = await prisma.notification.create({
+    data: {
+      userId: spec.userId,
+      type: 'SUBSCRIPTION_DAYS_GRANTED',
+      title,
+      body,
+      data: {
+        specialistId,
+        subscriptionId: updatedSub?.id ?? null,
+        daysGranted: days,
+        newTrialEnd: updatedSub?.trialEnd ? updatedSub.trialEnd.toISOString() : null,
+        newPeriodEnd: updatedSub?.currentPeriodEnd
+          ? updatedSub.currentPeriodEnd.toISOString()
+          : null,
+      } as any,
+    },
+    select: { id: true, title: true, body: true },
+  });
+
+  try {
+    await pushToUser({
+      userId: spec.userId,
+      title: notif.title ?? title,
+      body: notif.body ?? body,
+      data: {
+        notificationId: notif.id,
+        type: 'SUBSCRIPTION_DAYS_GRANTED',
+        specialistId,
+        daysGranted: days,
+        subscriptionId: updatedSub?.id ?? null,
+      },
+    });
+  } catch (e) {
+    console.warn('[push] SUBSCRIPTION_DAYS_GRANTED failed', e);
+  }
+
+  return res.json({
+    ok: true,
+    subscription: {
+      id: updatedSub?.id ?? null,
+      status: updatedSub?.status ?? null,
+      trialEnd: updatedSub?.trialEnd ? updatedSub.trialEnd.toISOString() : null,
+      currentPeriodEnd: updatedSub?.currentPeriodEnd
+        ? updatedSub.currentPeriodEnd.toISOString()
+        : null,
+      currentPeriodStart: updatedSub?.currentPeriodStart
+        ? updatedSub.currentPeriodStart.toISOString()
+        : null,
+    },
+    notificationId: notif.id,
+    daysGranted: days,
+    specialist: {
+      id: specialistId,
+      name: fullName || null,
+      userId: spec.userId,
+    },
+  });
+});
 
 export default adminRouter;
-
-

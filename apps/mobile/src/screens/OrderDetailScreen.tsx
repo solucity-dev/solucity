@@ -1,11 +1,11 @@
 // apps/mobile/src/screens/OrderDetailScreen.tsx
-import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons'
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs'
-import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native'
-import { Image as ExpoImage } from 'expo-image'
-import { LinearGradient } from 'expo-linear-gradient'
-import * as Location from 'expo-location'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
+import { Image as ExpoImage } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Location from 'expo-location';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -17,80 +17,81 @@ import {
   Text,
   TextInput,
   View,
-} from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useAuth } from '../auth/AuthProvider'
-import { api } from '../lib/api'
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-type OrderEvent = { id: string; type: string; createdAt: string; payload?: any }
+import { useAuth } from '../auth/AuthProvider';
+import { api } from '../lib/api';
+
+type OrderEvent = { id: string; type: string; createdAt: string; payload?: any };
 
 type OrderDetail = {
-  id: string
-  status: string
-  description: string | null
-  isUrgent: boolean
-  preferredAt: string | null
-  scheduledAt: string | null
-  createdAt: string
+  id: string;
+  status: string;
+  description: string | null;
+  isUrgent: boolean;
+  preferredAt: string | null;
+  scheduledAt: string | null;
+  createdAt: string;
 
   service: {
-    id: string
-    name: string
-    categoryName?: string | null
-    categorySlug?: string | null
-  } | null
+    id: string;
+    name: string;
+    categoryName?: string | null;
+    categorySlug?: string | null;
+  } | null;
 
   customer: {
-    id: string
-    name: string | null
-    avatarUrl?: string | null
-  } | null
+    id: string;
+    name: string | null;
+    avatarUrl?: string | null;
+  } | null;
 
   specialist: {
-    id: string
-    name: string | null
-    avatarUrl?: string | null
-  } | null
+    id: string;
+    name: string | null;
+    avatarUrl?: string | null;
+  } | null;
 
-  address: { id?: string; formatted?: string | null } | string | null
-  distanceKm?: number | null
+  address: { id?: string; formatted?: string | null } | string | null;
+  distanceKm?: number | null;
 
-  attachments: any[]
-  events: OrderEvent[]
-  rating: { score: number; comment: string | null } | null
-  chatThreadId?: string | null
-}
+  attachments: any[];
+  events: OrderEvent[];
+  rating: { score: number; comment: string | null } | null;
+  chatThreadId?: string | null;
+};
 
 type Resp = {
-  ok: boolean
-  order: OrderDetail
+  ok: boolean;
+  order: OrderDetail;
   meta?: {
-    deadline: 'none' | 'active' | 'expired'
-    timeLeftMs: number | null
-    deadlineAt: string | null
-  }
-}
+    deadline: 'none' | 'active' | 'expired';
+    timeLeftMs: number | null;
+    deadlineAt: string | null;
+  };
+};
 
 /**
  * ✅ Logger seguro solo en DEV
  */
 const devLog = (...args: any[]) => {
-  if (__DEV__) console.log(...args)
-}
+  if (__DEV__) console.log(...args);
+};
 
 /**
  * ✅ Helper seguro para mostrar errores en Alert
  * Evita: "ReadableNativeMap to String"
  */
 function getErrorMessage(e: any) {
-  const data = e?.response?.data
-  if (!data) return e?.message || 'Error inesperado'
-  if (typeof data === 'object' && typeof data.error === 'string') return data.error
-  if (typeof data === 'string') return data
+  const data = e?.response?.data;
+  if (!data) return e?.message || 'Error inesperado';
+  if (typeof data === 'object' && typeof data.error === 'string') return data.error;
+  if (typeof data === 'string') return data;
   try {
-    return JSON.stringify(data)
+    return JSON.stringify(data);
   } catch {
-    return 'Error inesperado'
+    return 'Error inesperado';
   }
 }
 
@@ -99,194 +100,197 @@ function getErrorMessage(e: any) {
  * (hoy no lo usamos, pero lo dejamos como referencia)
  */
 const resolveAgendaSection = (status?: string | null, meta?: Resp['meta']) => {
-  if (meta?.deadline === 'expired') return 'CANCELLED'
-  if (!status) return 'PENDING'
-  if (status === 'PENDING') return 'PENDING'
-  if (['ASSIGNED', 'IN_PROGRESS', 'PAUSED'].includes(status)) return 'CONFIRMED'
+  if (meta?.deadline === 'expired') return 'CANCELLED';
+  if (!status) return 'PENDING';
+  if (status === 'PENDING') return 'PENDING';
+  if (['ASSIGNED', 'IN_PROGRESS', 'PAUSED'].includes(status)) return 'CONFIRMED';
   if (['FINISHED_BY_SPECIALIST', 'IN_CLIENT_REVIEW', 'CONFIRMED_BY_CLIENT'].includes(status))
-    return 'FINISHED'
-  if (status.startsWith('CANCELLED') || status === 'CLOSED') return 'CANCELLED'
-  return 'PENDING'
-}
+    return 'FINISHED';
+  if (status.startsWith('CANCELLED') || status === 'CLOSED') return 'CANCELLED';
+  return 'PENDING';
+};
 
 export default function OrderDetailScreen() {
-  const insets = useSafeAreaInsets()
-  const nav = useNavigation<any>()
-  const route = useRoute<any>()
-  const { mode, user } = useAuth() as any
+  const insets = useSafeAreaInsets();
+  const nav = useNavigation<any>();
+  const route = useRoute<any>();
+  const { mode, user } = useAuth() as any;
 
-  const tabBarHeightRaw = useBottomTabBarHeight()
-  const tabBarHeight = Math.max(tabBarHeightRaw, 60) // fallback seguro
+  const tabBarHeightRaw = useBottomTabBarHeight();
+  const tabBarHeight = Math.max(tabBarHeightRaw, 60); // fallback seguro
 
   const orderId: string | null =
-    route.params?.id ?? route.params?.orderId ?? route.params?.item?.id ?? null
+    route.params?.id ?? route.params?.orderId ?? route.params?.item?.id ?? null;
 
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [data, setData] = useState<OrderDetail | null>(null)
-  const [meta, setMeta] = useState<Resp['meta'] | undefined>(undefined)
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<OrderDetail | null>(null);
+  const [meta, setMeta] = useState<Resp['meta'] | undefined>(undefined);
 
   // ⭐ Estado modal de rating
-  const [ratingModalVisible, setRatingModalVisible] = useState(false)
-  const [ratingScore, setRatingScore] = useState<number>(5)
-  const [ratingComment, setRatingComment] = useState('')
-  const [submittingRating, setSubmittingRating] = useState(false)
+  const [ratingModalVisible, setRatingModalVisible] = useState(false);
+  const [ratingScore, setRatingScore] = useState<number>(5);
+  const [ratingComment, setRatingComment] = useState('');
+  const [submittingRating, setSubmittingRating] = useState(false);
 
   // ✅ evita race conditions (notificación → navegar rápido / múltiples loads)
-  const loadSeqRef = useRef(0)
+  const loadSeqRef = useRef(0);
 
   // ✅ evita refresh duplicado por focus (react navigation a veces dispara 2 veces)
-  const lastFocusReloadRef = useRef<number>(0)
+  const lastFocusReloadRef = useRef<number>(0);
 
   // ✅ log seguro del params + id resuelto
   useEffect(() => {
     try {
-      devLog('[OrderDetail] route.params =', JSON.stringify(route.params ?? {}, null, 2))
+      devLog('[OrderDetail] route.params =', JSON.stringify(route.params ?? {}, null, 2));
     } catch {
-      devLog('[OrderDetail] route.params keys =', Object.keys(route.params ?? {}))
+      devLog('[OrderDetail] route.params keys =', Object.keys(route.params ?? {}));
     }
-    devLog('[OrderDetail] resolved orderId =', orderId)
+    devLog('[OrderDetail] resolved orderId =', orderId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderId])
+  }, [orderId]);
 
   const handleBackToAgenda = useCallback(
     (forceStatus?: string | null, forceMeta?: Resp['meta']) => {
-      let status = forceStatus ?? data?.status ?? 'PENDING'
-      if (forceMeta?.deadline === 'expired') status = 'CANCELLED_AUTO'
+      let status = forceStatus ?? data?.status ?? 'PENDING';
+      if (forceMeta?.deadline === 'expired') status = 'CANCELLED_AUTO';
 
       try {
-        nav.navigate('AgendaMain', { initialSection: status, refresh: true })
-        return true
+        nav.navigate('AgendaMain', { initialSection: status, refresh: true });
+        return true;
       } catch {}
 
       if (nav.canGoBack?.()) {
-        nav.goBack()
-        return true
+        nav.goBack();
+        return true;
       }
 
-      const parent = nav.getParent?.()
+      const parent = nav.getParent?.();
       if (parent?.navigate) {
         parent.navigate('Agenda', {
           screen: 'AgendaMain',
           params: { initialSection: status, refresh: true },
-        })
-        return true
+        });
+        return true;
       }
 
-      nav.navigate('Agenda', { initialSection: status, refresh: true })
-      return true
+      nav.navigate('Agenda', { initialSection: status, refresh: true });
+      return true;
     },
-    [nav, data?.status]
-  )
+    [nav, data?.status],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      const sub = BackHandler.addEventListener('hardwareBackPress', () => handleBackToAgenda())
-      return () => sub.remove()
-    }, [handleBackToAgenda])
-  )
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => handleBackToAgenda());
+      return () => sub.remove();
+    }, [handleBackToAgenda]),
+  );
 
   const load = async (id: string) => {
-    devLog('[OrderDetail][load] start id =', id)
+    devLog('[OrderDetail][load] start id =', id);
 
-    const seq = ++loadSeqRef.current
-    devLog('[OrderDetail][load] seq =', seq)
+    const seq = ++loadSeqRef.current;
+    devLog('[OrderDetail][load] seq =', seq);
 
     try {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
 
-      let url = `/orders/${id}`
+      let url = `/orders/${id}`;
 
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync()
+        const { status } = await Location.requestForegroundPermissionsAsync();
         if (status === 'granted') {
           const pos = await Location.getCurrentPositionAsync({
             accuracy: Location.Accuracy.Balanced,
-          })
-          const lat = pos.coords.latitude
-          const lng = pos.coords.longitude
-          url = `/orders/${id}?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`
+          });
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          url = `/orders/${id}?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`;
         } else {
-          devLog('[OrderDetail] ubicación no permitida, se llama sin lat/lng')
+          devLog('[OrderDetail] ubicación no permitida, se llama sin lat/lng');
         }
       } catch (locErr) {
-        devLog('[OrderDetail] error obteniendo ubicación', locErr)
+        devLog('[OrderDetail] error obteniendo ubicación', locErr);
       }
 
-      devLog('[OrderDetail][load] GET =>', url)
+      devLog('[OrderDetail][load] GET =>', url);
 
-      const r = await api.get<Resp>(url, { headers: { 'Cache-Control': 'no-cache' } })
+      const r = await api.get<Resp>(url, { headers: { 'Cache-Control': 'no-cache' } });
 
       // ✅ si ya hay otro load posterior, ignoramos este resultado
       if (seq !== loadSeqRef.current) {
-        devLog('[OrderDetail][load] ignored result (stale seq)', { seq, current: loadSeqRef.current })
-        return null
+        devLog('[OrderDetail][load] ignored result (stale seq)', {
+          seq,
+          current: loadSeqRef.current,
+        });
+        return null;
       }
 
       // ✅ logs resumidos (evita spam / errores)
-      devLog('[OrderDetail][load] response.ok =', r.data?.ok)
-      devLog('[OrderDetail][load] order.status =', r.data?.order?.status)
-      devLog('[OrderDetail][load] meta.deadline =', r.data?.meta?.deadline)
+      devLog('[OrderDetail][load] response.ok =', r.data?.ok);
+      devLog('[OrderDetail][load] order.status =', r.data?.order?.status);
+      devLog('[OrderDetail][load] meta.deadline =', r.data?.meta?.deadline);
 
       // ✅ logs completos (si querés ver todo)
-      devLog('[OrderDetail] order from API =', JSON.stringify(r.data.order, null, 2))
-      devLog('[OrderDetail] meta from API =', JSON.stringify(r.data.meta, null, 2))
+      devLog('[OrderDetail] order from API =', JSON.stringify(r.data.order, null, 2));
+      devLog('[OrderDetail] meta from API =', JSON.stringify(r.data.meta, null, 2));
 
-      devLog('[OrderDetail] address raw =', JSON.stringify(r.data.order?.address ?? null, null, 2))
+      devLog('[OrderDetail] address raw =', JSON.stringify(r.data.order?.address ?? null, null, 2));
 
-      setData(r.data.order)
-      setMeta(r.data.meta)
-      return r.data
+      setData(r.data.order);
+      setMeta(r.data.meta);
+      return r.data;
     } catch (e: any) {
-      if (seq !== loadSeqRef.current) return null
-      const msg = getErrorMessage(e) ?? 'Error al cargar la orden'
-      devLog('[OrderDetail][load] ERROR =', msg)
-      setError(msg)
-      return null
+      if (seq !== loadSeqRef.current) return null;
+      const msg = getErrorMessage(e) ?? 'Error al cargar la orden';
+      devLog('[OrderDetail][load] ERROR =', msg);
+      setError(msg);
+      return null;
     } finally {
-      if (seq === loadSeqRef.current) setLoading(false)
+      if (seq === loadSeqRef.current) setLoading(false);
     }
-  }
+  };
 
   // ✅ load inicial cuando cambia el id
   useEffect(() => {
     if (!orderId) {
-      setError('Orden sin id (parámetros faltantes desde la navegación)')
-      setLoading(false)
-      return
+      setError('Orden sin id (parámetros faltantes desde la navegación)');
+      setLoading(false);
+      return;
     }
 
     // ✅ reset inmediato para que NO se vea el status anterior (ASSIGNED) al entrar desde notificación
-    setData(null)
-    setMeta(undefined)
-    setError(null)
-    setLoading(true)
+    setData(null);
+    setMeta(undefined);
+    setError(null);
+    setLoading(true);
 
-    devLog('[OrderDetail][effect] initial load for orderId =', orderId)
-    load(orderId)
-  }, [orderId])
+    devLog('[OrderDetail][effect] initial load for orderId =', orderId);
+    load(orderId);
+  }, [orderId]);
 
   // ✅ FIX CLAVE: refrescar SIEMPRE al entrar a la pantalla (notificación suele reusar la misma screen)
   useFocusEffect(
     useCallback(() => {
-      if (!orderId) return
+      if (!orderId) return;
 
-      const now = Date.now()
-      if (now - lastFocusReloadRef.current < 600) return // anti doble-focus
-      lastFocusReloadRef.current = now
+      const now = Date.now();
+      if (now - lastFocusReloadRef.current < 600) return; // anti doble-focus
+      lastFocusReloadRef.current = now;
 
       // 🔥 para tu caso (notificaciones) es lo más seguro:
       // evitamos ver “Pedido en curso” viejo 1 segundo
-      setLoading(true)
-      setError(null)
-      setData(null)
-      setMeta(undefined)
+      setLoading(true);
+      setError(null);
+      setData(null);
+      setMeta(undefined);
 
-      devLog('[OrderDetail][focus] refresh load for orderId =', orderId)
-      load(orderId)
-    }, [orderId])
-  )
+      devLog('[OrderDetail][focus] refresh load for orderId =', orderId);
+      load(orderId);
+    }, [orderId]),
+  );
 
   const fmtDateTime = (iso?: string | null) =>
     !iso
@@ -294,173 +298,172 @@ export default function OrderDetailScreen() {
       : new Date(iso).toLocaleString([], {
           dateStyle: 'short',
           timeStyle: 'short',
-        })
+        });
 
   const eventTypeLabel = (type: string) => {
-  const t = String(type || '').toUpperCase()
-  const map: Record<string, string> = {
-    CREATED: 'Creado',
-    ACCEPTED: 'Aceptado',
-    ASSIGNED: 'Asignado',
-    IN_PROGRESS: 'En curso',
-    PAUSED: 'Pausado',
-    FINISHED_BY_SPECIALIST: 'Finalizado por especialista',
-    IN_CLIENT_REVIEW: 'En revisión del cliente',
-    CONFIRMED_BY_CLIENT: 'Confirmado por cliente',
-    REJECTED: 'Rechazado',
-    CANCELLED_BY_CUSTOMER: 'Cancelado por cliente',
-    CANCELLED_BY_SPECIALIST: 'Cancelado por especialista',
-    CANCELLED_AUTO: 'Vencido automáticamente',
-    CLOSED: 'Cerrado',
-    RATED: 'Calificado',
-  }
-  return map[t] ?? type
-}
+    const t = String(type || '').toUpperCase();
+    const map: Record<string, string> = {
+      CREATED: 'Creado',
+      ACCEPTED: 'Aceptado',
+      ASSIGNED: 'Asignado',
+      IN_PROGRESS: 'En curso',
+      PAUSED: 'Pausado',
+      FINISHED_BY_SPECIALIST: 'Finalizado por especialista',
+      IN_CLIENT_REVIEW: 'En revisión del cliente',
+      CONFIRMED_BY_CLIENT: 'Confirmado por cliente',
+      REJECTED: 'Rechazado',
+      CANCELLED_BY_CUSTOMER: 'Cancelado por cliente',
+      CANCELLED_BY_SPECIALIST: 'Cancelado por especialista',
+      CANCELLED_AUTO: 'Vencido automáticamente',
+      CLOSED: 'Cerrado',
+      RATED: 'Calificado',
+    };
+    return map[t] ?? type;
+  };
 
-// ✅ rol REAL (no depende de mode)
-const isSpecialist = user?.role === 'SPECIALIST'
-const isClient = !isSpecialist
+  // ✅ rol REAL (no depende de mode)
+  const isSpecialist = user?.role === 'SPECIALIST';
+  const isClient = !isSpecialist;
 
-  const isExpired = meta?.deadline === 'expired'
-  const isPending = data?.status === 'PENDING'
-  const isAssignedOrInProgress = data?.status === 'ASSIGNED' || data?.status === 'IN_PROGRESS'
-  const inClientReview = data?.status === 'IN_CLIENT_REVIEW'
-  const canRate = data?.status === 'CONFIRMED_BY_CLIENT' && !data?.rating
+  const isExpired = meta?.deadline === 'expired';
+  const isPending = data?.status === 'PENDING';
+  const isAssignedOrInProgress = data?.status === 'ASSIGNED' || data?.status === 'IN_PROGRESS';
+  const inClientReview = data?.status === 'IN_CLIENT_REVIEW';
+  const canRate = data?.status === 'CONFIRMED_BY_CLIENT' && !data?.rating;
 
-  const isAutoCancelled = data?.status === 'CANCELLED_AUTO'
-  const isCancelledByCustomer = data?.status === 'CANCELLED_BY_CUSTOMER'
-  const isCancelledBySpecialist = data?.status === 'CANCELLED_BY_SPECIALIST'
+  const isAutoCancelled = data?.status === 'CANCELLED_AUTO';
+  const isCancelledByCustomer = data?.status === 'CANCELLED_BY_CUSTOMER';
+  const isCancelledBySpecialist = data?.status === 'CANCELLED_BY_SPECIALIST';
 
   const isCancelled =
-    isExpired || !!isAutoCancelled || !!isCancelledByCustomer || !!isCancelledBySpecialist
+    isExpired || !!isAutoCancelled || !!isCancelledByCustomer || !!isCancelledBySpecialist;
 
-  const statusTitle =
-    isExpired
-      ? 'Pedido vencido'
-      : isAutoCancelled
+  const statusTitle = isExpired
+    ? 'Pedido vencido'
+    : isAutoCancelled
       ? 'Pedido vencido'
       : isCancelledByCustomer
-      ? 'Pedido cancelado por el cliente'
-      : isCancelledBySpecialist
-      ? 'Pedido cancelado por el especialista'
-      : isPending
-      ? 'Pedido pendiente'
-      : isAssignedOrInProgress
-      ? 'Pedido en curso'
-      : inClientReview
-      ? 'En revisión del cliente'
-      : data?.status === 'CONFIRMED_BY_CLIENT'
-      ? 'Trabajo confirmado'
-      : data?.status === 'CLOSED'
-      ? 'Pedido cerrado'
-      : 'Detalle del pedido'
+        ? 'Pedido cancelado por el cliente'
+        : isCancelledBySpecialist
+          ? 'Pedido cancelado por el especialista'
+          : isPending
+            ? 'Pedido pendiente'
+            : isAssignedOrInProgress
+              ? 'Pedido en curso'
+              : inClientReview
+                ? 'En revisión del cliente'
+                : data?.status === 'CONFIRMED_BY_CLIENT'
+                  ? 'Trabajo confirmado'
+                  : data?.status === 'CLOSED'
+                    ? 'Pedido cerrado'
+                    : 'Detalle del pedido';
 
   // 🔹 Persona que mostramos en el header
   const headerName = isClient
-    ? data?.specialist?.name ?? 'Especialista a asignar'
-    : data?.customer?.name ?? 'Cliente'
+    ? (data?.specialist?.name ?? 'Especialista a asignar')
+    : (data?.customer?.name ?? 'Cliente');
 
   const headerAvatarUrl = isClient
-    ? data?.specialist?.avatarUrl ?? null
-    : data?.customer?.avatarUrl ?? null
+    ? (data?.specialist?.avatarUrl ?? null)
+    : (data?.customer?.avatarUrl ?? null);
 
-  const headerInitial = (headerName?.trim?.()[0] ?? 'U').toUpperCase()
+  const headerInitial = (headerName?.trim?.()[0] ?? 'U').toUpperCase();
 
-  const FILES_BASE_URL = api.defaults.baseURL || process.env.EXPO_PUBLIC_API_URL || ''
+  const FILES_BASE_URL = api.defaults.baseURL || process.env.EXPO_PUBLIC_API_URL || '';
   const toAbsoluteUrl = (u?: string | null) => {
-    if (!u) return null
-    if (u.startsWith('http://') || u.startsWith('https://') || u.startsWith('file://')) return u
-    const base = FILES_BASE_URL.replace(/\/$/, '')
-    const path = u.startsWith('/') ? u : `/${u}`
-    return `${base}${path}?t=${Date.now()}`
-  }
+    if (!u) return null;
+    if (u.startsWith('http://') || u.startsWith('https://') || u.startsWith('file://')) return u;
+    const base = FILES_BASE_URL.replace(/\/$/, '');
+    const path = u.startsWith('/') ? u : `/${u}`;
+    return `${base}${path}?t=${Date.now()}`;
+  };
 
   const horarioLabel = (() => {
-    if (!data) return '—'
-    if (data.isUrgent) return 'Lo antes posible'
-    if (data.scheduledAt) return fmtDateTime(data.scheduledAt)
-    if (data.preferredAt) return fmtDateTime(data.preferredAt)
-    return 'Sin definir'
-  })()
+    if (!data) return '—';
+    if (data.isUrgent) return 'Lo antes posible';
+    if (data.scheduledAt) return fmtDateTime(data.scheduledAt);
+    if (data.preferredAt) return fmtDateTime(data.preferredAt);
+    return 'Sin definir';
+  })();
 
   const distanceLabel = (() => {
-    if (!data) return 'No disponible'
-    const d = data.distanceKm
-    if (d == null || Number.isNaN(d)) return 'No disponible'
-    if (d < 1) return `${Math.round(d * 1000)} m`
-    if (d < 10) return `${d.toFixed(1)} km`
-    return `${Math.round(d)} km`
-  })()
+    if (!data) return 'No disponible';
+    const d = data.distanceKm;
+    if (d == null || Number.isNaN(d)) return 'No disponible';
+    if (d < 1) return `${Math.round(d * 1000)} m`;
+    if (d < 10) return `${d.toFixed(1)} km`;
+    return `${Math.round(d)} km`;
+  })();
 
   const deadlinePill = useMemo(() => {
-    if (!meta || meta.deadline === 'none') return { text: 'Sin límite', style: styles.badgeSoft }
+    if (!meta || meta.deadline === 'none') return { text: 'Sin límite', style: styles.badgeSoft };
     if (meta.deadline === 'expired' || !meta.timeLeftMs || meta.timeLeftMs <= 0)
-      return { text: 'Límite vencido', style: styles.badgeWarn }
+      return { text: 'Límite vencido', style: styles.badgeWarn };
 
-    const totalMinutes = Math.max(0, Math.round(meta.timeLeftMs / 60000))
-    const hours = Math.floor(totalMinutes / 60)
-    const minutes = totalMinutes % 60
-    const parts: string[] = []
-    if (hours) parts.push(`${hours} h`)
-    if (minutes || !hours) parts.push(`${minutes} min`)
+    const totalMinutes = Math.max(0, Math.round(meta.timeLeftMs / 60000));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    const parts: string[] = [];
+    if (hours) parts.push(`${hours} h`);
+    if (minutes || !hours) parts.push(`${minutes} min`);
 
-    return { text: `Límite: ${parts.join(' ')}`, style: styles.badgeOk }
-  }, [meta])
+    return { text: `Límite: ${parts.join(' ')}`, style: styles.badgeOk };
+  }, [meta]);
 
   const attachmentImages: string[] = useMemo(() => {
-    if (!data || !Array.isArray(data.attachments)) return []
+    if (!data || !Array.isArray(data.attachments)) return [];
     return data.attachments
       .map((att: any) => {
-        if (!att) return null
-        if (typeof att === 'string') return toAbsoluteUrl(att)
-        if (typeof att.uri === 'string') return toAbsoluteUrl(att.uri)
-        if (typeof att.url === 'string') return toAbsoluteUrl(att.url)
-        if (typeof att.fileUrl === 'string') return toAbsoluteUrl(att.fileUrl)
-        return null
+        if (!att) return null;
+        if (typeof att === 'string') return toAbsoluteUrl(att);
+        if (typeof att.uri === 'string') return toAbsoluteUrl(att.uri);
+        if (typeof att.url === 'string') return toAbsoluteUrl(att.url);
+        if (typeof att.fileUrl === 'string') return toAbsoluteUrl(att.fileUrl);
+        return null;
       })
-      .filter((u): u is string => typeof u === 'string')
-  }, [data])
+      .filter((u): u is string => typeof u === 'string');
+  }, [data]);
 
   const addressText = (() => {
-  const a: any = data?.address
-  if (!a) return '—'
+    const a: any = data?.address;
+    if (!a) return '—';
 
-  // 1) string plano
-  if (typeof a === 'string') return a.trim() || '—'
+    // 1) string plano
+    if (typeof a === 'string') return a.trim() || '—';
 
-  // 2) tu formato esperado actual
-  if (typeof a.formatted === 'string' && a.formatted.trim()) return a.formatted.trim()
+    // 2) tu formato esperado actual
+    if (typeof a.formatted === 'string' && a.formatted.trim()) return a.formatted.trim();
 
-  // 3) otros formatos comunes (por si el backend cambia en ASSIGNED)
-  const candidates = [
-    a.address,
-    a.full,
-    a.text,
-    a.label,
-    a.display,
-    a.formattedAddress,
-    a.line1,
-  ].filter((x) => typeof x === 'string' && x.trim())
+    // 3) otros formatos comunes (por si el backend cambia en ASSIGNED)
+    const candidates = [
+      a.address,
+      a.full,
+      a.text,
+      a.label,
+      a.display,
+      a.formattedAddress,
+      a.line1,
+    ].filter((x) => typeof x === 'string' && x.trim());
 
-  if (candidates.length) return candidates[0].trim()
+    if (candidates.length) return candidates[0].trim();
 
-  // 4) si viene en partes (street/number/city)
-  const parts = [a.street, a.number, a.city, a.state, a.zip]
-    .filter((x) => typeof x === 'string' && x.trim())
-    .map((s: string) => s.trim())
+    // 4) si viene en partes (street/number/city)
+    const parts = [a.street, a.number, a.city, a.state, a.zip]
+      .filter((x) => typeof x === 'string' && x.trim())
+      .map((s: string) => s.trim());
 
-  if (parts.length) return parts.join(' ')
+    if (parts.length) return parts.join(' ');
 
-  // 5) fallback para debug en DEV
-  try {
-    return __DEV__ ? JSON.stringify(a) : '—'
-  } catch {
-    return '—'
-  }
-})()
+    // 5) fallback para debug en DEV
+    try {
+      return __DEV__ ? JSON.stringify(a) : '—';
+    } catch {
+      return '—';
+    }
+  })();
 
   // ✅ Chat disponible por estado (no por chatThreadId; si falta, reintentamos en el tap)
-  const canShowChat = !isPending && !isCancelled
+  const canShowChat = !isPending && !isCancelled;
 
   const confirmCancel = (onConfirm: () => void) => {
     Alert.alert(
@@ -469,170 +472,168 @@ const isClient = !isSpecialist
       [
         { text: 'No', style: 'cancel' },
         { text: 'Sí, cancelar', style: 'destructive', onPress: onConfirm },
-      ]
-    )
-  }
+      ],
+    );
+  };
 
   // ───────────────────── acciones ─────────────────────
   const doAccept = async () => {
-    if (!data) return
+    if (!data) return;
     try {
-      await api.post(`/orders/${data.id}/accept`, {})
-      Alert.alert('Listo', 'Pedido aceptado')
-      const fresh = orderId ? await load(orderId) : null
-      handleBackToAgenda(fresh?.order?.status ?? 'ASSIGNED', fresh?.meta)
+      await api.post(`/orders/${data.id}/accept`, {});
+      Alert.alert('Listo', 'Pedido aceptado');
+      const fresh = orderId ? await load(orderId) : null;
+      handleBackToAgenda(fresh?.order?.status ?? 'ASSIGNED', fresh?.meta);
     } catch (e: any) {
-      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo aceptar')
+      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo aceptar');
     }
-  }
+  };
 
   const doCancelBySpecialist = async () => {
-  if (!data) return
-  try {
-    await api.post(`/orders/${data.id}/cancel-by-specialist`, {
-      reason: 'Rechazado por el especialista',
-    })
-    Alert.alert('Listo', 'Solicitud rechazada')
-    const fresh = orderId ? await load(orderId) : null
-    handleBackToAgenda(fresh?.order?.status ?? 'CANCELLED_BY_SPECIALIST', fresh?.meta)
-  } catch (e: any) {
-    Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo rechazar')
-  }
-}
-
+    if (!data) return;
+    try {
+      await api.post(`/orders/${data.id}/cancel-by-specialist`, {
+        reason: 'Rechazado por el especialista',
+      });
+      Alert.alert('Listo', 'Solicitud rechazada');
+      const fresh = orderId ? await load(orderId) : null;
+      handleBackToAgenda(fresh?.order?.status ?? 'CANCELLED_BY_SPECIALIST', fresh?.meta);
+    } catch (e: any) {
+      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo rechazar');
+    }
+  };
 
   const doCancelAsCustomer = async () => {
-    if (!data) return
+    if (!data) return;
     try {
       await api.post(`/orders/${data.id}/cancel`, {
         reason: 'Cancelado por el cliente desde OrderDetail',
-      })
-      Alert.alert('Listo', 'Solicitud cancelada')
-      const fresh = orderId ? await load(orderId) : null
-      handleBackToAgenda(fresh?.order?.status ?? 'CANCELLED_BY_CUSTOMER', fresh?.meta)
+      });
+      Alert.alert('Listo', 'Solicitud cancelada');
+      const fresh = orderId ? await load(orderId) : null;
+      handleBackToAgenda(fresh?.order?.status ?? 'CANCELLED_BY_CUSTOMER', fresh?.meta);
     } catch (e: any) {
-      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo cancelar la solicitud')
+      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo cancelar la solicitud');
     }
-  }
+  };
 
   const doCancelAsSpecialist = async () => {
-    if (!data) return
+    if (!data) return;
     try {
       await api.post(`/orders/${data.id}/cancel-by-specialist`, {
         reason: 'Cancelado por el especialista desde OrderDetail',
-      })
-      Alert.alert('Listo', 'Solicitud cancelada')
-      const fresh = orderId ? await load(orderId) : null
-      handleBackToAgenda(fresh?.order?.status ?? 'CANCELLED_BY_SPECIALIST', fresh?.meta)
+      });
+      Alert.alert('Listo', 'Solicitud cancelada');
+      const fresh = orderId ? await load(orderId) : null;
+      handleBackToAgenda(fresh?.order?.status ?? 'CANCELLED_BY_SPECIALIST', fresh?.meta);
     } catch (e: any) {
-      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo cancelar')
+      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo cancelar');
     }
-  }
+  };
 
   const doFinish = async () => {
-    if (!data) return
+    if (!data) return;
     try {
-      await api.post(`/orders/${data.id}/finish`, { attachments: [], note: null })
-      Alert.alert('Listo', 'Trabajo marcado como finalizado')
-      const fresh = orderId ? await load(orderId) : null
-      handleBackToAgenda(fresh?.order?.status ?? 'IN_CLIENT_REVIEW', fresh?.meta)
+      await api.post(`/orders/${data.id}/finish`, { attachments: [], note: null });
+      Alert.alert('Listo', 'Trabajo marcado como finalizado');
+      const fresh = orderId ? await load(orderId) : null;
+      handleBackToAgenda(fresh?.order?.status ?? 'IN_CLIENT_REVIEW', fresh?.meta);
     } catch (e: any) {
-      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo finalizar')
+      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo finalizar');
     }
-  }
+  };
 
   const doRejectFinishAsCustomer = async () => {
-  if (!data) return
-  try {
-    await api.post(`/orders/${data.id}/reject`, {
-      reason: 'El cliente rechazó la finalización',
-    })
-    Alert.alert('Listo', 'Se rechazó la finalización. El trabajo volvió a estar en curso.')
+    if (!data) return;
+    try {
+      await api.post(`/orders/${data.id}/reject`, {
+        reason: 'El cliente rechazó la finalización',
+      });
+      Alert.alert('Listo', 'Se rechazó la finalización. El trabajo volvió a estar en curso.');
 
-    const fresh = orderId ? await load(orderId) : null
-    handleBackToAgenda(fresh?.order?.status ?? 'IN_PROGRESS', fresh?.meta)
-  } catch (e: any) {
-    Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo rechazar la finalización')
-  }
-}
+      const fresh = orderId ? await load(orderId) : null;
+      handleBackToAgenda(fresh?.order?.status ?? 'IN_PROGRESS', fresh?.meta);
+    } catch (e: any) {
+      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo rechazar la finalización');
+    }
+  };
 
   const openRatingModal = () => {
-    setRatingScore(5)
-    setRatingComment('')
-    setRatingModalVisible(true)
-  }
+    setRatingScore(5);
+    setRatingComment('');
+    setRatingModalVisible(true);
+  };
 
   const doConfirm = async () => {
-    if (!data) return
+    if (!data) return;
     try {
-      await api.post(`/orders/${data.id}/confirm`, {})
-      Alert.alert('Listo', 'Trabajo confirmado')
-      const fresh = orderId ? await load(orderId) : null
-      if (!fresh?.order?.rating) openRatingModal()
-      else handleBackToAgenda(fresh?.order?.status ?? 'CONFIRMED_BY_CLIENT', fresh?.meta)
+      await api.post(`/orders/${data.id}/confirm`, {});
+      Alert.alert('Listo', 'Trabajo confirmado');
+      const fresh = orderId ? await load(orderId) : null;
+      if (!fresh?.order?.rating) openRatingModal();
+      else handleBackToAgenda(fresh?.order?.status ?? 'CONFIRMED_BY_CLIENT', fresh?.meta);
     } catch (e: any) {
-      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo confirmar')
+      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo confirmar');
     }
-  }
+  };
 
   const submitRating = async () => {
-    if (!data) return
+    if (!data) return;
     try {
-      setSubmittingRating(true)
+      setSubmittingRating(true);
       await api.post(`/orders/${data.id}/rate`, {
         score: ratingScore,
         comment: ratingComment.trim() || null,
-      })
-      setRatingModalVisible(false)
-      Alert.alert('Gracias', 'Calificación enviada')
-      const fresh = orderId ? await load(orderId) : null
-      handleBackToAgenda(fresh?.order?.status ?? 'CLOSED', fresh?.meta)
+      });
+      setRatingModalVisible(false);
+      Alert.alert('Gracias', 'Calificación enviada');
+      const fresh = orderId ? await load(orderId) : null;
+      handleBackToAgenda(fresh?.order?.status ?? 'CLOSED', fresh?.meta);
     } catch (e: any) {
-      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo calificar')
+      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo calificar');
     } finally {
-      setSubmittingRating(false)
+      setSubmittingRating(false);
     }
-  }
+  };
 
   const handleOpenChat = async () => {
-    if (!data || !canShowChat) return
+    if (!data || !canShowChat) return;
 
-    let threadId = data.chatThreadId ?? null
+    let threadId = data.chatThreadId ?? null;
     if (!threadId) {
-      const fresh = orderId ? await load(orderId) : null
-      threadId = fresh?.order?.chatThreadId ?? null
+      const fresh = orderId ? await load(orderId) : null;
+      threadId = fresh?.order?.chatThreadId ?? null;
     }
 
     if (!threadId) {
       Alert.alert(
         'Chat no disponible',
-        'Todavía no se creó el chat para esta orden. Probá de nuevo en unos segundos.'
-      )
-      return
+        'Todavía no se creó el chat para esta orden. Probá de nuevo en unos segundos.',
+      );
+      return;
     }
 
-    const parent = nav.getParent?.()
-    const title =
-  isSpecialist
-    ? data.customer?.name ?? data.service?.name ?? 'Chat'
-    : data.specialist?.name ?? data.service?.name ?? 'Chat'
+    const parent = nav.getParent?.();
+    const title = isSpecialist
+      ? (data.customer?.name ?? data.service?.name ?? 'Chat')
+      : (data.specialist?.name ?? data.service?.name ?? 'Chat');
 
-    const params = { threadId, orderId: data.id, title }
+    const params = { threadId, orderId: data.id, title };
 
     if (parent?.navigate) {
-      parent.navigate('Chat', { screen: 'ChatThread', params })
-      return
+      parent.navigate('Chat', { screen: 'ChatThread', params });
+      return;
     }
 
-    nav.navigate('ChatThread', params)
-  }
+    nav.navigate('ChatThread', params);
+  };
 
   // ───────────────────── UI states ─────────────────────
-  const showPendingSpecialistActions = isPending && !isCancelled && isSpecialist
-  const showPendingCustomerActions = isPending && !isCancelled && isClient
-  const showSpecialistProgressActions = isAssignedOrInProgress && !isCancelled && isSpecialist
-  const showClientReviewActions = inClientReview && !isCancelled && isClient
-  const showConfirmedActions = isAssignedOrInProgress && !isCancelled
+  const showPendingSpecialistActions = isPending && !isCancelled && isSpecialist;
+  const showPendingCustomerActions = isPending && !isCancelled && isClient;
+  const showSpecialistProgressActions = isAssignedOrInProgress && !isCancelled && isSpecialist;
+  const showClientReviewActions = inClientReview && !isCancelled && isClient;
+  const showConfirmedActions = isAssignedOrInProgress && !isCancelled;
 
   if (loading) {
     return (
@@ -649,7 +650,7 @@ const isClient = !isSpecialist
           </Pressable>
         </SafeAreaView>
       </LinearGradient>
-    )
+    );
   }
 
   if (error || !data) {
@@ -671,10 +672,10 @@ const isClient = !isSpecialist
           </Pressable>
         </SafeAreaView>
       </LinearGradient>
-    )
+    );
   }
 
-  const rubroLabel = data.service?.categoryName ?? data.service?.name ?? 'Sin datos'
+  const rubroLabel = data.service?.categoryName ?? data.service?.name ?? 'Sin datos';
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
@@ -773,7 +774,11 @@ const isClient = !isSpecialist
               <>
                 <View style={{ height: 12 }} />
                 <Text style={styles.sectionTitle}>Adjuntos</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ marginTop: 8 }}
+                >
                   {attachmentImages.map((uri, idx) => (
                     <ExpoImage
                       key={`${uri}-${idx}`}
@@ -813,19 +818,19 @@ const isClient = !isSpecialist
               ))
             )}
             {/* ✅ RESEÑA (aparece SOLO si existe data.rating) */}
-  {data.rating && (
-    <View style={{ marginTop: 10 }}>
-      <Text style={styles.sectionTitle}>Reseña</Text>
+            {data.rating && (
+              <View style={{ marginTop: 10 }}>
+                <Text style={styles.sectionTitle}>Reseña</Text>
 
-      <Text style={styles.textBody}>⭐ {data.rating.score}/5</Text>
+                <Text style={styles.textBody}>⭐ {data.rating.score}/5</Text>
 
-      {data.rating.comment ? (
-        <Text style={[styles.textBody, { marginTop: 4 }]}>{data.rating.comment}</Text>
-      ) : (
-        <Text style={styles.muted}>Sin comentario.</Text>
-      )}
-    </View>
-  )}
+                {data.rating.comment ? (
+                  <Text style={[styles.textBody, { marginTop: 4 }]}>{data.rating.comment}</Text>
+                ) : (
+                  <Text style={styles.muted}>Sin comentario.</Text>
+                )}
+              </View>
+            )}
           </View>
 
           <View style={{ gap: 10 }}>
@@ -834,7 +839,10 @@ const isClient = !isSpecialist
                 <Pressable style={styles.ctaPrimary} onPress={doAccept}>
                   <Text style={styles.ctaPrimaryText}>Aceptar pedido</Text>
                 </Pressable>
-                <Pressable style={styles.ctaDanger} onPress={() => confirmCancel(doCancelBySpecialist)}>
+                <Pressable
+                  style={styles.ctaDanger}
+                  onPress={() => confirmCancel(doCancelBySpecialist)}
+                >
                   <Text style={styles.ctaDangerText}>Rechazar solicitud</Text>
                 </Pressable>
               </>
@@ -849,7 +857,10 @@ const isClient = !isSpecialist
             {showConfirmedActions && (
               <>
                 {isClient ? (
-                  <Pressable style={styles.ctaDanger} onPress={() => confirmCancel(doCancelAsCustomer)}>
+                  <Pressable
+                    style={styles.ctaDanger}
+                    onPress={() => confirmCancel(doCancelAsCustomer)}
+                  >
                     <Text style={styles.ctaDangerText}>Cancelar solicitud</Text>
                   </Pressable>
                 ) : (
@@ -874,20 +885,19 @@ const isClient = !isSpecialist
             )}
 
             {showClientReviewActions && (
-  <>
-    <Pressable style={styles.ctaPrimary} onPress={doConfirm}>
-      <Text style={styles.ctaPrimaryText}>Confirmar trabajo</Text>
-    </Pressable>
+              <>
+                <Pressable style={styles.ctaPrimary} onPress={doConfirm}>
+                  <Text style={styles.ctaPrimaryText}>Confirmar trabajo</Text>
+                </Pressable>
 
-    <Pressable
-      style={styles.ctaAlt}
-      onPress={() => confirmCancel(doRejectFinishAsCustomer)}
-    >
-      <Text style={styles.ctaAltText}>Rechazar finalización</Text>
-    </Pressable>
-  </>
-)}
-
+                <Pressable
+                  style={styles.ctaAlt}
+                  onPress={() => confirmCancel(doRejectFinishAsCustomer)}
+                >
+                  <Text style={styles.ctaAltText}>Rechazar finalización</Text>
+                </Pressable>
+              </>
+            )}
 
             {canRate && (
               <Pressable style={styles.ctaPrimary} onPress={openRatingModal}>
@@ -912,7 +922,11 @@ const isClient = !isSpecialist
 
               <View style={styles.modalStarsRow}>
                 {[1, 2, 3, 4, 5].map((val) => (
-                  <Pressable key={val} style={styles.starButton} onPress={() => setRatingScore(val)}>
+                  <Pressable
+                    key={val}
+                    style={styles.starButton}
+                    onPress={() => setRatingScore(val)}
+                  >
                     <Ionicons
                       name={val <= ratingScore ? 'star' : 'star-outline'}
                       size={28}
@@ -958,7 +972,7 @@ const isClient = !isSpecialist
         </Modal>
       </SafeAreaView>
     </LinearGradient>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -1133,39 +1147,4 @@ const styles = StyleSheet.create({
     backgroundColor: '#E9FEFF',
   },
   modalBtnPrimaryText: { color: '#06494F', fontWeight: '800' },
-})
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+});

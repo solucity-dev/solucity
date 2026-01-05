@@ -1,10 +1,10 @@
 // apps/mobile/src/screens/NotificationsScreen.tsx
-import { Ionicons } from '@expo/vector-icons'
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs'
-import { useFocusEffect, useNavigation } from '@react-navigation/native'
-import { LinearGradient } from 'expo-linear-gradient'
-import * as Notifications from 'expo-notifications'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Ionicons } from '@expo/vector-icons';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Notifications from 'expo-notifications';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -13,137 +13,138 @@ import {
   StyleSheet,
   Text,
   View,
-} from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useAuth } from '../auth/AuthProvider'
-import { api } from '../lib/api'
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { useAuth } from '../auth/AuthProvider';
+import { api } from '../lib/api';
 
 type NotificationData = {
-  orderId?: string
-  order_id?: string
+  orderId?: string;
+  order_id?: string;
   order?: {
-    id?: string
-    chatThreadId?: string
-    chat_thread_id?: string
-    customer?: { name?: string; avatarUrl?: string }
-    specialist?: { name?: string; avatarUrl?: string }
-  }
+    id?: string;
+    chatThreadId?: string;
+    chat_thread_id?: string;
+    customer?: { name?: string; avatarUrl?: string };
+    specialist?: { name?: string; avatarUrl?: string };
+  };
 
-  threadId?: string
-  thread_id?: string
-  chatThreadId?: string
-  chat_thread_id?: string
-  customerName?: string
-  customer_name?: string
-  specialistName?: string
-  specialist_name?: string
-  customer?: { name?: string; avatarUrl?: string }
-  specialist?: { name?: string; avatarUrl?: string }
+  threadId?: string;
+  thread_id?: string;
+  chatThreadId?: string;
+  chat_thread_id?: string;
+  customerName?: string;
+  customer_name?: string;
+  specialistName?: string;
+  specialist_name?: string;
+  customer?: { name?: string; avatarUrl?: string };
+  specialist?: { name?: string; avatarUrl?: string };
 
-  [k: string]: any
-}
+  [k: string]: any;
+};
 
 type NotificationItem = {
-  id: string
-  type: string | null
-  title: string | null
-  body: string | null
-  data: NotificationData
-  readAt: string | null
-  createdAt: string
-}
+  id: string;
+  type: string | null;
+  title: string | null;
+  body: string | null;
+  data: NotificationData;
+  readAt: string | null;
+  createdAt: string;
+};
 
 export default function NotificationsScreen() {
-  const insets = useSafeAreaInsets()
-  const tabBarHeight = useBottomTabBarHeight()
-  const navigation = useNavigation<any>()
-  const { token, ready } = useAuth()
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
+  const navigation = useNavigation<any>();
+  const { token, ready } = useAuth();
 
-  const [items, setItems] = useState<NotificationItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
+  const [items, setItems] = useState<NotificationItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const unreadCount = useMemo(() => items.filter((n) => !n.readAt).length, [items])
+  const unreadCount = useMemo(() => items.filter((n) => !n.readAt).length, [items]);
 
   // ✅ Mantener badge del SO sincronizado con no leídas
   useEffect(() => {
-    Notifications.setBadgeCountAsync(unreadCount).catch(() => {})
-  }, [unreadCount])
+    Notifications.setBadgeCountAsync(unreadCount).catch(() => {});
+  }, [unreadCount]);
 
   const loadNotifications = useCallback(async () => {
     if (!ready || !token) {
-      if (__DEV__) console.log('[Notifications] skip load: auth not ready')
-      setLoading(false)
-      setRefreshing(false)
-      return
+      if (__DEV__) console.log('[Notifications] skip load: auth not ready');
+      setLoading(false);
+      setRefreshing(false);
+      return;
     }
 
     try {
       const { data } = await api.get('/notifications', {
         params: { limit: 50 },
         headers: { 'Cache-Control': 'no-cache' },
-      })
-      const list: NotificationItem[] = Array.isArray(data?.items) ? data.items : []
-      setItems(list)
+      });
+      const list: NotificationItem[] = Array.isArray(data?.items) ? data.items : [];
+      setItems(list);
     } catch (e: any) {
-      const status = e?.response?.status
-      console.log('[Notifications] error', status, e?.message)
-      if (status === 401) setItems([])
+      const status = e?.response?.status;
+      console.log('[Notifications] error', status, e?.message);
+      if (status === 401) setItems([]);
     } finally {
-      setLoading(false)
-      setRefreshing(false)
+      setLoading(false);
+      setRefreshing(false);
     }
-  }, [ready, token])
+  }, [ready, token]);
 
   const markAsRead = useCallback(
     async (id: string) => {
-      if (!ready || !token) return
+      if (!ready || !token) return;
       try {
         await api.patch(`/notifications/${id}/read`, null, {
           headers: { 'Cache-Control': 'no-cache' },
-        })
+        });
       } catch (e: any) {
         if (__DEV__) {
-          console.log('[Notifications] markAsRead error', e?.response?.status, e?.message)
+          console.log('[Notifications] markAsRead error', e?.response?.status, e?.message);
         }
       }
     },
-    [ready, token]
-  )
+    [ready, token],
+  );
 
   useEffect(() => {
-    loadNotifications()
-  }, [loadNotifications])
+    loadNotifications();
+  }, [loadNotifications]);
 
   useFocusEffect(
     useCallback(() => {
-      loadNotifications()
-    }, [loadNotifications])
-  )
+      loadNotifications();
+    }, [loadNotifications]),
+  );
 
   const onRefresh = () => {
-    setRefreshing(true)
-    loadNotifications()
-  }
+    setRefreshing(true);
+    loadNotifications();
+  };
 
   const handlePress = async (item: NotificationItem) => {
     // ✅ 0) Optimista: sacamos el punto amarillo ya
     if (!item.readAt) {
       setItems((prev) =>
-        prev.map((n) => (n.id === item.id ? { ...n, readAt: new Date().toISOString() } : n))
-      )
+        prev.map((n) => (n.id === item.id ? { ...n, readAt: new Date().toISOString() } : n)),
+      );
       // ✅ persistimos en backend (sin frenar navegación)
-      markAsRead(item.id)
+      markAsRead(item.id);
     }
 
-    const parent = navigation.getParent?.()
-    const data = item?.data ?? {}
-    const type = (item?.type ?? '').toString()
-    const title = item?.title ?? ''
-    const body = item?.body ?? ''
+    const parent = navigation.getParent?.();
+    const data = item?.data ?? {};
+    const type = (item?.type ?? '').toString();
+    const title = item?.title ?? '';
+    const body = item?.body ?? '';
 
     // Extraemos posibles IDs
-    let orderId: string | null = data.orderId ?? data.order_id ?? data.order?.id ?? null
+    const orderId: string | null = data.orderId ?? data.order_id ?? data.order?.id ?? null;
 
     let threadId: string | null =
       data.threadId ??
@@ -154,7 +155,7 @@ export default function NotificationsScreen() {
       data.chat?.threadId ??
       data.order?.chatThreadId ??
       data.order?.chat_thread_id ??
-      null
+      null;
 
     // Nombres que puedan venir directo en el payload
     let customerName: string | null =
@@ -162,29 +163,32 @@ export default function NotificationsScreen() {
       data.customer_name ??
       data.customer?.name ??
       data.order?.customer?.name ??
-      null
+      null;
 
     let specialistName: string | null =
       data.specialistName ??
       data.specialist_name ??
       data.specialist?.name ??
       data.order?.specialist?.name ??
-      null
+      null;
 
     // 🔍 ¿Es "mensaje recibido"? -> miramos título / body / type
     const looksLikeMessage =
-      /mensaje/i.test(title) || /mensaje/i.test(body) || /chat/i.test(type) || /message/i.test(type)
+      /mensaje/i.test(title) ||
+      /mensaje/i.test(body) ||
+      /chat/i.test(type) ||
+      /message/i.test(type);
 
     if (__DEV__) {
-      console.log('────────────────────────')
-      console.log('[Notifications] item.id =', item.id)
-      console.log('[Notifications] type =', type)
-      console.log('[Notifications] title =', title)
-      console.log('[Notifications] body =', body)
-      console.log('[Notifications] data =', JSON.stringify(data, null, 2))
-      console.log('[Notifications] initial orderId =', orderId)
-      console.log('[Notifications] initial threadId =', threadId)
-      console.log('[Notifications] looksLikeMessage =', looksLikeMessage)
+      console.log('────────────────────────');
+      console.log('[Notifications] item.id =', item.id);
+      console.log('[Notifications] type =', type);
+      console.log('[Notifications] title =', title);
+      console.log('[Notifications] body =', body);
+      console.log('[Notifications] data =', JSON.stringify(data, null, 2));
+      console.log('[Notifications] initial orderId =', orderId);
+      console.log('[Notifications] initial threadId =', threadId);
+      console.log('[Notifications] looksLikeMessage =', looksLikeMessage);
     }
 
     // Si la notificación parece de MENSAJE y tenemos orderId,
@@ -193,73 +197,73 @@ export default function NotificationsScreen() {
       try {
         const r = await api.get(`/orders/${orderId}`, {
           headers: { 'Cache-Control': 'no-cache' },
-        })
-        const o = (r.data as any)?.order ?? r.data
+        });
+        const o = (r.data as any)?.order ?? r.data;
 
         if (__DEV__) {
-          console.log('[Notifications] /orders response =', JSON.stringify(o, null, 2))
+          console.log('[Notifications] /orders response =', JSON.stringify(o, null, 2));
         }
 
         if (o) {
-          if (!threadId && o.chatThreadId) threadId = o.chatThreadId
-          customerName = customerName ?? o.customer?.name ?? null
-          specialistName = specialistName ?? o.specialist?.name ?? null
+          if (!threadId && o.chatThreadId) threadId = o.chatThreadId;
+          customerName = customerName ?? o.customer?.name ?? null;
+          specialistName = specialistName ?? o.specialist?.name ?? null;
         }
       } catch (e) {
-        console.log('[Notifications] error fetching order for chat', e)
+        console.log('[Notifications] error fetching order for chat', e);
       }
     }
 
-    const counterpartName = customerName || specialistName || null
-    const chatTitle = counterpartName || 'Chat'
+    const counterpartName = customerName || specialistName || null;
+    const chatTitle = counterpartName || 'Chat';
 
     if (__DEV__) {
-      console.log('[Notifications] final orderId =', orderId)
-      console.log('[Notifications] final threadId =', threadId)
-      console.log('[Notifications] counterpartName =', counterpartName)
-      console.log('[Notifications] chatTitle =', chatTitle)
+      console.log('[Notifications] final orderId =', orderId);
+      console.log('[Notifications] final threadId =', threadId);
+      console.log('[Notifications] counterpartName =', counterpartName);
+      console.log('[Notifications] chatTitle =', chatTitle);
     }
 
     // 👉 Caso 1: notificación de MENSAJE con threadId → ir DIRECTO al chat
     if (looksLikeMessage && threadId) {
-      if (__DEV__) console.log('[Notifications] NAV → ChatThread (direct from list)')
+      if (__DEV__) console.log('[Notifications] NAV → ChatThread (direct from list)');
 
-      const params: any = { threadId: String(threadId), title: chatTitle }
-      if (orderId) params.orderId = String(orderId)
+      const params: any = { threadId: String(threadId), title: chatTitle };
+      if (orderId) params.orderId = String(orderId);
 
       if (parent?.navigate) {
-        parent.navigate('Chat', { screen: 'ChatThread', params })
+        parent.navigate('Chat', { screen: 'ChatThread', params });
       } else {
-        navigation.navigate('Chat', { screen: 'ChatThread', params })
+        navigation.navigate('Chat', { screen: 'ChatThread', params });
       }
-      return
+      return;
     }
 
     // 👉 Caso 2: cualquier otra notificación → OrderDetail
     if (!orderId) {
-      if (__DEV__) console.log('[Notifications] no orderId, no navigation')
-      return
+      if (__DEV__) console.log('[Notifications] no orderId, no navigation');
+      return;
     }
 
-    if (__DEV__) console.log('[Notifications] NAV → OrderDetail (from list)')
+    if (__DEV__) console.log('[Notifications] NAV → OrderDetail (from list)');
 
     // ✅ NO pasamos role (lo resuelve Auth/Stack)
     if (parent?.navigate) {
       parent.navigate('Agenda', {
         screen: 'OrderDetail',
         params: { id: String(orderId), from: 'notifications' },
-      })
-      return
+      });
+      return;
     }
 
     navigation.navigate('Agenda', {
       screen: 'OrderDetail',
       params: { id: String(orderId), from: 'notifications' },
-    })
-  }
+    });
+  };
 
   function renderItem({ item }: { item: NotificationItem }) {
-    const isRead = !!item.readAt
+    const isRead = !!item.readAt;
     return (
       <Pressable onPress={() => handlePress(item)} style={[styles.item, isRead && styles.itemRead]}>
         <View style={styles.itemIcon}>
@@ -286,7 +290,7 @@ export default function NotificationsScreen() {
 
         {!isRead && <View style={styles.unreadDot} />}
       </Pressable>
-    )
+    );
   }
 
   if (loading && !refreshing) {
@@ -296,7 +300,7 @@ export default function NotificationsScreen() {
           <ActivityIndicator size="large" color="#E9FEFF" />
         </SafeAreaView>
       </LinearGradient>
-    )
+    );
   }
 
   return (
@@ -321,14 +325,16 @@ export default function NotificationsScreen() {
             items.length === 0 ? styles.emptyContainer : styles.listContent,
             { paddingBottom: tabBarHeight + 24 },
           ]}
-          ListEmptyComponent={<Text style={styles.emptyText}>Todavía no tenés notificaciones.</Text>}
+          ListEmptyComponent={
+            <Text style={styles.emptyText}>Todavía no tenés notificaciones.</Text>
+          }
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#E9FEFF" />
           }
         />
       </SafeAreaView>
     </LinearGradient>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -377,18 +383,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   emptyText: { color: '#C2E7EB', textAlign: 'center', fontSize: 14 },
-})
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+});

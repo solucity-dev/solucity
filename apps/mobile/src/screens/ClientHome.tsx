@@ -1,33 +1,36 @@
-import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons'
-import { useNavigation } from '@react-navigation/native'
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { LinearGradient } from 'expo-linear-gradient'
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ROOT_CATEGORIES } from '../data/categories'
-import { useNotifications } from '../notifications/NotificationsProvider'
-import type { CategorySlug, HomeStackParamList } from '../types'
+import { ROOT_CATEGORIES } from '../data/categories';
+import { useSyncCustomerLocationOnMount } from '../hooks/useSyncCustomerLocationOnMount';
+import { useNotifications } from '../notifications/NotificationsProvider';
+import type { CategorySlug, HomeStackParamList } from '../types';
 
 // ➕ IMPORTAMOS EL HOOK
-import { useSyncCustomerLocationOnMount } from '../hooks/useSyncCustomerLocationOnMount'
 
 export default function ClientHome() {
-  const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>()
-  const insets = useSafeAreaInsets()
-  const { unread } = useNotifications()
+  const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
+  const insets = useSafeAreaInsets();
+  const { unread } = useNotifications();
 
   // ➕ ACTIVAMOS LA SINCRONIZACIÓN DE UBICACIÓN
-  useSyncCustomerLocationOnMount()
+  useSyncCustomerLocationOnMount();
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
       <SafeAreaView style={styles.safe} edges={['top']}>
-
         {/* Header */}
         <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
           <View style={styles.brandRow}>
-            <Image source={require('../assets/logo.png')} style={styles.logo} resizeMode="contain" />
+            <Image
+              source={require('../assets/logo.png')}
+              style={styles.logo}
+              resizeMode="contain"
+            />
             <Text style={styles.brandText}>solucity</Text>
           </View>
 
@@ -59,19 +62,20 @@ export default function ClientHome() {
                 ]}
               >
                 <View style={styles.iconWrap}>
-                  {c.icon.set === 'ion'
-                    ? <Ionicons name={c.icon.name as any} size={36} color="#fff" />
-                    : <MDI name={c.icon.name as any} size={36} color="#fff" />}
+                  {c.icon.set === 'ion' ? (
+                    <Ionicons name={c.icon.name as any} size={36} color="#fff" />
+                  ) : (
+                    <MDI name={c.icon.name as any} size={36} color="#fff" />
+                  )}
                 </View>
                 <Text style={styles.cardText}>{c.title}</Text>
               </Pressable>
             ))}
           </View>
         </ScrollView>
-
       </SafeAreaView>
     </LinearGradient>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -131,18 +135,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-})
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+});

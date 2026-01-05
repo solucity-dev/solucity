@@ -1,0 +1,301 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { type AdminSpecialistRow } from '../api/adminApi';
+import { useAdminSpecialists } from '../hooks/useAdminSpecialists';
+import './specialists.css';
+
+type KycFilter = 'ALL' | 'PENDING' | 'VERIFIED' | 'REJECTED' | 'UNVERIFIED';
+type SubFilter = 'ALL' | 'TRIALING' | 'ACTIVE' | 'PAST_DUE' | 'CANCELLED' | 'NONE';
+type SpecialtyFilter = 'ALL' | string;
+
+function Pill({ children }: { children: React.ReactNode }) {
+  return <span className="pill">{children}</span>;
+}
+
+function normalizeKyc(v: string | null): KycFilter {
+  const x = (v ?? '').toUpperCase();
+  if (x === 'PENDING' || x === 'VERIFIED' || x === 'REJECTED' || x === 'UNVERIFIED') return x;
+  return 'ALL';
+}
+
+function normalizeSub(v: string | null): SubFilter {
+  const x = (v ?? '').toUpperCase();
+  if (x === 'TRIALING' || x === 'ACTIVE' || x === 'PAST_DUE' || x === 'CANCELLED' || x === 'NONE')
+    return x;
+  return 'ALL';
+}
+
+function normalizeCat(v: string | null): SpecialtyFilter {
+  const x = (v ?? '').trim();
+  return x || 'ALL';
+}
+
+export default function Specialists() {
+  const nav = useNavigate();
+  const { data, loading, error, reload } = useAdminSpecialists();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const initialQ = searchParams.get('q') ?? '';
+  const initialKyc = normalizeKyc(searchParams.get('kyc'));
+  const initialSub = normalizeSub(searchParams.get('sub'));
+  const initialCat = normalizeCat(searchParams.get('cat'));
+
+  const [q, setQ] = useState(initialQ);
+  const [filterKyc, setFilterKyc] = useState<KycFilter>(initialKyc);
+  const [filterSub, setFilterSub] = useState<SubFilter>(initialSub);
+  const [filterCat, setFilterCat] = useState<SpecialtyFilter>(initialCat);
+
+  useEffect(() => {
+    const nextQ = searchParams.get('q') ?? '';
+    const nextKyc = normalizeKyc(searchParams.get('kyc'));
+    const nextSub = normalizeSub(searchParams.get('sub'));
+    const nextCat = normalizeCat(searchParams.get('cat'));
+
+    if (nextQ !== q) setQ(nextQ);
+    if (nextKyc !== filterKyc) setFilterKyc(nextKyc);
+    if (nextSub !== filterSub) setFilterSub(nextSub);
+    if (nextCat !== filterCat) setFilterCat(nextCat);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    const trimmed = q.trim();
+    if (trimmed) params.set('q', trimmed);
+    if (filterKyc !== 'ALL') params.set('kyc', filterKyc);
+    if (filterSub !== 'ALL') params.set('sub', filterSub);
+    if (filterCat !== 'ALL') params.set('cat', filterCat);
+    setSearchParams(params, { replace: true });
+  }, [q, filterKyc, filterSub, filterCat, setSearchParams]);
+
+  // ✅ Opciones de rubros sacadas de los especialistas (sin fetch extra)
+  const specialtyOptions = useMemo(() => {
+    const list: AdminSpecialistRow[] = data ?? [];
+    const map = new Map<string, string>(); // slug -> name
+
+    for (const r of list) {
+      for (const s of r.specialties ?? []) {
+        if (!map.has(s.slug)) map.set(s.slug, s.name);
+      }
+    }
+
+    return Array.from(map.entries())
+      .map(([slug, name]) => ({ slug, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  }, [data]);
+
+  const rows = useMemo<AdminSpecialistRow[]>(() => {
+    const list: AdminSpecialistRow[] = data ?? [];
+    const query = q.trim().toLowerCase();
+
+    return list
+      .filter((r: AdminSpecialistRow) => {
+        if (!query) return true;
+        return (
+          r.email.toLowerCase().includes(query) ||
+          r.name.toLowerCase().includes(query) ||
+          r.userId.toLowerCase().includes(query) ||
+          (r.specialistId ?? '').toLowerCase().includes(query)
+        );
+      })
+      .filter((r: AdminSpecialistRow) => {
+        if (filterKyc === 'ALL') return true;
+        return r.kycStatus === filterKyc;
+      })
+      .filter((r: AdminSpecialistRow) => {
+        if (filterSub === 'ALL') return true;
+        if (filterSub === 'NONE') return !r.subscription;
+        return r.subscription?.status === filterSub;
+      })
+      .filter((r: AdminSpecialistRow) => {
+        if (filterCat === 'ALL') return true;
+        return (r.specialtySlugs ?? []).includes(filterCat);
+      });
+  }, [data, q, filterKyc, filterSub, filterCat]);
+
+  const summary = useMemo(() => {
+    const list: AdminSpecialistRow[] = data ?? [];
+    return {
+      total: list.length,
+      kycPending: list.filter((x) => x.kycStatus === 'PENDING').length,
+      active: list.filter((x) => x.subscription?.status === 'ACTIVE').length,
+      trial: list.filter((x) => x.subscription?.status === 'TRIALING').length,
+      pastDue: list.filter((x) => x.subscription?.status === 'PAST_DUE').length,
+    };
+  }, [data]);
+
+  const goDetail = (r: AdminSpecialistRow) => {
+    const id = r.specialistId ?? r.userId;
+    nav(`/app/specialists/${id}`);
+  };
+
+  return (
+    <div className="specShell">
+      <div className="specTop">
+        <div>
+          <h1 className="specTitle">Especialistas</h1>
+          <p className="specSubtitle">Listado, búsqueda y filtros</p>
+        </div>
+
+        <button className="specBtn" onClick={reload} disabled={loading}>
+          {loading ? 'Actualizando…' : 'Actualizar'}
+        </button>
+      </div>
+
+      {error && <div className="specState">Error: {error}</div>}
+      {!data && !error && <div className="specState">Cargando…</div>}
+
+      {data && (
+        <>
+          <div className="specSummary">
+            <div className="sumCard">
+              <div className="sumLabel">Total</div>
+              <div className="sumValue">{summary.total}</div>
+            </div>
+            <div className="sumCard">
+              <div className="sumLabel">KYC pendientes</div>
+              <div className="sumValue">{summary.kycPending}</div>
+            </div>
+            <div className="sumCard">
+              <div className="sumLabel">Activos</div>
+              <div className="sumValue">{summary.active}</div>
+            </div>
+            <div className="sumCard">
+              <div className="sumLabel">Trial</div>
+              <div className="sumValue">{summary.trial}</div>
+            </div>
+            <div className="sumCard">
+              <div className="sumLabel">Pago atrasado</div>
+              <div className="sumValue">{summary.pastDue}</div>
+            </div>
+          </div>
+
+          <div className="specFilters">
+            <input
+              className="specInput"
+              placeholder="Buscar por nombre, email o ID"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+
+            <select
+              className="specSelect"
+              value={filterKyc}
+              onChange={(e) => setFilterKyc(e.target.value as KycFilter)}
+            >
+              <option value="ALL">KYC: Todos</option>
+              <option value="PENDING">Pendiente</option>
+              <option value="VERIFIED">Verificado</option>
+              <option value="REJECTED">Rechazado</option>
+              <option value="UNVERIFIED">Sin verificar</option>
+            </select>
+
+            <select
+              className="specSelect"
+              value={filterSub}
+              onChange={(e) => setFilterSub(e.target.value as SubFilter)}
+            >
+              <option value="ALL">Suscripción: Todas</option>
+              <option value="ACTIVE">Activa</option>
+              <option value="TRIALING">Trial</option>
+              <option value="PAST_DUE">Pago atrasado</option>
+              <option value="CANCELLED">Cancelada</option>
+              <option value="NONE">Sin suscripción</option>
+            </select>
+
+            {/* ✅ NUEVO: filtro por rubro */}
+            <select
+              className="specSelect"
+              value={filterCat}
+              onChange={(e) => setFilterCat(e.target.value)}
+              disabled={!specialtyOptions.length}
+              title={!specialtyOptions.length ? 'No hay rubros en los datos' : ''}
+            >
+              <option value="ALL">Rubro: Todos</option>
+              {specialtyOptions.map((c) => (
+                <option key={c.slug} value={c.slug}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+
+            <div className="specCount">{rows.length} resultados</div>
+          </div>
+
+          <div className="specTableWrap">
+            <table className="specTable">
+              <thead>
+                <tr>
+                  <th>Especialista</th>
+                  <th>KYC</th>
+                  <th>Suscripción</th>
+                  <th>Rating</th>
+                  <th>Días</th>
+                  <th>Estado</th>
+                  <th />
+                </tr>
+              </thead>
+
+              <tbody>
+                {rows.map((r: AdminSpecialistRow) => (
+                  <tr key={r.userId}>
+                    <td>
+                      <strong>{r.name}</strong>
+                      <div className="muted">{r.email}</div>
+
+                      <div className="muted" style={{ marginTop: 2 }}>
+                        <span style={{ opacity: 0.8 }}>ID:</span> {r.specialistId ?? r.userId}
+                      </div>
+
+                      {/* ✅ Opcional: mostrar rubros resumidos */}
+                      {r.specialties?.length ? (
+                        <div className="muted" style={{ marginTop: 4 }}>
+                          {r.specialties
+                            .slice(0, 3)
+                            .map((x) => x.name)
+                            .join(' · ')}
+                          {r.specialties.length > 3 ? ` · +${r.specialties.length - 3}` : ''}
+                        </div>
+                      ) : null}
+                    </td>
+
+                    <td>
+                      <Pill>{r.kycStatus}</Pill>
+                    </td>
+
+                    <td>
+                      <Pill>{r.subscription?.status ?? 'NONE'}</Pill>
+                    </td>
+
+                    <td>
+                      {r.ratingAvg.toFixed(1)} ({r.ratingCount})
+                    </td>
+
+                    <td>{r.daysLeft ?? '-'}</td>
+
+                    <td>
+                      <Pill>{r.status}</Pill>
+                    </td>
+
+                    <td>
+                      <button className="rowBtn" onClick={() => goDetail(r)}>
+                        Ver
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {!rows.length && <div className="specEmpty">Sin resultados</div>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+
+
+
+

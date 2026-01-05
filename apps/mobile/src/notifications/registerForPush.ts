@@ -1,5 +1,5 @@
-import * as Notifications from 'expo-notifications'
-import { Platform } from 'react-native'
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
 
 export async function registerForPush(): Promise<string | null> {
   try {
@@ -11,25 +11,23 @@ export async function registerForPush(): Promise<string | null> {
         sound: 'default',
         enableVibrate: true,
         lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-      })
+      });
     }
 
-    const { status: existing } = await Notifications.getPermissionsAsync()
-    let finalStatus = existing
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    let finalStatus = existing;
 
     if (existing !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync()
-      finalStatus = status
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
     }
 
-    if (finalStatus !== 'granted') return null
+    if (finalStatus !== 'granted') return null;
 
-    const token = (await Notifications.getExpoPushTokenAsync()).data
-    return token
+    const token = (await Notifications.getExpoPushTokenAsync()).data;
+    return token;
   } catch (e) {
-    if (__DEV__) console.log('[push] registerForPush error (ignored)', e)
-    return null
+    if (__DEV__) console.log('[push] registerForPush error (ignored)', e);
+    return null;
   }
 }
-
-

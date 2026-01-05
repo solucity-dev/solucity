@@ -1,59 +1,46 @@
 // apps/mobile/src/screens/ChatListScreen.tsx
-import { useChatThreads } from '@/hooks/useChatThreads'
-import { api } from '@/lib/api'
-import type { ChatStackParamList } from '@/types/chat'
-import { Ionicons } from '@expo/vector-icons'
-import { useNavigation } from '@react-navigation/native'
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { Image as ExpoImage } from 'expo-image'
-import { LinearGradient } from 'expo-linear-gradient'
-import { useMemo } from 'react'
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Pressable,
-  Text,
-  View,
-} from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Image as ExpoImage } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useMemo } from 'react';
+import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-type Nav = NativeStackNavigationProp<ChatStackParamList, 'ChatList'>
+import { useChatThreads } from '@/hooks/useChatThreads';
+import { api } from '@/lib/api';
+import type { ChatStackParamList } from '@/types/chat';
+
+type Nav = NativeStackNavigationProp<ChatStackParamList, 'ChatList'>;
 
 // misma función que usás en ProfileScreen / SpecialistHome
 function absoluteUrl(u?: string | null): string | undefined {
-  if (!u) return undefined
-  if (/^https?:\/\//i.test(u)) return u
+  if (!u) return undefined;
+  if (/^https?:\/\//i.test(u)) return u;
   if (u.startsWith('/')) {
-    const base = api.defaults.baseURL ?? ''
-    return `${base.replace(/\/+$/, '')}${u}`
+    const base = api.defaults.baseURL ?? '';
+    return `${base.replace(/\/+$/, '')}${u}`;
   }
-  return u
+  return u;
 }
 
 export default function ChatListScreen() {
-  const insets = useSafeAreaInsets()
-  const nav = useNavigation<Nav>()
-  const { data, isLoading, refetch } = useChatThreads()
+  const insets = useSafeAreaInsets();
+  const nav = useNavigation<Nav>();
+  const { data, isLoading, refetch } = useChatThreads();
 
-  const threads = useMemo(() => data ?? [], [data])
+  const threads = useMemo(() => data ?? [], [data]);
 
   const handleDeleteThread = async (threadId: string) => {
     try {
-      await api.delete(`/chat/threads/${threadId}`)
-      await refetch()
+      await api.delete(`/chat/threads/${threadId}`);
+      await refetch();
     } catch (e: any) {
-      console.log(
-        '[ChatList] error deleting thread',
-        e?.response?.status,
-        e?.message
-      )
-      Alert.alert(
-        'Error',
-        'No se pudo eliminar la conversación. Intentá de nuevo más tarde.'
-      )
+      console.log('[ChatList] error deleting thread', e?.response?.status, e?.message);
+      Alert.alert('Error', 'No se pudo eliminar la conversación. Intentá de nuevo más tarde.');
     }
-  }
+  };
 
   if (isLoading) {
     return (
@@ -67,12 +54,10 @@ export default function ChatListScreen() {
           }}
         >
           <ActivityIndicator color="#E9FEFF" />
-          <Text style={{ color: '#E9FEFF', marginTop: 8 }}>
-            Cargando chats…
-          </Text>
+          <Text style={{ color: '#E9FEFF', marginTop: 8 }}>Cargando chats…</Text>
         </View>
       </LinearGradient>
-    )
+    );
   }
 
   return (
@@ -87,11 +72,7 @@ export default function ChatListScreen() {
           justifyContent: 'space-between',
         }}
       >
-        <Text
-          style={{ color: '#E9FEFF', fontSize: 22, fontWeight: '900' }}
-        >
-          Chats
-        </Text>
+        <Text style={{ color: '#E9FEFF', fontSize: 22, fontWeight: '900' }}>Chats</Text>
 
         <Pressable onPress={() => refetch()}>
           <Text
@@ -114,38 +95,30 @@ export default function ChatListScreen() {
           gap: 10,
         }}
         ListEmptyComponent={
-          <View
-            style={{ flex: 1, alignItems: 'center', marginTop: 40 }}
-          >
-            <Text style={{ color: '#E9FEFF', opacity: 0.9 }}>
-              Todavía no tenés conversaciones.
-            </Text>
+          <View style={{ flex: 1, alignItems: 'center', marginTop: 40 }}>
+            <Text style={{ color: '#E9FEFF', opacity: 0.9 }}>Todavía no tenés conversaciones.</Text>
           </View>
         }
         renderItem={({ item }) => {
-          const counterpartName = item.counterpart?.name ?? 'Contacto'
+          const counterpartName = item.counterpart?.name ?? 'Contacto';
 
-          const rawAvatar = (item as any).counterpart?.avatarUrl ?? null
-          const avatarUrl = rawAvatar ? absoluteUrl(rawAvatar) : undefined
+          const rawAvatar = (item as any).counterpart?.avatarUrl ?? null;
+          const avatarUrl = rawAvatar ? absoluteUrl(rawAvatar) : undefined;
 
-          const rubro = '' // si en algún momento querés volver a mostrar el rubro, lo podés usar acá
+          const rubro = ''; // si en algún momento querés volver a mostrar el rubro, lo podés usar acá
 
-          const lastText = item.lastMessage?.text ?? ''
-          const lastFrom = item.lastMessage?.senderName ?? ''
+          const lastText = item.lastMessage?.text ?? '';
+          const lastFrom = item.lastMessage?.senderName ?? '';
 
           const lastLine = lastText
             ? lastFrom
               ? `${lastFrom}: ${lastText}`
               : lastText
-            : 'Sin mensajes aún'
+            : 'Sin mensajes aún';
 
-          const initial =
-            counterpartName.trim().charAt(0).toUpperCase() || '?'
+          const initial = counterpartName.trim().charAt(0).toUpperCase() || '?';
 
-          const orderId =
-            (item as any).orderId ??
-            (item as any).order?.id ??
-            undefined
+          const orderId = (item as any).orderId ?? (item as any).order?.id ?? undefined;
 
           return (
             <View
@@ -261,8 +234,8 @@ export default function ChatListScreen() {
                         style: 'destructive',
                         onPress: () => handleDeleteThread(item.id),
                       },
-                    ]
-                  )
+                    ],
+                  );
                 }}
                 style={{
                   width: 44,
@@ -276,14 +249,11 @@ export default function ChatListScreen() {
                 <Ionicons name="trash-outline" size={20} color="#E9FEFF" />
               </Pressable>
             </View>
-          )
+          );
         }}
         onRefresh={refetch}
         refreshing={false}
       />
     </LinearGradient>
-  )
+  );
 }
-
-
-

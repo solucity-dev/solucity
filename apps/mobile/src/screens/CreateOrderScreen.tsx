@@ -1,13 +1,13 @@
 // apps/mobile/src/screens/CreateOrderScreen.tsx
-import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons'
-import DateTimePicker from '@react-native-community/datetimepicker'
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs'
-import type { RouteProp } from '@react-navigation/native'
-import { useNavigation, useRoute } from '@react-navigation/native'
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import * as ImagePicker from 'expo-image-picker'
-import { LinearGradient } from 'expo-linear-gradient'
-import { useEffect, useMemo, useState } from 'react'
+import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import type { RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as ImagePicker from 'expo-image-picker';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -18,279 +18,250 @@ import {
   Text,
   TextInput,
   View,
-} from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { api } from '../lib/api'
-import type { HomeStackParamList } from '../types'
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-type RouteT = RouteProp<HomeStackParamList, 'CreateOrder'>
+import { api } from '../lib/api';
+import type { HomeStackParamList } from '../types';
+
+type RouteT = RouteProp<HomeStackParamList, 'CreateOrder'>;
 
 type MeResponse = {
-  ok: boolean
+  ok: boolean;
   user: {
-    id: string
-    role: 'CUSTOMER' | 'SPECIALIST' | 'ADMIN'
-    email?: string | null
-  }
-  profiles: { customerId: string | null; specialistId: string | null }
-  defaultAddress?: { id: string; formatted: string } | null
-}
+    id: string;
+    role: 'CUSTOMER' | 'SPECIALIST' | 'ADMIN';
+    email?: string | null;
+  };
+  profiles: { customerId: string | null; specialistId: string | null };
+  defaultAddress?: { id: string; formatted: string } | null;
+};
 
 type PhotoItem = {
-  localUri: string
-  remoteUrl?: string | null
-}
+  localUri: string;
+  remoteUrl?: string | null;
+};
 
 export default function CreateOrderScreen() {
-  const insets = useSafeAreaInsets()
-  const rawTabH = useBottomTabBarHeight()
+  const insets = useSafeAreaInsets();
+  const rawTabH = useBottomTabBarHeight();
   // 🔴 A VECES rawTabH = 0 → el botón queda debajo de la tab bar
   // ✅ Altura efectiva con mínimo razonable (ajustable si tu tab es más alta)
-  const tabH = Math.max(rawTabH, 60)
+  const tabH = Math.max(rawTabH, 60);
 
-  const { params } = useRoute<RouteT>()
-  const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>()
+  const { params } = useRoute<RouteT>();
+  const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
 
   // Me (para obtener customerId y defaultAddressId)
-  const [me, setMe] = useState<MeResponse | null>(null)
-  const [meLoading, setMeLoading] = useState(true)
-  const [meError, setMeError] = useState<string | null>(null)
+  const [me, setMe] = useState<MeResponse | null>(null);
+  const [meLoading, setMeLoading] = useState(true);
+  const [meError, setMeError] = useState<string | null>(null);
 
   useEffect(() => {
-    let mounted = true
-    ;(async () => {
+    let mounted = true;
+    (async () => {
       try {
-        setMeLoading(true)
-        setMeError(null)
+        setMeLoading(true);
+        setMeError(null);
         const r = await api.get<MeResponse>('/auth/me', {
           headers: { 'Cache-Control': 'no-cache' },
-        })
-        if (mounted) setMe(r.data)
+        });
+        if (mounted) setMe(r.data);
       } catch (e: any) {
-        if (mounted) setMeError(e?.message ?? 'No se pudo obtener usuario')
+        if (mounted) setMeError(e?.message ?? 'No se pudo obtener usuario');
       } finally {
-        if (mounted) setMeLoading(false)
+        if (mounted) setMeLoading(false);
       }
-    })()
+    })();
     return () => {
-      mounted = false
-    }
-  }, [])
+      mounted = false;
+    };
+  }, []);
 
   // Form state
-  const [address, setAddress] = useState((params as any).address ?? '')
+  const [address, setAddress] = useState((params as any).address ?? '');
   useEffect(() => {
     if (!(params as any).address && me?.defaultAddress?.formatted) {
-      setAddress(me.defaultAddress.formatted)
+      setAddress(me.defaultAddress.formatted);
     }
-  }, [me?.defaultAddress?.formatted, (params as any).address])
+  }, [me?.defaultAddress?.formatted, (params as any).address]);
 
-  const [desc, setDesc] = useState('')
-  const [chips, setChips] = useState<string[]>([])
-  const [urgent, setUrgent] = useState(false)
-  const [mode, setMode] = useState<'now' | 'schedule'>('now')
+  const [desc, setDesc] = useState('');
+  const [chips, setChips] = useState<string[]>([]);
+  const [urgent, setUrgent] = useState(false);
+  const [mode, setMode] = useState<'now' | 'schedule'>('now');
 
   // fecha/hora nativas
-  const [scheduledAt, setScheduledAt] = useState<Date | null>(null)
-  const [showDate, setShowDate] = useState(false)
-  const [showTime, setShowTime] = useState(false)
+  const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
+  const [showDate, setShowDate] = useState(false);
+  const [showTime, setShowTime] = useState(false);
 
-  const [photos, setPhotos] = useState<PhotoItem[]>([])
-  const [submitting, setSubmitting] = useState(false)
+  const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  const [submitting, setSubmitting] = useState(false);
 
   const visitInfo = useMemo(() => {
-    const p = (params as any).visitPrice
+    const p = (params as any).visitPrice;
     return p != null
       ? `Visita técnica: $${p.toLocaleString('es-AR')}`
-      : 'Visita técnica: a consultar'
-  }, [(params as any).visitPrice])
+      : 'Visita técnica: a consultar';
+  }, [(params as any).visitPrice]);
 
   const toggleChip = (label: string) =>
-    setChips((cur) =>
-      cur.includes(label) ? cur.filter((c) => c !== label) : [...cur, label],
-    )
+    setChips((cur) => (cur.includes(label) ? cur.filter((c) => c !== label) : [...cur, label]));
 
   function formatDate(d: Date) {
-    return d.toLocaleDateString()
+    return d.toLocaleDateString();
   }
   function formatTime(d: Date) {
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
   // Subida de imágenes
   const uploadOrderImage = async (localUri: string): Promise<string> => {
-    const form = new FormData()
-    form.append(
-      'file',
-      {
-        uri: localUri,
-        name: 'order-attachment.jpg',
-        type: 'image/jpeg',
-      } as any,
-    )
+    const form = new FormData();
+    form.append('file', {
+      uri: localUri,
+      name: 'order-attachment.jpg',
+      type: 'image/jpeg',
+    } as any);
 
-    const r = await api.post<{ url: string }>(
-      '/orders/attachments/upload',
-      form,
-      {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      },
-    )
+    const r = await api.post<{ url: string }>('/orders/attachments/upload', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
 
-    return r.data.url
-  }
+    return r.data.url;
+  };
 
   const handleAddPhotoFromLibrary = async () => {
     try {
-      const { status } =
-        await ImagePicker.requestMediaLibraryPermissionsAsync()
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== ImagePicker.PermissionStatus.GRANTED) {
-        Alert.alert(
-          'Permiso requerido',
-          'Necesitamos acceso a tus fotos para adjuntarlas.',
-        )
-        return
+        Alert.alert('Permiso requerido', 'Necesitamos acceso a tus fotos para adjuntarlas.');
+        return;
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
         quality: 0.8,
-      })
+      });
 
       if (!result.canceled) {
-        const assets = result.assets ?? []
+        const assets = result.assets ?? [];
         setPhotos((prev) => {
-          const next = [...prev]
+          const next = [...prev];
           for (const asset of assets) {
-            if (!asset.uri) continue
-            next.push({ localUri: asset.uri, remoteUrl: null })
+            if (!asset.uri) continue;
+            next.push({ localUri: asset.uri, remoteUrl: null });
           }
-          return next.slice(0, 6)
-        })
+          return next.slice(0, 6);
+        });
       }
     } catch (e) {
-      console.warn('[CreateOrder] handleAddPhotoFromLibrary error', e)
+      console.warn('[CreateOrder] handleAddPhotoFromLibrary error', e);
     }
-  }
+  };
 
   const handleAddPhotoFromCamera = async () => {
     try {
-      const { status } =
-        await ImagePicker.requestCameraPermissionsAsync()
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== ImagePicker.PermissionStatus.GRANTED) {
-        Alert.alert(
-          'Permiso requerido',
-          'Necesitamos acceso a la cámara para tomar una foto.',
-        )
-        return
+        Alert.alert('Permiso requerido', 'Necesitamos acceso a la cámara para tomar una foto.');
+        return;
       }
 
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.8,
-      })
+      });
 
       if (!result.canceled && result.assets?.[0]?.uri) {
-        const uri = result.assets[0].uri
-        setPhotos((prev) =>
-          [...prev, { localUri: uri, remoteUrl: null }].slice(0, 6),
-        )
+        const uri = result.assets[0].uri;
+        setPhotos((prev) => [...prev, { localUri: uri, remoteUrl: null }].slice(0, 6));
       }
     } catch (e) {
-      console.warn('[CreateOrder] handleAddPhotoFromCamera error', e)
+      console.warn('[CreateOrder] handleAddPhotoFromCamera error', e);
     }
-  }
+  };
 
   const pickImages = () => {
     Alert.alert('Agregar fotos', 'Elegí cómo querés adjuntar la imagen', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Tomar foto', onPress: handleAddPhotoFromCamera },
       { text: 'Elegir de la galería', onPress: handleAddPhotoFromLibrary },
-    ])
-  }
+    ]);
+  };
 
   const onConfirm = async () => {
     try {
-      const typedFormatted = address.trim()
+      const typedFormatted = address.trim();
       if (!typedFormatted) {
-        Alert.alert('Falta la dirección', 'Indicá dónde realizar el trabajo.')
-        return
+        Alert.alert('Falta la dirección', 'Indicá dónde realizar el trabajo.');
+        return;
       }
 
       if (mode === 'schedule' && !scheduledAt) {
-        Alert.alert('Faltan datos', 'Indicá fecha y hora o elegí “Ahora”.')
-        return
+        Alert.alert('Faltan datos', 'Indicá fecha y hora o elegí “Ahora”.');
+        return;
       }
 
       if (!me?.ok) {
-        Alert.alert(
-          'Sesión requerida',
-          'No pudimos identificar al usuario (auth/me).',
-        )
-        return
+        Alert.alert('Sesión requerida', 'No pudimos identificar al usuario (auth/me).');
+        return;
       }
-      const customerId = me?.profiles?.customerId
+      const customerId = me?.profiles?.customerId;
       if (!customerId) {
-        Alert.alert(
-          'Sesión requerida',
-          'No pudimos identificar el perfil de cliente (auth/me).',
-        )
-        return
+        Alert.alert('Sesión requerida', 'No pudimos identificar el perfil de cliente (auth/me).');
+        return;
       }
 
       // serviceId
-      let serviceId: string | undefined = (params as any).serviceId
+      let serviceId: string | undefined = (params as any).serviceId;
       if (!serviceId && (params as any).specialistId) {
         try {
-          const spec = await api.get(`/specialists/${(params as any).specialistId}`)
+          const spec = await api.get(`/specialists/${(params as any).specialistId}`);
           serviceId =
-            spec.data?.defaultServiceId ||
-            spec.data?.serviceId ||
-            spec.data?.services?.[0]?.id
+            spec.data?.defaultServiceId || spec.data?.serviceId || spec.data?.services?.[0]?.id;
         } catch (e) {
-          console.warn('[CreateOrder] no se pudo inferir serviceId desde specialist', e)
+          console.warn('[CreateOrder] no se pudo inferir serviceId desde specialist', e);
         }
       }
       if (!serviceId) {
         Alert.alert(
           'Falta elegir servicio',
           'No pudimos determinar el servicio. Volvé al perfil y elegí uno, o enviá serviceId al navegar.',
-        )
-        return
+        );
+        return;
       }
 
       // locationId SOLO si corresponde
-      const defaultFormatted = me?.defaultAddress?.formatted?.trim() ?? ''
-      const explicitLocationId = (params as any).locationId as string | undefined
+      const defaultFormatted = me?.defaultAddress?.formatted?.trim() ?? '';
+      const explicitLocationId = (params as any).locationId as string | undefined;
 
-      const hasManualAddress =
-        typedFormatted.length > 0 && typedFormatted !== defaultFormatted
+      const hasManualAddress = typedFormatted.length > 0 && typedFormatted !== defaultFormatted;
 
       const shouldSendLocationId =
-        !!explicitLocationId ||
-        (!hasManualAddress && typedFormatted === defaultFormatted)
+        !!explicitLocationId || (!hasManualAddress && typedFormatted === defaultFormatted);
 
       const locationIdToSend =
-        explicitLocationId ??
-        (shouldSendLocationId ? me?.defaultAddress?.id : null)
+        explicitLocationId ?? (shouldSendLocationId ? me?.defaultAddress?.id : null);
 
-      setSubmitting(true)
+      setSubmitting(true);
 
       // subir fotos
       const photosWithRemote = await Promise.all(
         photos.map(async (p) => {
-          if (p.remoteUrl) return p
-          const url = await uploadOrderImage(p.localUri)
-          return { ...p, remoteUrl: url }
+          if (p.remoteUrl) return p;
+          const url = await uploadOrderImage(p.localUri);
+          return { ...p, remoteUrl: url };
         }),
-      )
+      );
 
       const attachments = photosWithRemote
         .filter((p) => !!p.remoteUrl)
-        .map((p) => ({ type: 'image', url: p.remoteUrl }))
+        .map((p) => ({ type: 'image', url: p.remoteUrl }));
 
-      const description = [desc.trim(), ...chips].filter(Boolean).join(' · ')
+      const description = [desc.trim(), ...chips].filter(Boolean).join(' · ');
 
       // ✅ payload SIN null en fechas
       const payload: any = {
@@ -302,66 +273,60 @@ export default function CreateOrderScreen() {
         isUrgent: urgent || mode === 'now',
         ...(locationIdToSend ? { locationId: locationIdToSend } : {}),
         address: typedFormatted || null,
-      }
+      };
 
       if (mode === 'now') {
-        payload.preferredAt = new Date().toISOString()
+        payload.preferredAt = new Date().toISOString();
       }
 
       if (mode === 'schedule' && scheduledAt) {
-        payload.scheduledAt = scheduledAt.toISOString()
+        payload.scheduledAt = scheduledAt.toISOString();
       }
 
       if (__DEV__) {
-        console.log('[CreateOrder] payload =>', JSON.stringify(payload, null, 2))
+        console.log('[CreateOrder] payload =>', JSON.stringify(payload, null, 2));
       }
 
       const r = await api.post('/orders', payload, {
         headers: { 'x-user-id': me?.user.id ?? '' },
-      })
+      });
 
       Alert.alert(
         '¡Pedido enviado!',
-        `Tu solicitud fue creada para ${ (params as any).specialistName ?? 'el especialista' }.`,
-      )
+        `Tu solicitud fue creada para ${(params as any).specialistName ?? 'el especialista'}.`,
+      );
 
-      nav.goBack()
+      nav.goBack();
     } catch (e: any) {
-      const status = e?.response?.status
-      const data = e?.response?.data
+      const status = e?.response?.status;
+      const data = e?.response?.data;
 
-      console.log('[CreateOrder] error status =', status)
-      console.log('[CreateOrder] error data =', data)
+      console.log('[CreateOrder] error status =', status);
+      console.log('[CreateOrder] error data =', data);
 
       const msg =
         data?.error?.message ||
         data?.error ||
         (status === 401
           ? 'Sesión expirada. Volvé a iniciar sesión.'
-          : 'No se pudo crear la orden.')
+          : 'No se pudo crear la orden.');
 
-      Alert.alert('Error', String(msg))
+      Alert.alert('Error', String(msg));
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
-  }
+  };
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
       <SafeAreaView style={styles.safe} edges={['top']}>
         {/* Header */}
         <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
-          <Pressable
-            onPress={() => nav.goBack()}
-            style={{ padding: 6, marginLeft: -6 }}
-          >
+          <Pressable onPress={() => nav.goBack()} style={{ padding: 6, marginLeft: -6 }}>
             <Ionicons name="chevron-back" size={26} color="#E9FEFF" />
           </Pressable>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Image
-              source={require('../assets/logo.png')}
-              style={{ width: 22, height: 22 }}
-            />
+            <Image source={require('../assets/logo.png')} style={{ width: 22, height: 22 }} />
             <Text style={styles.brand}>Solucity</Text>
           </View>
           <View style={{ width: 26 }} />
@@ -405,24 +370,20 @@ export default function CreateOrderScreen() {
           </View>
 
           {/* Descripción */}
-          <Text style={[styles.label, { marginTop: 12 }]}>
-            Descripción del problema
-          </Text>
+          <Text style={[styles.label, { marginTop: 12 }]}>Descripción del problema</Text>
 
           <View style={styles.chipsRow}>
             {['Corte de luz', 'Cortocircuito', 'Presupuesto', 'Sin encendido'].map((c) => {
-              const on = chips.includes(c)
+              const on = chips.includes(c);
               return (
                 <Pressable
                   key={c}
                   onPress={() => toggleChip(c)}
                   style={[styles.chip, on && styles.chipOn]}
                 >
-                  <Text style={[styles.chipText, on && styles.chipTextOn]}>
-                    {c}
-                  </Text>
+                  <Text style={[styles.chipText, on && styles.chipTextOn]}>{c}</Text>
                 </Pressable>
-              )
+              );
             })}
           </View>
 
@@ -444,11 +405,7 @@ export default function CreateOrderScreen() {
           {photos.length > 0 && (
             <View style={styles.photosGrid}>
               {photos.map((p) => (
-                <Image
-                  key={p.localUri}
-                  source={{ uri: p.localUri }}
-                  style={styles.photo}
-                />
+                <Image key={p.localUri} source={{ uri: p.localUri }} style={styles.photo} />
               ))}
             </View>
           )}
@@ -463,8 +420,8 @@ export default function CreateOrderScreen() {
             <Pressable
               style={[styles.segmentBtn, mode === 'now' && styles.segmentOn]}
               onPress={() => {
-                setMode('now')
-                setScheduledAt(null)
+                setMode('now');
+                setScheduledAt(null);
               }}
             >
               <Text style={[styles.segmentText, mode === 'now' && styles.segmentTextOn]}>
@@ -474,8 +431,8 @@ export default function CreateOrderScreen() {
             <Pressable
               style={[styles.segmentBtn, mode === 'schedule' && styles.segmentOn]}
               onPress={() => {
-                setMode('schedule')
-                if (!scheduledAt) setScheduledAt(new Date())
+                setMode('schedule');
+                if (!scheduledAt) setScheduledAt(new Date());
               }}
             >
               <Text style={[styles.segmentText, mode === 'schedule' && styles.segmentTextOn]}>
@@ -489,11 +446,7 @@ export default function CreateOrderScreen() {
               <Pressable onPress={() => setShowDate(true)} style={styles.dateField}>
                 <MDI name="calendar-month-outline" size={18} color="#06494F" />
                 <Text
-                  style={
-                    scheduledAt
-                      ? styles.dateFieldTextValue
-                      : styles.dateFieldTextPlaceholder
-                  }
+                  style={scheduledAt ? styles.dateFieldTextValue : styles.dateFieldTextPlaceholder}
                 >
                   {scheduledAt ? formatDate(scheduledAt) : 'Seleccionar fecha'}
                 </Text>
@@ -501,18 +454,14 @@ export default function CreateOrderScreen() {
 
               <Pressable
                 onPress={() => {
-                  if (!scheduledAt) setScheduledAt(new Date())
-                  setShowTime(true)
+                  if (!scheduledAt) setScheduledAt(new Date());
+                  setShowTime(true);
                 }}
                 style={[styles.dateField, { flex: 0.9 }]}
               >
                 <MDI name="clock-outline" size={18} color="#06494F" />
                 <Text
-                  style={
-                    scheduledAt
-                      ? styles.dateFieldTextValue
-                      : styles.dateFieldTextPlaceholder
-                  }
+                  style={scheduledAt ? styles.dateFieldTextValue : styles.dateFieldTextPlaceholder}
                 >
                   {scheduledAt ? formatTime(scheduledAt) : 'Seleccionar hora'}
                 </Text>
@@ -525,11 +474,7 @@ export default function CreateOrderScreen() {
             onPress={() => setUrgent((v) => !v)}
             style={[styles.urgent, urgent && styles.urgentOn]}
           >
-            <MDI
-              name="alert-decagram-outline"
-              size={18}
-              color={urgent ? '#06494F' : '#E9FEFF'}
-            />
+            <MDI name="alert-decagram-outline" size={18} color={urgent ? '#06494F' : '#E9FEFF'} />
             <Text style={[styles.urgentText, urgent && styles.urgentTextOn]}>
               {urgent ? 'Urgente' : 'Marcar como urgente'}
             </Text>
@@ -538,9 +483,7 @@ export default function CreateOrderScreen() {
           {/* Info visita técnica */}
           <View style={styles.infoBox}>
             <Text style={styles.infoTitle}>{visitInfo}</Text>
-            <Text style={styles.infoSub}>
-              Los costos de materiales se acordarán
-            </Text>
+            <Text style={styles.infoSub}>Los costos de materiales se acordarán</Text>
           </View>
         </ScrollView>
 
@@ -550,11 +493,11 @@ export default function CreateOrderScreen() {
             value={scheduledAt ?? new Date()}
             mode="date"
             onChange={(_, d) => {
-              setShowDate(false)
+              setShowDate(false);
               if (d) {
-                const base = scheduledAt ?? new Date()
-                base.setFullYear(d.getFullYear(), d.getMonth(), d.getDate())
-                setScheduledAt(new Date(base))
+                const base = scheduledAt ?? new Date();
+                base.setFullYear(d.getFullYear(), d.getMonth(), d.getDate());
+                setScheduledAt(new Date(base));
               }
             }}
           />
@@ -565,11 +508,11 @@ export default function CreateOrderScreen() {
             mode="time"
             is24Hour
             onChange={(_, d) => {
-              setShowTime(false)
+              setShowTime(false);
               if (d) {
-                const base = scheduledAt ?? new Date()
-                base.setHours(d.getHours(), d.getMinutes(), 0, 0)
-                setScheduledAt(new Date(base))
+                const base = scheduledAt ?? new Date();
+                base.setHours(d.getHours(), d.getMinutes(), 0, 0);
+                setScheduledAt(new Date(base));
               }
             }}
           />
@@ -586,10 +529,7 @@ export default function CreateOrderScreen() {
           ]}
         >
           <Pressable
-            style={[
-              styles.confirmBtn,
-              (submitting || meLoading) && { opacity: 0.7 },
-            ]}
+            style={[styles.confirmBtn, (submitting || meLoading) && { opacity: 0.7 }]}
             onPress={onConfirm}
             disabled={submitting || meLoading}
           >
@@ -600,17 +540,13 @@ export default function CreateOrderScreen() {
             )}
           </Pressable>
 
-          <Pressable
-            style={styles.cancelBtn}
-            onPress={() => nav.goBack()}
-            disabled={submitting}
-          >
+          <Pressable style={styles.cancelBtn} onPress={() => nav.goBack()} disabled={submitting}>
             <Text style={styles.cancelText}>Cancelar</Text>
           </Pressable>
         </View>
       </SafeAreaView>
     </LinearGradient>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -774,6 +710,4 @@ const styles = StyleSheet.create({
   confirmText: { color: '#fff', fontWeight: '900', fontSize: 16 },
   cancelBtn: { alignItems: 'center', paddingVertical: 6 },
   cancelText: { color: '#0dd1db', fontWeight: '800' },
-})
-
-
+});

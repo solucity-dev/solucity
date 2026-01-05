@@ -1,17 +1,18 @@
 // apps/backend/src/routes/chat.ts (o donde lo tengas)
-import { Router } from 'express'
-import { z } from 'zod'
-import { prisma } from '../lib/prisma'
-import { auth } from '../middlewares/auth'
-import { sendExpoPush } from '../services/pushExpo'
+import { Router } from 'express';
+import { z } from 'zod';
+
+import { prisma } from '../lib/prisma';
+import { auth } from '../middlewares/auth';
+import { sendExpoPush } from '../services/pushExpo';
 
 const headerUserId = (req: import('express').Request) =>
-  (String(req.header('x-user-id') || '').trim() || null)
+  String(req.header('x-user-id') || '').trim() || null;
 
 const getActorUserId = (req: any): string | null =>
-  (req.user?.id as string | undefined) ?? headerUserId(req)
+  (req.user?.id as string | undefined) ?? headerUserId(req);
 
-export const chat = Router()
+export const chat = Router();
 
 /* ───────────────── Helpers ───────────────── */
 
@@ -22,27 +23,22 @@ async function canAccessOrder(orderId: string, uid: string): Promise<boolean> {
       customer: { select: { userId: true } },
       specialist: { select: { userId: true } },
     },
-  })
-  if (!order) return false
-  const isCustomer = order.customer?.userId === uid
-  const isSpecialist = order.specialist?.userId === uid
-  return isCustomer || isSpecialist
+  });
+  if (!order) return false;
+  const isCustomer = order.customer?.userId === uid;
+  const isSpecialist = order.specialist?.userId === uid;
+  return isCustomer || isSpecialist;
 }
 
 // ✅ helper push igual al de orders: envía a todos los tokens enabled del user
-async function pushToUser(params: {
-  userId: string
-  title: string
-  body: string
-  data: any
-}) {
+async function pushToUser(params: { userId: string; title: string; body: string; data: any }) {
   const tokens = await prisma.pushToken.findMany({
     where: { userId: params.userId, enabled: true },
     select: { token: true },
-  })
+  });
 
-  const toList = tokens.map((t) => t.token).filter(Boolean)
-  if (!toList.length) return
+  const toList = tokens.map((t) => t.token).filter(Boolean);
+  if (!toList.length) return;
 
   await sendExpoPush(
     toList.map((to) => ({
@@ -53,28 +49,28 @@ async function pushToUser(params: {
       title: params.title,
       body: params.body,
       data: params.data,
-    }))
-  )
+    })),
+  );
 }
 
 /* ────────────── POST /chat/ensure (orderId) ────────────── */
 /** Asegura que exista un thread para una orden y lo devuelve */
 chat.post('/ensure', auth, async (req, res) => {
-  const uid = getActorUserId(req)
-  if (!uid) return res.status(401).json({ ok: false, error: 'unauthorized' })
+  const uid = getActorUserId(req);
+  if (!uid) return res.status(401).json({ ok: false, error: 'unauthorized' });
 
-  const parse = z.object({ orderId: z.string().min(1) }).safeParse(req.body)
+  const parse = z.object({ orderId: z.string().min(1) }).safeParse(req.body);
   if (!parse.success) {
-    return res.status(400).json({ ok: false, error: parse.error.flatten() })
+    return res.status(400).json({ ok: false, error: parse.error.flatten() });
   }
-  const { orderId } = parse.data
+  const { orderId } = parse.data;
 
-  const allowed = await canAccessOrder(orderId, uid)
-  if (!allowed) return res.status(403).json({ ok: false, error: 'forbidden' })
+  const allowed = await canAccessOrder(orderId, uid);
+  if (!allowed) return res.status(403).json({ ok: false, error: 'forbidden' });
 
-  let thread = await prisma.chatThread.findUnique({ where: { orderId } })
+  let thread = await prisma.chatThread.findUnique({ where: { orderId } });
   if (!thread) {
-    thread = await prisma.chatThread.create({ data: { orderId } })
+    thread = await prisma.chatThread.create({ data: { orderId } });
   }
 
   return res.json({
@@ -84,20 +80,17 @@ chat.post('/ensure', auth, async (req, res) => {
       orderId: thread.orderId,
       createdAt: thread.createdAt,
     },
-  })
-})
+  });
+});
 
 /* ────────────── GET /chat/threads (mis hilos) ────────────── */
 chat.get('/threads', auth, async (req: any, res) => {
-  const uid = getActorUserId(req)
-  if (!uid) return res.status(401).json({ ok: false, error: 'unauthorized' })
+  const uid = getActorUserId(req);
+  if (!uid) return res.status(401).json({ ok: false, error: 'unauthorized' });
 
   const rows = await prisma.chatThread.findMany({
     where: {
-      OR: [
-        { order: { customer: { userId: uid } } },
-        { order: { specialist: { userId: uid } } },
-      ],
+      OR: [{ order: { customer: { userId: uid } } }, { order: { specialist: { userId: uid } } }],
     },
     include: {
       order: {
@@ -116,15 +109,15 @@ chat.get('/threads', auth, async (req: any, res) => {
     },
     orderBy: { createdAt: 'desc' },
     take: 100,
-  })
+  });
 
   const items = rows.map((t) => {
-    const o = t.order
-    const last = t.messages[0] ?? null
+    const o = t.order;
+    const last = t.messages[0] ?? null;
 
-    const isCustomer = o?.customer?.userId === uid
-    const spec = o?.specialist as any
-    const cust = o?.customer as any
+    const isCustomer = o?.customer?.userId === uid;
+    const spec = o?.specialist as any;
+    const cust = o?.customer as any;
 
     const counterpart = isCustomer
       ? spec
@@ -135,12 +128,12 @@ chat.get('/threads', auth, async (req: any, res) => {
           }
         : { kind: 'specialist' as const, name: 'Especialista', avatarUrl: null }
       : cust
-      ? {
-          kind: 'customer' as const,
-          name: `${cust.user?.name ?? 'Cliente'}`.trim(),
-          avatarUrl: cust.avatarUrl ?? null,
-        }
-      : { kind: 'customer' as const, name: 'Cliente', avatarUrl: null }
+        ? {
+            kind: 'customer' as const,
+            name: `${cust.user?.name ?? 'Cliente'}`.trim(),
+            avatarUrl: cust.avatarUrl ?? null,
+          }
+        : { kind: 'customer' as const, name: 'Cliente', avatarUrl: null };
 
     return {
       id: t.id,
@@ -158,21 +151,21 @@ chat.get('/threads', auth, async (req: any, res) => {
           }
         : null,
       createdAt: t.createdAt,
-    }
-  })
+    };
+  });
 
-  return res.json({ ok: true, threads: items })
-})
+  return res.json({ ok: true, threads: items });
+});
 
 /* ───── GET /chat/threads/:threadId/messages?cursor&take ───── */
 chat.get('/threads/:threadId/messages', auth, async (req, res) => {
-  const uid = getActorUserId(req)
-  if (!uid) return res.status(401).json({ ok: false, error: 'unauthorized' })
+  const uid = getActorUserId(req);
+  if (!uid) return res.status(401).json({ ok: false, error: 'unauthorized' });
 
-  const threadId = String(req.params.threadId)
-  const take = Math.min(Number(req.query.take ?? 30), 100)
-  const cursorIso = String(req.query.cursor || '')
-  const cursorDate = cursorIso ? new Date(cursorIso) : null
+  const threadId = String(req.params.threadId);
+  const take = Math.min(Number(req.query.take ?? 30), 100);
+  const cursorIso = String(req.query.cursor || '');
+  const cursorDate = cursorIso ? new Date(cursorIso) : null;
 
   const thread = await prisma.chatThread.findUnique({
     where: { id: threadId },
@@ -184,18 +177,18 @@ chat.get('/threads/:threadId/messages', auth, async (req, res) => {
         },
       },
     },
-  })
+  });
   if (!thread) {
-    return res.status(404).json({ ok: false, error: 'thread_not_found' })
+    return res.status(404).json({ ok: false, error: 'thread_not_found' });
   }
 
-  const uCustomer = thread.order?.customer?.userId === uid
-  const uSpecial = thread.order?.specialist?.userId === uid
+  const uCustomer = thread.order?.customer?.userId === uid;
+  const uSpecial = thread.order?.specialist?.userId === uid;
   if (!uCustomer && !uSpecial) {
-    return res.status(403).json({ ok: false, error: 'forbidden' })
+    return res.status(403).json({ ok: false, error: 'forbidden' });
   }
 
-  const where = cursorDate ? { threadId, createdAt: { lt: cursorDate } } : { threadId }
+  const where = cursorDate ? { threadId, createdAt: { lt: cursorDate } } : { threadId };
 
   const list = await prisma.chatMessage.findMany({
     where,
@@ -204,7 +197,7 @@ chat.get('/threads/:threadId/messages', auth, async (req, res) => {
     include: {
       sender: { select: { name: true, surname: true } },
     },
-  })
+  });
 
   return res.json({
     ok: true,
@@ -217,21 +210,21 @@ chat.get('/threads/:threadId/messages', auth, async (req, res) => {
       isMine: m.senderId === uid,
       senderName: `${m.sender?.name ?? ''} ${m.sender?.surname ?? ''}`.trim() || 'Usuario',
     })),
-  })
-})
+  });
+});
 
 /* ────────── POST /chat/threads/:threadId/messages ────────── */
 chat.post('/threads/:threadId/messages', auth, async (req, res) => {
-  const uid = getActorUserId(req)
-  if (!uid) return res.status(401).json({ ok: false, error: 'unauthorized' })
+  const uid = getActorUserId(req);
+  if (!uid) return res.status(401).json({ ok: false, error: 'unauthorized' });
 
-  const parse = z.object({ text: z.string().min(1).max(2000) }).safeParse(req.body)
+  const parse = z.object({ text: z.string().min(1).max(2000) }).safeParse(req.body);
   if (!parse.success) {
-    return res.status(400).json({ ok: false, error: parse.error.flatten() })
+    return res.status(400).json({ ok: false, error: parse.error.flatten() });
   }
-  const { text } = parse.data
+  const { text } = parse.data;
 
-  const threadId = String(req.params.threadId)
+  const threadId = String(req.params.threadId);
   const thread = await prisma.chatThread.findUnique({
     where: { id: threadId },
     include: {
@@ -243,13 +236,13 @@ chat.post('/threads/:threadId/messages', auth, async (req, res) => {
         },
       },
     },
-  })
-  if (!thread) return res.status(404).json({ ok: false, error: 'thread_not_found' })
+  });
+  if (!thread) return res.status(404).json({ ok: false, error: 'thread_not_found' });
 
-  const uCustomer = thread.order.customer?.userId === uid
-  const uSpecial = thread.order.specialist?.userId === uid
+  const uCustomer = thread.order.customer?.userId === uid;
+  const uSpecial = thread.order.specialist?.userId === uid;
   if (!uCustomer && !uSpecial) {
-    return res.status(403).json({ ok: false, error: 'forbidden' })
+    return res.status(403).json({ ok: false, error: 'forbidden' });
   }
 
   const msg = await prisma.chatMessage.create({
@@ -258,17 +251,17 @@ chat.post('/threads/:threadId/messages', auth, async (req, res) => {
       senderId: uid,
       body: text,
     },
-  })
+  });
 
   // 🔔 Notificación + PUSH al otro usuario (con notificationId)
   try {
-    const customerUid = thread.order.customer?.userId ?? null
-    const specialistUid = thread.order.specialist?.userId ?? null
-    const recipientId = uCustomer ? specialistUid : customerUid
+    const customerUid = thread.order.customer?.userId ?? null;
+    const specialistUid = thread.order.specialist?.userId ?? null;
+    const recipientId = uCustomer ? specialistUid : customerUid;
 
     if (recipientId && recipientId !== uid) {
-      const title = 'Nuevo mensaje recibido'
-      const body = text.length > 60 ? text.slice(0, 60) + '…' : text
+      const title = 'Nuevo mensaje recibido';
+      const body = text.length > 60 ? text.slice(0, 60) + '…' : text;
 
       // 1) Guardar notificación en DB
       const notif = await prisma.notification.create({
@@ -284,7 +277,7 @@ chat.post('/threads/:threadId/messages', auth, async (req, res) => {
           } as any,
         },
         select: { id: true, title: true, body: true },
-      })
+      });
 
       // 2) PUSH REAL con notificationId (clave para marcar read desde el tap)
       await pushToUser({
@@ -298,10 +291,10 @@ chat.post('/threads/:threadId/messages', auth, async (req, res) => {
           orderId: thread.order.id,
           senderId: uid,
         },
-      })
+      });
     }
   } catch (e) {
-    console.warn('[CHAT] failed to notify message', e)
+    console.warn('[CHAT] failed to notify message', e);
   }
 
   return res.status(201).json({
@@ -313,17 +306,17 @@ chat.post('/threads/:threadId/messages', auth, async (req, res) => {
       createdAt: msg.createdAt,
       readAt: msg.readAt ?? null,
     },
-  })
-})
+  });
+});
 
 /* ────────────── DELETE /chat/threads/:threadId ────────────── */
 chat.delete('/threads/:threadId', auth, async (req, res) => {
-  const uid = getActorUserId(req)
+  const uid = getActorUserId(req);
   if (!uid) {
-    return res.status(401).json({ ok: false, error: 'unauthorized' })
+    return res.status(401).json({ ok: false, error: 'unauthorized' });
   }
 
-  const threadId = String(req.params.threadId)
+  const threadId = String(req.params.threadId);
 
   try {
     const thread = await prisma.chatThread.findUnique({
@@ -337,30 +330,24 @@ chat.delete('/threads/:threadId', auth, async (req, res) => {
           },
         },
       },
-    })
+    });
 
     if (!thread) {
-      return res.status(404).json({ ok: false, error: 'thread_not_found' })
+      return res.status(404).json({ ok: false, error: 'thread_not_found' });
     }
 
-    const isCustomer = thread.order?.customer?.userId === uid
-    const isSpecialist = thread.order?.specialist?.userId === uid
+    const isCustomer = thread.order?.customer?.userId === uid;
+    const isSpecialist = thread.order?.specialist?.userId === uid;
 
     if (!isCustomer && !isSpecialist) {
-      return res.status(403).json({ ok: false, error: 'forbidden' })
+      return res.status(403).json({ ok: false, error: 'forbidden' });
     }
 
-    await prisma.chatThread.delete({ where: { id: threadId } })
+    await prisma.chatThread.delete({ where: { id: threadId } });
 
-    return res.json({ ok: true })
+    return res.json({ ok: true });
   } catch (e) {
-    console.error('[DELETE /chat/threads/:threadId] error', e)
-    return res.status(500).json({ ok: false, error: 'No se pudo eliminar la conversación' })
+    console.error('[DELETE /chat/threads/:threadId] error', e);
+    return res.status(500).json({ ok: false, error: 'No se pudo eliminar la conversación' });
   }
-})
-
-
-
-
-
-
+});

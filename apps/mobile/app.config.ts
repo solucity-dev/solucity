@@ -1,5 +1,5 @@
 // apps/mobile/app.config.ts
-import { ExpoConfig } from 'expo/config'
+import { ExpoConfig } from 'expo/config';
 
 const config: ExpoConfig = {
   name: 'solucity',
@@ -20,21 +20,18 @@ const config: ExpoConfig = {
     infoPlist: {
       NSLocationWhenInUseUsageDescription:
         'Usamos tu ubicación para mostrar especialistas cercanos.',
-      NSPhotoLibraryUsageDescription:
-        'Necesitamos acceder a tus fotos para subir tu DNI y selfie.',
-      NSPhotoLibraryAddUsageDescription:
-        'Permití guardar fotos si querés descargar comprobantes.',
-      NSCameraUsageDescription:
-        'Necesitamos la cámara para tomar fotos del DNI y una selfie.',
+      NSPhotoLibraryUsageDescription: 'Necesitamos acceder a tus fotos para subir tu DNI y selfie.',
+      NSPhotoLibraryAddUsageDescription: 'Permití guardar fotos si querés descargar comprobantes.',
+      NSCameraUsageDescription: 'Necesitamos la cámara para tomar fotos del DNI y una selfie.',
     },
   },
 
-  android: ({
+  android: {
     // ✅ ESTO ES LO QUE TE FALTA PARA EAS
     package: 'com.solucity.app',
 
     // ✅ IMPORTANTE (ruta relativa a apps/mobile/app.config.ts)
-  googleServicesFile: './google-services.json',
+    googleServicesFile: './google-services.json',
 
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',
@@ -50,7 +47,7 @@ const config: ExpoConfig = {
       'READ_MEDIA_IMAGES',
       'POST_NOTIFICATIONS',
     ],
-  } as any),
+  } as any,
 
   web: { output: 'single', favicon: './assets/favicon.png' },
 
@@ -67,18 +64,12 @@ const config: ExpoConfig = {
     [
       'expo-image-picker',
       {
-        photosPermission:
-          'Necesitamos acceder a tus fotos para subir tu DNI y selfie.',
-        cameraPermission:
-          'Necesitamos la cámara para tomar fotos del DNI y una selfie.',
+        photosPermission: 'Necesitamos acceder a tus fotos para subir tu DNI y selfie.',
+        cameraPermission: 'Necesitamos la cámara para tomar fotos del DNI y una selfie.',
       },
     ],
     'expo-notifications',
   ],
-}
+};
 
-export default config
-
-
-
-
+export default config;

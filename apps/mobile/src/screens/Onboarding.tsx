@@ -1,6 +1,6 @@
 // apps/mobile/src/screens/Onboarding.tsx
-import { LinearGradient } from 'expo-linear-gradient'
-import { useCallback, useRef, useState } from 'react'
+import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useRef, useState } from 'react';
 import {
   Dimensions,
   FlatList,
@@ -12,23 +12,23 @@ import {
   type FlatListProps,
   type ImageSourcePropType,
   type ViewToken,
-} from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import Img1 from '../assets/onboarding-1.png'
-import Img2 from '../assets/onboarding-2.png'
-import Img3 from '../assets/onboarding-3.png'
+import Img1 from '../assets/onboarding-1.png';
+import Img2 from '../assets/onboarding-2.png';
+import Img3 from '../assets/onboarding-3.png';
 
-type OnboardingProps = { onFinish: () => void }
+type OnboardingProps = { onFinish: () => void };
 
 type Slide = {
-  key: string
-  image: ImageSourcePropType
-  h1: string
-  h2?: string
-  body?: string
-  cta: string
-}
+  key: string;
+  image: ImageSourcePropType;
+  h1: string;
+  h2?: string;
+  body?: string;
+  cta: string;
+};
 
 const SLIDES: Slide[] = [
   {
@@ -53,22 +53,22 @@ const SLIDES: Slide[] = [
     body: 'Especialistas verificados, calificados por otros clientes.',
     cta: 'COMENZAR',
   },
-]
+];
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window')
-const ITEM_LENGTH = SCREEN_WIDTH
-const IMG_WIDTH = SCREEN_WIDTH * 0.7 // 70% del ancho de pantalla
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const ITEM_LENGTH = SCREEN_WIDTH;
+const IMG_WIDTH = SCREEN_WIDTH * 0.7; // 70% del ancho de pantalla
 
 export default function Onboarding({ onFinish }: OnboardingProps) {
-  const [index, setIndex] = useState(0)
-  const listRef = useRef<FlatList<Slide>>(null)
-  const insets = useSafeAreaInsets()
+  const [index, setIndex] = useState(0);
+  const listRef = useRef<FlatList<Slide>>(null);
+  const insets = useSafeAreaInsets();
 
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
-    if (viewableItems[0]?.index != null) setIndex(viewableItems[0].index)
-  })
+    if (viewableItems[0]?.index != null) setIndex(viewableItems[0].index);
+  });
 
-  const viewConfigRef = useRef({ viewAreaCoveragePercentThreshold: 60 })
+  const viewConfigRef = useRef({ viewAreaCoveragePercentThreshold: 60 });
 
   const getItemLayout = useCallback<NonNullable<FlatListProps<Slide>['getItemLayout']>>(
     (_: ArrayLike<Slide> | null | undefined, i: number) => ({
@@ -77,15 +77,15 @@ export default function Onboarding({ onFinish }: OnboardingProps) {
       index: i,
     }),
     [],
-  )
+  );
 
   const goNext = useCallback(() => {
     if (index < SLIDES.length - 1) {
-      listRef.current?.scrollToIndex({ index: index + 1, animated: true })
+      listRef.current?.scrollToIndex({ index: index + 1, animated: true });
     } else {
-      onFinish()
+      onFinish();
     }
-  }, [index, onFinish])
+  }, [index, onFinish]);
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={styles.container}>
@@ -146,7 +146,7 @@ export default function Onboarding({ onFinish }: OnboardingProps) {
         </View>
       </SafeAreaView>
     </LinearGradient>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -205,5 +205,4 @@ const styles = StyleSheet.create({
   ctaText: { color: '#0B6B76', fontWeight: '800', letterSpacing: 0.5, fontSize: 16 },
   skip: { alignSelf: 'center', marginTop: 6 },
   skipText: { color: 'rgba(255,255,255,0.92)' },
-})
-
+});

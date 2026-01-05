@@ -1,20 +1,20 @@
 // apps/mobile/src/screens/Welcome.tsx
-import { LinearGradient } from 'expo-linear-gradient'
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { LinearGradient } from 'expo-linear-gradient';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import Logo from '../assets/logo.png'
+import Logo from '../assets/logo.png';
 
 type Props = {
-  onCreateAccount: () => void
-  onLogin: () => void
-  onOpenTerms: () => void
-}
+  onCreateAccount: () => void;
+  onLogin: () => void;
+  onOpenTerms: () => void;
+};
 
 export default function Welcome({ onCreateAccount, onLogin, onOpenTerms }: Props) {
-  const insets = useSafeAreaInsets()
+  const insets = useSafeAreaInsets();
   // levantamos el footer para que no quede pegado al borde
-  const bottomLift = Math.max(32, insets.bottom + 18)
+  const bottomLift = Math.max(32, insets.bottom + 18);
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={styles.container}>
@@ -61,7 +61,7 @@ export default function Welcome({ onCreateAccount, onLogin, onOpenTerms }: Props
         </View>
       </SafeAreaView>
     </LinearGradient>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -129,4 +129,4 @@ const styles = StyleSheet.create({
   },
   termsBtn: { alignSelf: 'center', paddingVertical: 6, marginTop: 2 },
   termsText: { color: 'rgba(255,255,255,0.92)', textDecorationLine: 'underline' },
-})
+});

@@ -1,0 +1,327 @@
+/* apps/admin-web/src/pages/specialistDetail.css */
+
+.sdShell {
+  min-height: calc(100vh - 48px);
+  padding: 24px;
+
+  background:
+    radial-gradient(1200px 700px at 10% 10%, rgba(0, 201, 167, 0.22), transparent 55%),
+    radial-gradient(900px 600px at 90% 20%, rgba(20, 120, 255, 0.22), transparent 55%),
+    linear-gradient(180deg, #062a36 0%, #083545 45%, #062a36 100%);
+
+  color: #eef6ff;
+}
+
+.sdTop {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.sdTitle {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: #f3f8ff;
+}
+
+.sdSubtitle {
+  margin: 8px 0 0;
+  color: rgba(243, 248, 255, 0.72);
+  font-size: 14px;
+}
+
+.sdBreadcrumb {
+  margin-bottom: 10px;
+}
+
+.sdBack {
+  color: rgba(233, 254, 255, 0.9);
+  text-decoration: none;
+  font-weight: 800;
+  font-size: 13px;
+  opacity: 0.9;
+}
+.sdBack:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.sdBtn {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.10);
+  color: #f3f8ff;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.22);
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+.sdBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 30px rgba(2, 6, 23, 0.28);
+  background: rgba(255, 255, 255, 0.14);
+}
+.sdBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.sdState {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.10);
+  color: #f3f8ff;
+}
+.sdError {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.10);
+}
+
+.sdHero {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.07) 100%);
+  box-shadow: 0 14px 30px rgba(2, 6, 23, 0.25);
+}
+
+.sdAvatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.10);
+  box-shadow: inset 0 0 0 1px rgba(2,6,23,0.15);
+}
+.sdAvatarImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.sdAvatarFallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  color: #e9feff;
+  letter-spacing: -0.02em;
+}
+
+.sdHeroMain {
+  flex: 1;
+}
+
+.sdNameRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.sdName {
+  font-size: 18px;
+  font-weight: 900;
+  color: #f3f8ff;
+}
+
+.sdMeta {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sdMetaLabel {
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(233, 254, 255, 0.75);
+}
+.sdMetaValue {
+  margin-top: 4px;
+  font-weight: 900;
+  color: #e9feff;
+}
+.sdMuted {
+  color: rgba(233, 254, 255, 0.7);
+  font-weight: 800;
+}
+
+.sdGrid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.sdCard {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.07) 100%);
+  box-shadow: 0 14px 30px rgba(2, 6, 23, 0.25);
+  overflow: hidden;
+}
+
+.sdCardHead {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.06);
+}
+.sdCardTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  color: #f3f8ff;
+}
+.sdCardBody {
+  padding: 14px;
+}
+
+.sdKV {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.sdKV .k {
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.06);
+}
+.sdKV .k span {
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(233, 254, 255, 0.75);
+}
+.sdKV .k strong {
+  display: block;
+  margin-top: 6px;
+  font-weight: 900;
+  color: #e9feff;
+}
+
+.sdBlock {
+  margin-top: 12px;
+}
+.sdBlockLabel {
+  font-weight: 900;
+  color: rgba(233, 254, 255, 0.85);
+  margin-bottom: 6px;
+}
+.sdBlockText {
+  color: rgba(233, 254, 255, 0.9);
+  line-height: 1.45;
+}
+
+.sdTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sdTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.08);
+  font-weight: 900;
+  color: #e9feff;
+}
+.sdTagSlug {
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(233, 254, 255, 0.7);
+}
+
+.sdKycRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.sdKycLabel {
+  font-weight: 900;
+  color: rgba(233, 254, 255, 0.85);
+}
+
+.sdKycLinks {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.sdLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.10);
+  color: #e9feff;
+  text-decoration: none;
+  font-weight: 900;
+  transition: transform 120ms ease, background 120ms ease;
+}
+.sdLink:hover {
+  transform: translateY(-1px);
+  background: rgba(255,255,255,0.14);
+}
+.sdLink.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sdChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.08);
+  font-weight: 900;
+  font-size: 12px;
+  color: rgba(233, 254, 255, 0.92);
+}
+
+.sdChip.tone-good {
+  border-color: rgba(16, 185, 129, 0.30);
+  background: rgba(16, 185, 129, 0.10);
+}
+.sdChip.tone-warn {
+  border-color: rgba(245, 158, 11, 0.30);
+  background: rgba(245, 158, 11, 0.10);
+}
+.sdChip.tone-bad {
+  border-color: rgba(239, 68, 68, 0.30);
+  background: rgba(239, 68, 68, 0.10);
+}
+
+@media (max-width: 980px) {
+  .sdMeta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sdGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+

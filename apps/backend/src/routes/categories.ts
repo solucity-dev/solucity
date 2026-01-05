@@ -1,8 +1,8 @@
-import { Router } from 'express'
+import { Router } from 'express';
 
-import { prisma } from '../lib/prisma'
+import { prisma } from '../lib/prisma';
 
-export const categories = Router()
+export const categories = Router();
 
 // GET /categories
 categories.get('/', async (_req, res) => {
@@ -15,6 +15,6 @@ categories.get('/', async (_req, res) => {
         orderBy: { name: 'asc' },
       },
     },
-  })
-  res.json(data)
-})
+  });
+  res.json(data);
+});

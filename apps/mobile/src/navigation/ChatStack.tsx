@@ -1,10 +1,11 @@
 // apps/mobile/src/navigation/ChatStack.tsx
-import ChatListScreen from '@/screens/ChatListScreen'
-import ChatThreadScreen from '@/screens/ChatThreadScreen'
-import type { ChatStackParamList } from '@/types'
-import { createNativeStackNavigator } from '@react-navigation/native-stack'
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-const Stack = createNativeStackNavigator<ChatStackParamList>()
+import ChatListScreen from '@/screens/ChatListScreen';
+import ChatThreadScreen from '@/screens/ChatThreadScreen';
+import type { ChatStackParamList } from '@/types';
+
+const Stack = createNativeStackNavigator<ChatStackParamList>();
 
 export default function ChatStack() {
   return (
@@ -12,6 +13,5 @@ export default function ChatStack() {
       <Stack.Screen name="ChatList" component={ChatListScreen} />
       <Stack.Screen name="ChatThread" component={ChatThreadScreen} />
     </Stack.Navigator>
-  )
+  );
 }
-

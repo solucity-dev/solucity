@@ -1,59 +1,58 @@
 // apps/mobile/src/navigation/RootNavigator.tsx
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import { createNativeStackNavigator } from '@react-navigation/native-stack'
-import { useEffect, useState } from 'react'
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useEffect, useState } from 'react';
 
-import { useAuth } from '../auth/AuthProvider'
+import { useAuth } from '../auth/AuthProvider';
+import ChooseRole from '../screens/ChooseRole';
+import KycStatusScreen from '../screens/KycStatusScreen';
+import KycUploadScreen from '../screens/KycUploadScreen';
+import LoginScreen from '../screens/LoginScreen';
+import Onboarding from '../screens/Onboarding';
+import RegisterClient from '../screens/RegisterClient';
+import RegisterSpecialist from '../screens/RegisterSpecialist';
+import SpecialistWizard from '../screens/SpecialistWizard';
+import Splash from '../screens/Splash';
+import Welcome from '../screens/Welcome';
+import ClientTabs from './ClientTabs';
+import SpecialistTabs from './SpecialistTabs';
+import { setNavRole } from './navigationRef';
 
-import ClientTabs from './ClientTabs'
-import SpecialistTabs from './SpecialistTabs'
-
-import ChooseRole from '../screens/ChooseRole'
-import LoginScreen from '../screens/LoginScreen'
-import Onboarding from '../screens/Onboarding'
-import RegisterClient from '../screens/RegisterClient'
-import RegisterSpecialist from '../screens/RegisterSpecialist'
-import SpecialistWizard from '../screens/SpecialistWizard'
-import Splash from '../screens/Splash'
-import Welcome from '../screens/Welcome'
-import { setNavRole } from './navigationRef'
-
-
-const Stack = createNativeStackNavigator()
-const ONBOARDING_KEY = 'onboarding:seen'
+const Stack = createNativeStackNavigator();
+const ONBOARDING_KEY = 'onboarding:seen';
 
 export default function RootNavigator() {
-  const { token, loading, user } = useAuth()
-  const [bootReady, setBootReady] = useState(false)
-  const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null)
+  const { token, loading, user } = useAuth();
+  const [bootReady, setBootReady] = useState(false);
+  const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
 
   useEffect(() => {
-    setNavRole(user?.role ?? null)
-  }, [user?.role])
+    setNavRole(user?.role ?? null);
+  }, [user?.role]);
 
   useEffect(() => {
-    let cancelled = false
-    ;(async () => {
+    let cancelled = false;
+    (async () => {
       try {
-        const seen = await AsyncStorage.getItem(ONBOARDING_KEY)
-        if (!cancelled) setOnboardingSeen(seen === '1')
+        const seen = await AsyncStorage.getItem(ONBOARDING_KEY);
+        if (!cancelled) setOnboardingSeen(seen === '1');
       } finally {
-        if (!cancelled) setBootReady(true)
+        if (!cancelled) setBootReady(true);
       }
-    })()
+    })();
     return () => {
-      cancelled = true
-    }
-  }, [])
+      cancelled = true;
+    };
+  }, []);
 
   // Mientras hidrata auth + onboarding, mostramos splash
   if (loading || !bootReady || onboardingSeen === null) {
-    return <Splash duration={1200} />
+    return <Splash duration={1200} />;
   }
 
   // Con token → stack privado (según role real)
   if (token) {
-    const isSpecialist = user?.role === 'SPECIALIST'
+    const isSpecialist = user?.role === 'SPECIALIST';
 
     return (
       <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -62,8 +61,12 @@ export default function RootNavigator() {
         ) : (
           <Stack.Screen name="Main" component={ClientTabs} />
         )}
+
+        {/* ✅ Global: accesible desde cualquier lado (Home/Perfil/etc) */}
+        <Stack.Screen name="KycStatus" component={KycStatusScreen} />
+        <Stack.Screen name="KycUpload" component={KycUploadScreen} />
       </Stack.Navigator>
-    )
+    );
   }
 
   // Sin token → flujo público
@@ -78,10 +81,10 @@ export default function RootNavigator() {
           <Onboarding
             onFinish={async () => {
               try {
-                await AsyncStorage.setItem(ONBOARDING_KEY, '1')
+                await AsyncStorage.setItem(ONBOARDING_KEY, '1');
               } finally {
-                setOnboardingSeen(true)
-                navigation.replace('Welcome')
+                setOnboardingSeen(true);
+                navigation.replace('Welcome');
               }
             }}
           />
@@ -122,17 +125,5 @@ export default function RootNavigator() {
         )}
       />
     </Stack.Navigator>
-  )
+  );
 }
-
-
-
-
-
-
-
-
-
-
-
-

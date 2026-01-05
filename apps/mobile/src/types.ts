@@ -5,7 +5,7 @@ export type RootCategoryId =
   | 'construccion-mantenimiento'
   | 'informatica-electronica'
   | 'seguridad'
-  | 'servicios'
+  | 'servicios';
 
 /**
  * Slugs de rubros (categorías hijas).
@@ -36,64 +36,60 @@ export type CategorySlug =
   | 'clases-particulares'
   | 'paseador-de-perros'
   | 'acompanante-terapeutico'
-  | 'fletes'
+  | 'fletes';
 
 /** Tabs principales del cliente */
 export type ClientTabsParamList = {
-  Home: undefined
-  Agenda: undefined
-  Chat: undefined
-  Perfil: undefined
-}
+  Home: undefined;
+  Agenda: undefined;
+  Chat: undefined;
+  Perfil: undefined;
+};
 
 /** Tabs del especialista: mismas rutas que cliente */
-export type SpecialistTabsParamList = ClientTabsParamList
+export type SpecialistTabsParamList = ClientTabsParamList;
 
 /** Stack interno de la pestaña Home del cliente */
 export type HomeStackParamList = {
-  ClientHome: undefined
-  Category: { id: CategorySlug }
-  SpecialistsList: { categorySlug: CategorySlug; title: string }
-  SpecialistProfile: { id: string; title?: string }
+  ClientHome: undefined;
+  Category: { id: CategorySlug };
+  SpecialistsList: { categorySlug: CategorySlug; title: string };
+  SpecialistProfile: { id: string; title?: string };
 
   CreateOrder: {
-    specialistId: string
-    specialistName?: string
-    visitPrice?: number | null
-    address?: string
-    serviceId?: string
-  }
+    specialistId: string;
+    specialistName?: string;
+    visitPrice?: number | null;
+    address?: string;
+    serviceId?: string;
+  };
 
-  Orders: { role?: 'customer' | 'specialist' } | undefined
+  Orders: { role?: 'customer' | 'specialist' } | undefined;
 
   OrderDetail: {
-    id: string
-    role?: 'customer' | 'specialist'
-    from?: 'notifications' | 'agenda' | 'home'
-  }
+    id: string;
+    role?: 'customer' | 'specialist';
+    from?: 'notifications' | 'agenda' | 'home';
+  };
 
-  SpecialistWizard: undefined
-  Notifications: undefined
-}
+  SpecialistWizard: undefined;
+  Notifications: undefined;
+};
 
 /** Stack interno de la pestaña Chat */
 export type ChatStackParamList = {
-  ChatList: undefined
-  ChatThread: { threadId?: string; orderId?: string; title?: string }
-}
+  ChatList: undefined;
+  ChatThread: { threadId?: string; orderId?: string; title?: string };
+};
 
 /** Stack interno del Home del especialista */
 export type SpecialistHomeStackParamList = {
-  SpecialistHome: undefined
-  Notifications: undefined
-}
+  SpecialistHome: undefined;
+  Notifications: undefined;
+};
 
 /** ✅ NUEVO: Secciones válidas de Agenda */
-export type AgendaSection =
-  | 'PENDING'
-  | 'CONFIRMED'
-  | 'FINISHED'
-  | 'CANCELLED'
+export type AgendaSection = 'PENDING' | 'CONFIRMED' | 'FINISHED' | 'CANCELLED';
 
 /**
  * ✅ NUEVO: Stack interno de la pestaña Agenda (compartido)
@@ -101,30 +97,11 @@ export type AgendaSection =
  * OrderDetail = detalle dentro de Agenda
  */
 export type AgendaStackParamList = {
-  AgendaMain:
-    | { initialSection?: AgendaSection; refresh?: boolean }
-    | undefined
+  AgendaMain: { initialSection?: AgendaSection; refresh?: boolean } | undefined;
 
   OrderDetail: {
-    id: string
-    role?: 'customer' | 'specialist'
-    from?: 'notifications' | 'agenda'
-  }
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    id: string;
+    role?: 'customer' | 'specialist';
+    from?: 'notifications' | 'agenda';
+  };
+};

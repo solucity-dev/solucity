@@ -1,47 +1,47 @@
 // apps/mobile/src/navigation/navigationRef.ts
-import { createNavigationContainerRef } from '@react-navigation/native'
+import { createNavigationContainerRef } from '@react-navigation/native';
 
-export const navigationRef = createNavigationContainerRef<any>()
+export const navigationRef = createNavigationContainerRef<any>();
 
-type NavRole = 'SPECIALIST' | 'CUSTOMER' | 'ADMIN' | null
+type NavRole = 'SPECIALIST' | 'CUSTOMER' | 'ADMIN' | null;
 
-let navRole: NavRole = null
+let navRole: NavRole = null;
 
 type PendingNav =
   | { type: 'orderDetail'; orderId: string }
   | { type: 'chatThread'; threadId: string; orderId?: string | null }
-  | null
+  | null;
 
-let pendingNav: PendingNav = null
+let pendingNav: PendingNav = null;
 
 export function setNavRole(role: NavRole) {
-  navRole = role
-  if (__DEV__) console.log('[NAV] setNavRole =', role)
-    // ✅ si había navegación pendiente y ahora ya sabemos el rol
-  flushPendingNav()
+  navRole = role;
+  if (__DEV__) console.log('[NAV] setNavRole =', role);
+  // ✅ si había navegación pendiente y ahora ya sabemos el rol
+  flushPendingNav();
 }
 
 export function queueOrderDetail(orderId: string) {
-  pendingNav = { type: 'orderDetail', orderId }
-  if (__DEV__) console.log('[NAV] queued orderDetail =', orderId)
+  pendingNav = { type: 'orderDetail', orderId };
+  if (__DEV__) console.log('[NAV] queued orderDetail =', orderId);
 }
 
 export function queueChatThread(threadId: string, orderId?: string | null) {
-  pendingNav = { type: 'chatThread', threadId, orderId: orderId ?? null }
-  if (__DEV__) console.log('[NAV] queued chatThread =', threadId, 'orderId=', orderId)
+  pendingNav = { type: 'chatThread', threadId, orderId: orderId ?? null };
+  if (__DEV__) console.log('[NAV] queued chatThread =', threadId, 'orderId=', orderId);
 }
 
 export function flushPendingNav() {
-  if (!pendingNav) return
-  if (!navigationRef.isReady()) return
+  if (!pendingNav) return;
+  if (!navigationRef.isReady()) return;
 
-  const p = pendingNav
-  pendingNav = null
+  const p = pendingNav;
+  pendingNav = null;
 
   if (p.type === 'orderDetail') {
-    navigateToOrderDetail(p.orderId)
+    navigateToOrderDetail(p.orderId);
   } else if (p.type === 'chatThread') {
-    navigateToChatThread(p.threadId, p.orderId ?? null)
+    navigateToChatThread(p.threadId, p.orderId ?? null);
   }
 }
 
@@ -50,12 +50,12 @@ export function flushPendingNav() {
  */
 export function navigateToOrderDetail(orderId: string) {
   if (!navigationRef.isReady()) {
-    queueOrderDetail(orderId)
-    return
+    queueOrderDetail(orderId);
+    return;
   }
 
-  const isSpecialist = navRole === 'SPECIALIST'
-  const root = isSpecialist ? 'MainSpecialist' : 'Main'
+  const isSpecialist = navRole === 'SPECIALIST';
+  const root = isSpecialist ? 'MainSpecialist' : 'Main';
 
   navigationRef.navigate(root, {
     screen: 'Agenda',
@@ -68,7 +68,7 @@ export function navigateToOrderDetail(orderId: string) {
         from: 'notif-tap',
       },
     },
-  })
+  });
 }
 
 /**
@@ -79,15 +79,22 @@ export function navigateToOrderDetail(orderId: string) {
  */
 export function navigateToChatThread(threadId: string, orderId?: string | null) {
   if (!navigationRef.isReady()) {
-    queueChatThread(threadId, orderId ?? null)
-    return
+    queueChatThread(threadId, orderId ?? null);
+    return;
   }
 
-  const isSpecialist = navRole === 'SPECIALIST'
-  const root = isSpecialist ? 'MainSpecialist' : 'Main'
+  const isSpecialist = navRole === 'SPECIALIST';
+  const root = isSpecialist ? 'MainSpecialist' : 'Main';
 
   if (__DEV__) {
-    console.log('[NAV] navigateToChatThread -> root=', root, 'threadId=', threadId, 'orderId=', orderId)
+    console.log(
+      '[NAV] navigateToChatThread -> root=',
+      root,
+      'threadId=',
+      threadId,
+      'orderId=',
+      orderId,
+    );
   }
 
   navigationRef.navigate(root, {
@@ -102,9 +109,5 @@ export function navigateToChatThread(threadId: string, orderId?: string | null) 
         // title: 'Chat',
       },
     },
-  })
+  });
 }
-
-
-
-

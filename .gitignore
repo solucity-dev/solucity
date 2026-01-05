@@ -40,7 +40,6 @@ apps/**/.env.*
 !apps/**/.env.example
 .env*.local
 
-
 # === TypeScript ===
 *.tsbuildinfo
 
@@ -55,10 +54,21 @@ coverage/
 *.tmp
 
 # === Monorepo específico ===
-# Ignorar salidas de apps o libs si las generamos
 apps/*/dist
 packages/*/dist
+build/
 
 # Firebase / Expo secrets
 keys/
 firebase-admin*.json
+
+# === Backend uploads (CRÍTICO: NUNCA a git) ===
+apps/backend/uploads/
+apps/backend/uploads/**
+
+# === Prisma local (por si existiera) ===
+prisma/dev.db
+prisma/dev.db-journal
+
+# root app.json (evitar conflicto con Expo config en apps/mobile)
+app.json

@@ -1,7 +1,7 @@
 // apps/mobile/src/screens/SpecialistSettings.tsx
-import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
-import { useState } from 'react'
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useState } from 'react';
 import {
   Alert,
   Image, // 👈 de react-native (correcto)
@@ -11,36 +11,37 @@ import {
   Text,
   TextInput,
   View,
-} from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useAuth } from '../auth/AuthProvider'
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { useAuth } from '../auth/AuthProvider';
 
 export default function SpecialistSettings() {
-  const insets = useSafeAreaInsets()
-  const { signOut } = useAuth()
+  const insets = useSafeAreaInsets();
+  const { signOut } = useAuth();
 
   // Campos de ejemplo (puedes conectarlos a tu API si quieres guardado instantáneo)
-  const [fullname, setFullname] = useState('')
-  const [email, setEmail] = useState('')
-  const [pushEnabled, setPushEnabled] = useState(true)
+  const [fullname, setFullname] = useState('');
+  const [email, setEmail] = useState('');
+  const [pushEnabled, setPushEnabled] = useState(true);
 
   const onSaveBasic = async () => {
     try {
       // Aquí podrías llamar a tu endpoint de ajustes de cuenta
       // await api.patch('/me', { fullname, email })
-      Alert.alert('Guardado', 'Tus datos se actualizaron.')
+      Alert.alert('Guardado', 'Tus datos se actualizaron.');
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.error ?? 'No se pudo guardar.')
+      Alert.alert('Error', e?.response?.data?.error ?? 'No se pudo guardar.');
     }
-  }
+  };
 
   const onChangePassword = async () => {
-    Alert.alert('Próximamente', 'Cambiar contraseña en el siguiente sprint.')
-  }
+    Alert.alert('Próximamente', 'Cambiar contraseña en el siguiente sprint.');
+  };
 
   const onLogout = async () => {
-    await signOut()
-  }
+    await signOut();
+  };
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
@@ -133,7 +134,7 @@ export default function SpecialistSettings() {
         </ScrollView>
       </SafeAreaView>
     </LinearGradient>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -147,12 +148,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
   },
-  brandRow: {            // 👈 faltaba
+  brandRow: {
+    // 👈 faltaba
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
-  logo: {                // 👈 faltaba
+  logo: {
+    // 👈 faltaba
     width: 30,
     height: 30,
   },
@@ -210,6 +213,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   btnT: { fontWeight: '900' },
-})
-
-
+});

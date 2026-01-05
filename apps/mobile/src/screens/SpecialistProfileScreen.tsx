@@ -1,13 +1,11 @@
 // apps/mobile/src/screens/SpecialistProfile.tsx
-import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons'
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs'
-import type { RouteProp } from '@react-navigation/native'
-import { useNavigation, useRoute } from '@react-navigation/native'
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import Constants from 'expo-constants'
-import { LinearGradient } from 'expo-linear-gradient'
-import * as Location from 'expo-location'
-import { useEffect, useMemo, useState } from 'react'
+import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import Constants from 'expo-constants';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Location from 'expo-location';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -16,101 +14,103 @@ import {
   StyleSheet,
   Text,
   View,
-} from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import type { RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { HomeStackParamList } from '../types';
 
-import type { HomeStackParamList } from '../types'
-
-type Route = RouteProp<HomeStackParamList, 'SpecialistProfile'>
+type Route = RouteProp<HomeStackParamList, 'SpecialistProfile'>;
 
 /** 👇 Tipo para cada reseña */
 type Review = {
-  id: string
-  rating: number
-  comment: string | null
-  author: string
-  avatarUrl: string | null
-  createdAt: string
-}
+  id: string;
+  rating: number;
+  comment: string | null;
+  author: string;
+  avatarUrl: string | null;
+  createdAt: string;
+};
 
 type SpecialistDetails = {
-  id: string
-  name: string
-  avatarUrl?: string | null
-  ratingAvg?: number | null
-  ratingCount?: number | null
-  badge?: 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | null
-  enabled?: boolean
-  availableNow?: boolean
-  visitPrice?: number | null
-  currency?: string | null
-  bio?: string | null
-  distanceKm?: number | null
-  availability?: { days: number[]; start: string; end: string } | null
-  specialties?: { id: string; name: string; slug: string }[]
-  stats?: { done: number; canceled: number }
-  reviews: Review[] // 👈 nuevo campo
-}
+  id: string;
+  name: string;
+  avatarUrl?: string | null;
+  ratingAvg?: number | null;
+  ratingCount?: number | null;
+  badge?: 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | null;
+  enabled?: boolean;
+  availableNow?: boolean;
+  visitPrice?: number | null;
+  pricingLabel?: string | null; // ✅ NUEVO
+  currency?: string | null;
+  bio?: string | null;
+  distanceKm?: number | null;
+  availability?: { days: number[]; start: string; end: string } | null;
+  specialties?: { id: string; name: string; slug: string }[];
+  stats?: { done: number; canceled: number };
+  reviews: Review[]; // 👈 nuevo campo
+};
 
 const API_URL =
   (Constants.expoConfig?.extra as any)?.API_URL ??
   (Constants.manifest2 as any)?.extra?.API_URL ??
-  (Constants.manifest as any)?.extra?.API_URL
+  (Constants.manifest as any)?.extra?.API_URL;
 
 function absoluteUrl(u?: string | null): string | undefined {
-  if (!u) return undefined
-  if (/^https?:\/\//i.test(u)) return u
-  const base = API_URL?.replace(/\/+$/, '') || ''
-  return `${base}${u.startsWith('/') ? '' : '/'}${u}`
+  if (!u) return undefined;
+  if (/^https?:\/\//i.test(u)) return u;
+  const base = API_URL?.replace(/\/+$/, '') || '';
+  return `${base}${u.startsWith('/') ? '' : '/'}${u}`;
 }
 
-const DAY_LABELS = ['D', 'L', 'M', 'X', 'J', 'V', 'S']
+const DAY_LABELS = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
 
 const BADGE_LABEL: Record<NonNullable<SpecialistDetails['badge']>, string> = {
   BRONZE: 'Bronce',
   SILVER: 'Plata',
   GOLD: 'Oro',
   PLATINUM: 'Platino',
-}
+};
 
 export default function SpecialistProfileScreen() {
-  const { params } = useRoute<Route>()
-  const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>()
+  const { params } = useRoute<Route>();
+  const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
 
-  const insets = useSafeAreaInsets()
-const tabBarHeightRaw = useBottomTabBarHeight()
-const tabBarHeight = Math.max(tabBarHeightRaw, 60) // fallback seguro
+  const insets = useSafeAreaInsets();
+  const tabBarHeightRaw = useBottomTabBarHeight();
+  const tabBarHeight = Math.max(tabBarHeightRaw, 60); // fallback seguro
 
-const ctaBottom = tabBarHeight + insets.bottom + 12 // margen visual
+  const ctaBottom = tabBarHeight + insets.bottom + 12; // margen visual
 
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [spec, setSpec] = useState<SpecialistDetails | null>(null)
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [spec, setSpec] = useState<SpecialistDetails | null>(null);
 
   useEffect(() => {
-    ;(async () => {
+    (async () => {
       try {
-        setLoading(true)
-        setError(null)
+        setLoading(true);
+        setError(null);
 
         // 1) obtener ubicación para distancia
-        const { status } = await Location.requestForegroundPermissionsAsync()
+        const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
-          throw new Error('No se pudo obtener tu ubicación')
+          throw new Error('No se pudo obtener tu ubicación');
         }
 
         const pos = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
-        })
-        const lat = pos.coords.latitude
-        const lng = pos.coords.longitude
+        });
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
 
         // 2) pedir datos del especialista
-        const url = `${API_URL}/specialists/${params.id}?lat=${lat}&lng=${lng}`
-        const res = await fetch(url)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = (await res.json()) as any
+        const url = `${API_URL}/specialists/${params.id}?lat=${lat}&lng=${lng}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as any;
 
         const normalized: SpecialistDetails = {
           id: data.id,
@@ -122,46 +122,47 @@ const ctaBottom = tabBarHeight + insets.bottom + 12 // margen visual
           enabled: data.enabled,
           availableNow: data.availableNow,
           visitPrice: data.visitPrice,
+          pricingLabel: data.pricingLabel ?? null, // ✅ NUEVO
           currency: data.currency,
           bio: data.bio,
           distanceKm: data.distanceKm,
           availability: data.availability,
           specialties: data.specialties || [],
           stats: data.stats,
-          reviews: Array.isArray(data.reviews) ? data.reviews : [], // 👈 normalizamos aquí
-        }
+          reviews: Array.isArray(data.reviews) ? data.reviews : [],
+        };
 
-        setSpec(normalized)
+        setSpec(normalized);
       } catch (e: any) {
-        setError(e?.message ?? 'No se pudo cargar el perfil.')
+        setError(e?.message ?? 'No se pudo cargar el perfil.');
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    })()
-  }, [params.id])
+    })();
+  }, [params.id]);
 
   const avatarSource = useMemo(() => {
-    const url = absoluteUrl(spec?.avatarUrl ?? null)
-    if (url) return { uri: url }
-    return require('../assets/avatar-placeholder.png')
-  }, [spec?.avatarUrl])
+    const url = absoluteUrl(spec?.avatarUrl ?? null);
+    if (url) return { uri: url };
+    return require('../assets/avatar-placeholder.png');
+  }, [spec?.avatarUrl]);
 
   const distanceLabel = (km?: number | null) => {
-    if (km == null || !Number.isFinite(km)) return '—'
-    if (km < 1) return `${Math.round(km * 1000)} m`
-    if (km < 10) return `${km.toFixed(1)} km`
-    return `${Math.round(km)} km`
-  }
+    if (km == null || !Number.isFinite(km)) return '—';
+    if (km < 1) return `${Math.round(km * 1000)} m`;
+    if (km < 10) return `${km.toFixed(1)} km`;
+    return `${Math.round(km)} km`;
+  };
 
-  const badgeText = spec?.badge ? BADGE_LABEL[spec.badge] : 'Bronce'
+  const badgeText = spec?.badge ? BADGE_LABEL[spec.badge] : 'Bronce';
 
-  const availability = spec?.availability ?? { days: [], start: '09:00', end: '18:00' }
-  const days = availability.days ?? []
+  const availability = spec?.availability ?? { days: [], start: '09:00', end: '18:00' };
+  const days = availability.days ?? [];
 
-  const statsDone = spec?.stats?.done ?? 0
-  const statsCanceled = spec?.stats?.canceled ?? 0
+  const statsDone = spec?.stats?.done ?? 0;
+  const statsCanceled = spec?.stats?.canceled ?? 0;
 
-  const specialties = spec?.specialties ?? []
+  const specialties = spec?.specialties ?? [];
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
@@ -199,10 +200,9 @@ const ctaBottom = tabBarHeight + insets.bottom + 12 // margen visual
             <ScrollView
               style={{ flex: 1 }}
               contentContainerStyle={{
-  paddingHorizontal: 16,
-  paddingBottom: ctaBottom + 90, // espacio para que el final quede visible
-}}
-
+                paddingHorizontal: 16,
+                paddingBottom: ctaBottom + 90, // espacio para que el final quede visible
+              }}
               showsVerticalScrollIndicator={false}
             >
               {/* Header del perfil */}
@@ -236,14 +236,13 @@ const ctaBottom = tabBarHeight + insets.bottom + 12 // margen visual
                 </View>
               </View>
 
-              {/* Precio / visita técnica */}
+              {/* Precio / etiqueta dinámica */}
               <View style={styles.priceCard}>
                 <MDI name="camera-metering-spot" size={18} color="#0A5B63" />
                 <Text style={styles.priceText}>
-                  Visita técnica:{' '}
-                  {spec.visitPrice != null
-                    ? `$${spec.visitPrice.toLocaleString('es-AR')}`
-                    : '—'}
+                  {spec.pricingLabel?.trim() || 'Visita'}
+
+                  {spec.visitPrice != null ? `: $${spec.visitPrice.toLocaleString('es-AR')}` : ''}
                 </Text>
               </View>
 
@@ -269,14 +268,11 @@ const ctaBottom = tabBarHeight + insets.bottom + 12 // margen visual
 
                 <View style={styles.daysRow}>
                   {DAY_LABELS.map((lbl, idx) => {
-                    const on = days.includes(idx)
+                    const on = days.includes(idx);
                     return (
                       <View
                         key={lbl}
-                        style={[
-                          styles.dayChip,
-                          on ? styles.dayChipOn : styles.dayChipOff,
-                        ]}
+                        style={[styles.dayChip, on ? styles.dayChipOn : styles.dayChipOff]}
                       >
                         <Text
                           style={[
@@ -287,7 +283,7 @@ const ctaBottom = tabBarHeight + insets.bottom + 12 // margen visual
                           {lbl}
                         </Text>
                       </View>
-                    )
+                    );
                   })}
                 </View>
 
@@ -355,12 +351,7 @@ const ctaBottom = tabBarHeight + insets.bottom + 12 // margen visual
                           justifyContent: 'space-between',
                         }}
                       >
-                        <Text
-                          style={[
-                            styles.sectionBody,
-                            { fontWeight: '700' },
-                          ]}
-                        >
+                        <Text style={[styles.sectionBody, { fontWeight: '700' }]}>
                           {rev.author}
                         </Text>
 
@@ -372,23 +363,16 @@ const ctaBottom = tabBarHeight + insets.bottom + 12 // margen visual
                           }}
                         >
                           <Ionicons name="star" size={14} color="#FFD166" />
-                          <Text style={styles.sectionBody}>
-                            {rev.rating.toFixed(1)}
-                          </Text>
+                          <Text style={styles.sectionBody}>{rev.rating.toFixed(1)}</Text>
                         </View>
                       </View>
 
                       {rev.comment && (
-                        <Text style={[styles.sectionBody, { marginTop: 4 }]}>
-                          {rev.comment}
-                        </Text>
+                        <Text style={[styles.sectionBody, { marginTop: 4 }]}>{rev.comment}</Text>
                       )}
 
                       <Text
-                        style={[
-                          styles.sectionBody,
-                          { marginTop: 2, fontSize: 12, opacity: 0.7 },
-                        ]}
+                        style={[styles.sectionBody, { marginTop: 2, fontSize: 12, opacity: 0.7 }]}
                       >
                         {new Date(rev.createdAt).toLocaleDateString('es-AR')}
                       </Text>
@@ -408,7 +392,7 @@ const ctaBottom = tabBarHeight + insets.bottom + 12 // margen visual
                 onPress={() => {
                   nav.navigate('CreateOrder', {
                     specialistId: spec.id,
-                  })
+                  });
                 }}
               >
                 <Text style={styles.mainCtaText}>Solicitar contratación</Text>
@@ -418,7 +402,7 @@ const ctaBottom = tabBarHeight + insets.bottom + 12 // margen visual
         )}
       </SafeAreaView>
     </LinearGradient>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -607,12 +591,4 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     fontSize: 16,
   },
-})
-
-
-
-
-
-
-
-
+});

@@ -1,9 +1,9 @@
 // apps/mobile/src/screens/SpecialistWizardScreen.tsx
-import { Ionicons } from '@expo/vector-icons'
-import { useNavigation } from '@react-navigation/native'
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { LinearGradient } from 'expo-linear-gradient'
-import { useMemo, useState } from 'react'
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -13,14 +13,15 @@ import {
   Text,
   TextInput,
   View,
-} from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { api } from '../lib/api'
-import type { HomeStackParamList } from '../types'
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-type Nav = NativeStackNavigationProp<HomeStackParamList>
+import { api } from '../lib/api';
+import type { HomeStackParamList } from '../types';
 
-type Category = { id: string; name: string; slug: string }
+type Nav = NativeStackNavigationProp<HomeStackParamList>;
+
+type Category = { id: string; name: string; slug: string };
 
 // Puedes reemplazar esta lista con un GET real si ya tenés endpoint de categorías.
 const FALLBACK_CATEGORIES: Category[] = [
@@ -29,52 +30,52 @@ const FALLBACK_CATEGORIES: Category[] = [
   { id: 'electricidad', name: 'Electricidad', slug: 'electricidad' },
   { id: 'pintura', name: 'Pintura', slug: 'pintura' },
   { id: 'jardineria', name: 'Jardinería', slug: 'jardineria' },
-]
+];
 
 export default function SpecialistWizardScreen() {
-  const insets = useSafeAreaInsets()
-  const nav = useNavigation<Nav>()
+  const insets = useSafeAreaInsets();
+  const nav = useNavigation<Nav>();
 
-  const [step, setStep] = useState<1 | 2 | 3>(1)
-  const [categories, setCategories] = useState<Category[]>(FALLBACK_CATEGORIES)
-  const [categoryId, setCategoryId] = useState<string | null>(null)
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [categories, setCategories] = useState<Category[]>(FALLBACK_CATEGORIES);
+  const [categoryId, setCategoryId] = useState<string | null>(null);
 
-  const [visitPrice, setVisitPrice] = useState<string>('0')
-  const [availableNow, setAvailableNow] = useState<boolean>(true)
+  const [visitPrice, setVisitPrice] = useState<string>('0');
+  const [availableNow, setAvailableNow] = useState<boolean>(true);
 
-  const [center, setCenter] = useState<{ lat: string; lng: string }>({ lat: '', lng: '' })
-  const [radiusKm, setRadiusKm] = useState<string>('8')
+  const [center, setCenter] = useState<{ lat: string; lng: string }>({ lat: '', lng: '' });
+  const [radiusKm, setRadiusKm] = useState<string>('8');
 
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(false);
 
   const canNext = useMemo(() => {
-    if (step === 1) return !!categoryId
-    if (step === 2) return Number.isFinite(Number(visitPrice))
+    if (step === 1) return !!categoryId;
+    if (step === 2) return Number.isFinite(Number(visitPrice));
     if (step === 3)
       return (
         Number.isFinite(Number(center.lat)) &&
         Number.isFinite(Number(center.lng)) &&
         Number.isFinite(Number(radiusKm))
-      )
-    return false
-  }, [step, categoryId, visitPrice, center, radiusKm])
+      );
+    return false;
+  }, [step, categoryId, visitPrice, center, radiusKm]);
 
   const next = async () => {
-    if (!canNext) return
-    if (step < 3) setStep((s) => (s + 1) as any)
-    else await onFinish()
-  }
+    if (!canNext) return;
+    if (step < 3) setStep((s) => (s + 1) as any);
+    else await onFinish();
+  };
 
   const onFinish = async () => {
     try {
-      setLoading(true)
+      setLoading(true);
       // 1) bootstrap
-      await api.post('/specialists/me/bootstrap')
+      await api.post('/specialists/me/bootstrap');
 
       // 2) specialties (principal)
       await api.put('/specialists/me/specialties', {
         primaryCategoryId: categoryId,
-      })
+      });
 
       // 3) profile
       await api.put('/specialists/me/profile', {
@@ -83,17 +84,17 @@ export default function SpecialistWizardScreen() {
         centerLat: Number(center.lat),
         centerLng: Number(center.lng),
         radiusKm: Number(radiusKm) || 8,
-      })
+      });
 
-      Alert.alert('Listo', 'Perfil de especialista configurado.')
-      nav.goBack()
+      Alert.alert('Listo', 'Perfil de especialista configurado.');
+      nav.goBack();
     } catch (e: any) {
-      const msg = e?.response?.data?.error ?? e?.message ?? 'No se pudo guardar'
-      Alert.alert('Error', String(msg))
+      const msg = e?.response?.data?.error ?? e?.message ?? 'No se pudo guardar';
+      Alert.alert('Error', String(msg));
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
@@ -117,7 +118,7 @@ export default function SpecialistWizardScreen() {
               <Text style={styles.title}>Elegí tu rubro principal</Text>
               <View style={{ marginTop: 10, gap: 10 }}>
                 {categories.map((c) => {
-                  const on = c.id === categoryId
+                  const on = c.id === categoryId;
                   return (
                     <Pressable
                       key={c.id}
@@ -126,7 +127,7 @@ export default function SpecialistWizardScreen() {
                     >
                       <Text style={[styles.itemText, on && styles.itemTextOn]}>{c.name}</Text>
                     </Pressable>
-                  )
+                  );
                 })}
               </View>
             </View>
@@ -210,7 +211,7 @@ export default function SpecialistWizardScreen() {
         </View>
       </SafeAreaView>
     </LinearGradient>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -269,4 +270,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   btnText: { color: '#fff', fontWeight: '900', fontSize: 16 },
-})
+});

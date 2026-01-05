@@ -1,23 +1,24 @@
-import fetch from "node-fetch";
+//apps/backend/src/services/push.ts
+import fetch from 'node-fetch';
 
 type PushMessage = {
   to: string;
   title?: string;
   body?: string;
   data?: any;
-  sound?: "default";
+  sound?: 'default';
   channelId?: string; // android
 };
 
 export async function sendExpoPush(messages: PushMessage[]) {
   if (!messages.length) return;
 
-  const res = await fetch("https://exp.host/--/api/v2/push/send", {
-    method: "POST",
+  const res = await fetch('https://exp.host/--/api/v2/push/send', {
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      "Accept-Encoding": "gzip, deflate",
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'Accept-Encoding': 'gzip, deflate',
     },
     body: JSON.stringify(messages),
   });
@@ -25,7 +26,7 @@ export async function sendExpoPush(messages: PushMessage[]) {
   const json = await res.json().catch(() => null);
 
   if (!res.ok) {
-    console.warn("[push] failed", res.status, json);
+    console.warn('[push] failed', res.status, json);
     return;
   }
 

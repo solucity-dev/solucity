@@ -1,18 +1,18 @@
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient()
+const prisma = new PrismaClient();
 
 async function run() {
   const specs = await prisma.specialistProfile.findMany({
     include: {
       specialties: { include: { category: { include: { group: true } } } },
     },
-  })
+  });
 
   for (const s of specs) {
-    const categorySlugs = s.specialties.map((x) => x.category.slug)
-    const groupSlugs = [...new Set(s.specialties.map((x) => x.category.group.slug))]
-    const verified = s.kycStatus === 'VERIFIED'
+    const categorySlugs = s.specialties.map((x) => x.category.slug);
+    const groupSlugs = [...new Set(s.specialties.map((x) => x.category.group.slug))];
+    const verified = s.kycStatus === 'VERIFIED';
 
     await prisma.specialistSearchIndex.upsert({
       where: { specialistId: s.id },
@@ -43,9 +43,9 @@ async function run() {
         availableNow: s.availableNow,
         verified,
       },
-    })
+    });
   }
-  console.log('✅ Backfill SSI listo')
+  console.log('✅ Backfill SSI listo');
 }
 
-run().finally(() => prisma.$disconnect())
+run().finally(() => prisma.$disconnect());

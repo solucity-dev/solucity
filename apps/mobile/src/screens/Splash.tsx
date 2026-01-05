@@ -1,9 +1,9 @@
-import { LinearGradient } from 'expo-linear-gradient'
-import { ActivityIndicator, Image, StyleSheet } from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient';
+import { ActivityIndicator, Image, StyleSheet } from 'react-native';
 
-import Logo from '../assets/logo.png'
+import Logo from '../assets/logo.png';
 
-type Props = { duration?: number }
+type Props = { duration?: number };
 
 export default function Splash(_props: Props) {
   return (
@@ -11,7 +11,7 @@ export default function Splash(_props: Props) {
       <Image source={Logo} resizeMode="contain" style={styles.logo} />
       <ActivityIndicator size="large" color="#ffffff" style={styles.spinner} />
     </LinearGradient>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -34,4 +34,4 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   spinner: { marginTop: 8 },
-})
+});

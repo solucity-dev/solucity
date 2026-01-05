@@ -1,78 +1,154 @@
 // apps/backend/src/routes/specialists.routes.ts
-import { Router, type Request, type Response } from 'express'
-import fs from 'fs'
-import multer from 'multer'
-import path from 'path'
-import sharp from 'sharp'
-import { z } from 'zod'
+import fs from 'fs';
+import path from 'path';
 
-import { prisma } from '../lib/prisma'
-import { auth } from '../middlewares/auth'
+import { Router, type Request, type Response } from 'express';
+import multer from 'multer';
+import sharp from 'sharp';
+import { z } from 'zod';
 
-const router = Router()
+import { prisma } from '../lib/prisma';
+import { auth } from '../middlewares/auth';
+import { notifyKycStatus } from '../services/notifyKyc';
+
+const router = Router();
 
 /** ========= Storage local (MVP) ========= **/
-const uploadDir = path.join(process.cwd(), 'uploads')
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true })
+const uploadDir = path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
-/** ========= Multer storages ========= **/
+/** ========= Multer storage ========= **/
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadDir),
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname) || '.jpg'
+    const ext = path.extname(file.originalname) || '.jpg';
     const base = path
       .basename(file.originalname, ext)
       .replace(/\s+/g, '_')
-      .replace(/[^A-Za-z0-9_\-]/g, '')
-    cb(null, `${Date.now()}_${base}${ext}`)
+      .replace(/[^A-Za-z0-9_-]/g, '');
+    cb(null, `${Date.now()}_${base}${ext}`);
   },
-})
+});
 
 /** Solo imágenes (JPEG/PNG/WebP) — KYC/Avatar */
 const upload = multer({
   storage,
   limits: { fileSize: 8 * 1024 * 1024 }, // 8MB
   fileFilter: (_req, file, cb) => {
-    const ok = /^image\/(jpe?g|png|webp)$/i.test(file.mimetype)
-    if (!ok) return cb(new Error('unsupported_type'))
-    cb(null, true)
+    const ok = /^image\/(jpe?g|png|webp)$/i.test(file.mimetype);
+    if (!ok) return cb(new Error('unsupported_type'));
+    cb(null, true);
   },
-})
+});
 
 /** Imágenes o PDF — Certificaciones */
 const uploadAny = multer({
   storage,
   limits: { fileSize: 12 * 1024 * 1024 }, // 12MB
   fileFilter: (_req, file, cb) => {
-    const isImg = /^image\/(jpe?g|png|webp)$/i.test(file.mimetype)
-    const isPdf = file.mimetype === 'application/pdf'
-    if (!isImg && !isPdf) return cb(new Error('unsupported_type'))
-    cb(null, true)
+    const isImg = /^image\/(jpe?g|png|webp)$/i.test(file.mimetype);
+    const isPdf = file.mimetype === 'application/pdf';
+    if (!isImg && !isPdf) return cb(new Error('unsupported_type'));
+    cb(null, true);
   },
-})
+});
 
-type MulterReq = Request & { file?: Express.Multer.File }
-type AuthReq = Request & { user?: { id: string; role: string } }
+type MulterReq = Request & { file?: Express.Multer.File };
+type AuthReq = Request & { user?: { id: string; role: string } };
 
 /** Util: normalizar URL absoluta a partir de /uploads/... */
 function toAbsoluteUrl(u: string): string {
-  if (!u) return u
-  if (/^https?:\/\//i.test(u)) return u
+  if (!u) return u;
+  if (/^https?:\/\//i.test(u)) return u;
   const base =
     process.env.PUBLIC_BASE_URL?.replace(/\/+$/, '') ||
-    `http://localhost:${process.env.PORT || 3000}`
-  return `${base}${u.startsWith('/') ? '' : '/'}${u}`
+    `http://localhost:${process.env.PORT || 3000}`;
+  return `${base}${u.startsWith('/') ? '' : '/'}${u}`;
 }
 
 /** Validador de URL absoluta o relativa /uploads/... */
 const urlLike = z
   .string()
-  .refine(
-    (s) => /^https?:\/\//i.test(s) || s.startsWith('/uploads/'),
-    'invalid_url',
-  )
+  .refine((s) => /^https?:\/\//i.test(s) || s.startsWith('/uploads/'), 'invalid_url');
 
-/** ===== helper: sincronizar índice de búsqueda ===== */
+/** helper: error handling multer */
+function multerErrorToResponse(err: any, res: Response) {
+  if (!err) return false;
+
+  if (err?.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ ok: false, error: 'file_too_large' });
+  }
+  if (err?.message === 'unsupported_type') {
+    return res.status(415).json({ ok: false, error: 'unsupported_type' });
+  }
+  return false;
+}
+
+/** ========= HORARIOS =========
+ * Regla:
+ * - Si NO hay availability bien configurado => NO bloquea (se ve igual)
+ * - Si hay days/start/end => debe respetar
+ */
+function isWithinAvailability(
+  availability: any,
+  now = new Date(),
+  timeZone = 'America/Argentina/Cordoba',
+): boolean {
+  if (!availability) return true;
+
+  const days: number[] = Array.isArray(availability.days) ? availability.days : [];
+  const start: string | undefined = availability.start;
+  const end: string | undefined = availability.end;
+
+  // si falta algo => no bloquea
+  if (!days.length || !start || !end) return true;
+
+  // fecha local en timezone
+  const dateParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+
+  const y = Number(dateParts.find((p) => p.type === 'year')?.value ?? '1970');
+  const m = Number(dateParts.find((p) => p.type === 'month')?.value ?? '01');
+  const d = Number(dateParts.find((p) => p.type === 'day')?.value ?? '01');
+
+  // día de semana en esa fecha (0..6)
+  const localDate = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  const dayIndex = localDate.getUTCDay();
+
+  if (!days.includes(dayIndex)) return false;
+
+  // hora local en timezone
+  const timeParts = new Intl.DateTimeFormat('es-AR', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(now);
+
+  const hour = Number(timeParts.find((p) => p.type === 'hour')?.value ?? '0');
+  const minute = Number(timeParts.find((p) => p.type === 'minute')?.value ?? '0');
+  const currentMins = hour * 60 + minute;
+
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+
+  if (Number.isNaN(sh) || Number.isNaN(sm) || Number.isNaN(eh) || Number.isNaN(em)) return true;
+
+  const startMins = sh * 60 + sm;
+  const endMins = eh * 60 + em;
+
+  // soporta cruce de medianoche
+  if (endMins >= startMins) {
+    return currentMins >= startMins && currentMins <= endMins;
+  }
+  return currentMins >= startMins || currentMins <= endMins;
+}
+
+/** ===== helper: sync search index ===== */
 async function syncSearchIndexForUser(userId: string) {
   const spec = await prisma.specialistProfile.findUnique({
     where: { userId },
@@ -89,40 +165,29 @@ async function syncSearchIndexForUser(userId: string) {
       badge: true,
       specialties: {
         include: {
-          category: { select: { slug: true } },
+          category: { select: { slug: true, group: { select: { slug: true } } } },
         },
       },
     },
-  })
+  });
 
-  if (!spec) return
+  if (!spec) return;
 
-  const categorySlugs = spec.specialties.map((s) => s.category.slug)
-  const centerLat = spec.centerLat ?? 0
-  const centerLng = spec.centerLng ?? 0
-  const radiusKm = spec.radiusKm ?? 20
+  const categorySlugs = spec.specialties.map((s) => s.category.slug);
+  const groupSlugs = Array.from(new Set(spec.specialties.map((s) => s.category.group.slug)));
 
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('[syncSearchIndexForUser] read profile =', {
-      id: spec.id,
-      centerLat: spec.centerLat,
-      centerLng: spec.centerLng,
-      radiusKm: spec.radiusKm,
-      categorySlugs,
-      badge: spec.badge,
-    })
-    console.log('[syncSearchIndexForUser] updating index for specialist', spec.id, {
-      categorySlugs,
-      centerLat,
-      centerLng,
-      radiusKm,
-    })
-  }
+  const centerLat = spec.centerLat ?? 0;
+  const centerLng = spec.centerLng ?? 0;
+  const radiusKm = spec.radiusKm ?? 20;
+
+  // availableNow solo true si está VERIFIED
+  const safeAvailableNow = spec.kycStatus === 'VERIFIED' ? (spec.availableNow ?? false) : false;
 
   await prisma.specialistSearchIndex.upsert({
     where: { specialistId: spec.id },
     create: {
       specialistId: spec.id,
+      groupSlugs,
       categorySlugs,
       centerLat,
       centerLng,
@@ -130,11 +195,12 @@ async function syncSearchIndexForUser(userId: string) {
       ratingAvg: spec.ratingAvg ?? 0,
       ratingCount: spec.ratingCount ?? 0,
       verified: spec.kycStatus === 'VERIFIED',
-      availableNow: spec.availableNow ?? false,
+      availableNow: safeAvailableNow,
       visitPrice: spec.visitPrice ?? 0,
-      badge: spec.badge ?? null,
+      badge: (spec.badge as any) ?? 'BRONZE',
     },
     update: {
+      groupSlugs,
       categorySlugs,
       centerLat,
       centerLng,
@@ -142,187 +208,239 @@ async function syncSearchIndexForUser(userId: string) {
       ratingAvg: spec.ratingAvg ?? 0,
       ratingCount: spec.ratingCount ?? 0,
       verified: spec.kycStatus === 'VERIFIED',
-      availableNow: spec.availableNow ?? false,
+      availableNow: safeAvailableNow,
       visitPrice: spec.visitPrice ?? 0,
-      badge: spec.badge ?? null,
+      badge: (spec.badge as any) ?? 'BRONZE',
     },
-  })
+  });
 }
 
-/** ===== helper: stats de contrataciones por especialista ===== */
+/** ===== helper: stats de contrataciones ===== */
 async function getSpecialistStatsById(specialistId: string) {
   const [done, canceled] = await Promise.all([
     prisma.serviceOrder.count({
-      where: {
-        specialistId,
-        status: { in: ['CONFIRMED_BY_CLIENT', 'CLOSED'] as any },
-      },
+      where: { specialistId, status: { in: ['CONFIRMED_BY_CLIENT', 'CLOSED'] as any } },
     }),
     prisma.serviceOrder.count({
       where: {
         specialistId,
         status: {
-          in: [
-            'CANCELLED_BY_CUSTOMER',
-            'CANCELLED_BY_SPECIALIST',
-            'CANCELLED_AUTO',
-          ] as any,
+          in: ['CANCELLED_BY_CUSTOMER', 'CANCELLED_BY_SPECIALIST', 'CANCELLED_AUTO'] as any,
         },
       },
     }),
-  ])
+  ]);
 
-  return { done, canceled }
+  return { done, canceled };
 }
 
 /* ─────────────────────────────────────────────────────────────────────
- * RUTAS PÚBLICAS (sin auth)
+ * RUTAS PÚBLICAS
  * ────────────────────────────────────────────────────────────────────*/
 
 /**
  * GET /specialists/search?category=<slug>&lat=&lng=&radiusKm=
- *       [&habilitado=true] [&availableNow=true|false] [&priceMin=] [&priceMax=]
- *       [&sort=distance|rating|price]
+ *       [&verified=true|false] [&availableNow=true|false] [&enabled=true|false]
+ *       [&priceMin=] [&priceMax=] [&sort=distance|rating|price]
  */
 router.get('/search', async (req, res) => {
-  const category = typeof req.query.category === 'string' ? req.query.category : ''
-  const lat = Number(req.query.lat ?? NaN)
-  const lng = Number(req.query.lng ?? NaN)
-  const radiusKm = Number(req.query.radiusKm ?? 8)
+  console.log('[GET /specialists/search]', {
+    category: req.query.category,
+    lat: req.query.lat,
+    lng: req.query.lng,
+    radiusKm: req.query.radiusKm,
+    verified: req.query.verified,
+    availableNow: req.query.availableNow,
+    enabled: req.query.enabled,
+    priceMin: req.query.priceMin,
+    priceMax: req.query.priceMax,
+  });
 
-  if (Number.isNaN(lat) || Number.isNaN(lng)) {
-    return res.status(400).json({ ok: false, error: 'lat/lng requeridos' })
-  }
+  try {
+    let category = typeof req.query.category === 'string' ? req.query.category : '';
 
-  const habilitado = req.query.habilitado === 'true' ? true : undefined
-  const verified = req.query.verified === 'true' ? true : undefined // compat antigua
+    // ✅ alias/compat: slugs abreviados o viejos de la app -> slug real en DB (seed)
+    const CATEGORY_ALIASES: Record<string, string> = {
+      // Informática y electrónica
+      'aire-acond': 'climatizacion',
+      'st-electronica': 'servicio-tecnico-electronica',
+      'st-electrodom': 'servicio-tecnico-electrodomesticos',
+      'st-informatica': 'servicio-tecnico-informatica',
 
-  // 👇 NUEVA LÓGICA: por defecto solo mostramos disponibles
-  const availableNowParam =
-    typeof req.query.availableNow === 'string' ? req.query.availableNow : undefined
+      // Seguridad
+      'camaras-alarmas': 'camaras-y-alarmas',
+      'personal-seg': 'personal-de-seguridad',
 
-  const availableNow =
-    availableNowParam === 'true'
-      ? true
-      : availableNowParam === 'false'
-      ? false
-      : true // 👈 si no mandan nada, filtra "solo disponibles"
+      // Servicios
+      'acompanante-ter': 'acompanante-terapeutico',
+      'clases-part': 'clases-particulares',
+      'paseador-perros': 'paseador-de-perros',
+    };
 
-  const priceMax = req.query.priceMax ? Number(req.query.priceMax) : undefined
-  const priceMin = req.query.priceMin ? Number(req.query.priceMin) : undefined
-  const sort = (req.query.sort as string) ?? 'distance' // distance | rating | price
+    const rawCategory = category;
+    category = CATEGORY_ALIASES[category] ?? category;
 
-  const deg = radiusKm / 111
-  const latMin = lat - deg
-  const latMax = lat + deg
-  const lngMin = lng - deg
-  const lngMax = lng + deg
-
-  // 1) preselección rápida
-  const pre = await prisma.specialistSearchIndex.findMany({
-    where: {
-      categorySlugs: category ? { has: category } : undefined,
-      centerLat: { gte: latMin, lte: latMax },
-      centerLng: { gte: lngMin, lte: lngMax },
-      verified: habilitado ?? verified,
-      availableNow,
-      visitPrice: { gte: priceMin ?? undefined, lte: priceMax ?? undefined },
-    },
-    take: 120,
-  })
-
-  // 👇 DEBUG
-  console.log('[/specialists/search] category =', category)
-  console.log('[/specialists/search] pre.length =', pre.length)
-  console.log(
-    '[/specialists/search] pre rows =',
-    pre.map((r) => ({
-      id: r.specialistId,
-      slugs: r.categorySlugs,
-      centerLat: r.centerLat,
-      centerLng: r.centerLng,
-      radiusKm: r.radiusKm,
-    })),
-  )
-
-  // 2) distancia + filtro por radio propio
-  const toRad = (x: number) => (x * Math.PI) / 180
-  const withDist = pre
-    .map((r) => {
-      if (r.centerLat == null || r.centerLng == null)
-        return { ...r, distanceKm: Number.POSITIVE_INFINITY }
-      const R = 6371
-      const dLat = toRad(r.centerLat - lat)
-      const dLng = toRad(r.centerLng - lng)
-      const a =
-        Math.sin(dLat / 2) ** 2 +
-        Math.cos(toRad(lat)) * Math.cos(toRad(r.centerLat)) * Math.sin(dLng / 2) ** 2
-      const dist = 2 * R * Math.asin(Math.sqrt(a))
-      return { ...r, distanceKm: dist }
-    })
-    .filter((x) => x.distanceKm <= (x.radiusKm ?? radiusKm))
-
-  // 3) enriquecer con nombre desde User
-  const profiles = await prisma.specialistProfile.findMany({
-    where: { id: { in: withDist.map((x) => x.specialistId) } },
-    select: {
-      id: true,
-      userId: true,
-      kycStatus: true,
-      avatarUrl: true,
-    },
-  })
-
-  const users = await prisma.user.findMany({
-    where: { id: { in: profiles.map((p) => p.userId) } },
-    select: { id: true, name: true, surname: true },
-  })
-
-  const profById = new Map(profiles.map((p) => [p.id, p]))
-  const userById = new Map(users.map((u) => [u.id, u]))
-
-  const enriched = withDist.map((x) => {
-    const prof = profById.get(x.specialistId)
-    const user = prof ? userById.get(prof.userId) : undefined
-    const name = `${user?.name ?? 'Especialista'} ${user?.surname ?? ''}`.trim()
-    const enabled = prof?.kycStatus === 'VERIFIED'
-
-    return {
-      ...x,
-      name,
-      enabled,
-      kycStatus: prof?.kycStatus ?? 'UNVERIFIED',
-      avatarUrl: prof?.avatarUrl ?? null,
+    if (rawCategory !== category) {
+      console.log('[GET /specialists/search][alias]', { rawCategory, mappedTo: category });
     }
-  })
 
-  // 4) orden final
-  if (sort === 'rating') {
-    enriched.sort(
-      (a, b) =>
-        (b.ratingAvg ?? 0) - (a.ratingAvg ?? 0) ||
-        (b.ratingCount ?? 0) - (a.ratingCount ?? 0) ||
-        a.distanceKm - b.distanceKm,
-    )
-  } else if (sort === 'price') {
-    enriched.sort(
-      (a, b) => (a.visitPrice ?? Infinity) - (b.visitPrice ?? Infinity),
-    )
-  } else {
-    enriched.sort((a, b) => a.distanceKm - b.distanceKm)
+    const lat = Number(req.query.lat ?? NaN);
+    const lng = Number(req.query.lng ?? NaN);
+    const radiusKm = Number(req.query.radiusKm ?? 8);
+
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      return res.status(400).json({ ok: false, error: 'lat/lng requeridos' });
+    }
+
+    // filtros
+    const enabledParam = typeof req.query.enabled === 'string' ? req.query.enabled : undefined;
+    const onlyEnabled = enabledParam === 'true';
+
+    const verifiedParam = typeof req.query.verified === 'string' ? req.query.verified : undefined;
+    const verifiedFilter: boolean | undefined =
+      verifiedParam === 'true' ? true : verifiedParam === 'false' ? false : undefined;
+
+    const availableNowParam =
+      typeof req.query.availableNow === 'string' ? req.query.availableNow : undefined;
+    const onlyAvailable = availableNowParam === 'true';
+
+    const priceMax = req.query.priceMax ? Number(req.query.priceMax) : undefined;
+    const priceMin = req.query.priceMin ? Number(req.query.priceMin) : undefined;
+
+    const sort = (req.query.sort as string) ?? 'distance';
+
+    const deg = radiusKm / 111;
+    const latMin = lat - deg;
+    const latMax = lat + deg;
+    const lngMin = lng - deg;
+    const lngMax = lng + deg;
+
+    const visitPriceFilter =
+      priceMin != null || priceMax != null
+        ? { gte: priceMin ?? undefined, lte: priceMax ?? undefined }
+        : undefined;
+
+    // 1) preselección rápida
+    const pre = await prisma.specialistSearchIndex.findMany({
+      where: {
+        categorySlugs: category ? { has: category } : undefined,
+        centerLat: { gte: latMin, lte: latMax },
+        centerLng: { gte: lngMin, lte: lngMax },
+        ...(verifiedFilter !== undefined ? { verified: verifiedFilter } : {}),
+        ...(visitPriceFilter ? { visitPrice: visitPriceFilter } : {}),
+      },
+      take: 120,
+    });
+
+    // 2) distancia + filtro por radio propio
+    const toRad = (x: number) => (x * Math.PI) / 180;
+    const withDist = pre
+      .map((r) => {
+        if (r.centerLat == null || r.centerLng == null)
+          return { ...r, distanceKm: Number.POSITIVE_INFINITY };
+        const R = 6371;
+        const dLat = toRad(r.centerLat - lat);
+        const dLng = toRad(r.centerLng - lng);
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(toRad(lat)) * Math.cos(toRad(r.centerLat)) * Math.sin(dLng / 2) ** 2;
+        const dist = 2 * R * Math.asin(Math.sqrt(a));
+        return { ...r, distanceKm: dist };
+      })
+      .filter((x) => x.distanceKm <= (x.radiusKm ?? radiusKm));
+
+    if (withDist.length === 0) return res.json([]);
+
+    // 3) enriquecer con datos reales del profile (incluye availability)
+    const profiles = await prisma.specialistProfile.findMany({
+      where: { id: { in: withDist.map((x) => x.specialistId) } },
+      select: {
+        id: true,
+        userId: true,
+        kycStatus: true,
+        avatarUrl: true,
+        availability: true,
+        availableNow: true,
+        pricingLabel: true, // ✅ NUEVO
+      },
+    });
+
+    const users = await prisma.user.findMany({
+      where: { id: { in: profiles.map((p) => p.userId) } },
+      select: { id: true, name: true, surname: true },
+    });
+
+    const profById = new Map(profiles.map((p) => [p.id, p]));
+    const userById = new Map(users.map((u) => [u.id, u]));
+
+    // 3.5) enabled = certificación aprobada PARA ESE RUBRO
+    const enabledBySpecialistId = new Map<string, boolean>();
+    if (category) {
+      const approvedCerts = await prisma.specialistCertification.findMany({
+        where: {
+          specialistId: { in: withDist.map((x) => x.specialistId) },
+          status: 'APPROVED',
+          category: { slug: category },
+        },
+        select: { specialistId: true },
+      });
+      for (const c of approvedCerts) enabledBySpecialistId.set(c.specialistId, true);
+    }
+
+    // 4) construir lista final + disponibilidad REAL (toggle + horario)
+    let enriched = withDist.map((x) => {
+      const prof = profById.get(x.specialistId);
+      const user = prof ? userById.get(prof.userId) : undefined;
+      const name = `${user?.name ?? 'Especialista'} ${user?.surname ?? ''}`.trim();
+
+      const kycOk = prof?.kycStatus === 'VERIFIED';
+      const toggleAvailable = kycOk ? !!prof?.availableNow : false;
+      const scheduleOk = isWithinAvailability(prof?.availability);
+      const visibleNow = kycOk && toggleAvailable && scheduleOk;
+
+      return {
+        ...x,
+        name,
+        enabled: enabledBySpecialistId.get(x.specialistId) === true,
+        kycStatus: prof?.kycStatus ?? 'UNVERIFIED',
+        avatarUrl: prof?.avatarUrl ?? null,
+        availableNow: visibleNow,
+        pricingLabel: prof?.pricingLabel ?? null, // ✅ NUEVO
+      };
+    });
+
+    if (onlyAvailable) enriched = enriched.filter((x) => x.availableNow === true);
+    if (onlyEnabled) enriched = enriched.filter((x) => x.enabled === true);
+
+    if (sort === 'rating') {
+      enriched.sort(
+        (a, b) =>
+          (b.ratingAvg ?? 0) - (a.ratingAvg ?? 0) ||
+          (b.ratingCount ?? 0) - (a.ratingCount ?? 0) ||
+          a.distanceKm - b.distanceKm,
+      );
+    } else if (sort === 'price') {
+      enriched.sort((a, b) => (a.visitPrice ?? Infinity) - (b.visitPrice ?? Infinity));
+    } else {
+      enriched.sort((a, b) => a.distanceKm - b.distanceKm);
+    }
+
+    return res.json(enriched.slice(0, 50));
+  } catch (e) {
+    if (process.env.NODE_ENV !== 'production') console.error('GET /specialists/search', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
   }
-
-  return res.json(enriched.slice(0, 50))
-})
+});
 
 /**
  * GET /specialists/by-category/:slug
- * Lista especialistas verificados o pendientes por rubro
  */
 router.get('/by-category/:slug', async (req: Request, res: Response) => {
   try {
-    const slug = String(req.params.slug ?? '').trim().toLowerCase()
-    if (!slug) return res.status(400).json({ ok: false, error: 'slug_required' })
+    const slug = String(req.params.slug ?? '')
+      .trim()
+      .toLowerCase();
+    if (!slug) return res.status(400).json({ ok: false, error: 'slug_required' });
 
     const rows = await prisma.specialistSpecialty.findMany({
       where: {
@@ -336,75 +454,67 @@ router.get('/by-category/:slug', async (req: Request, res: Response) => {
             bio: true,
             radiusKm: true,
             visitPrice: true,
+            pricingLabel: true, // ✅ NUEVO (no rompe)
             kycStatus: true,
             avatarUrl: true,
             user: { select: { name: true } },
           },
         },
       },
-    })
+    });
 
-    type Row = {
-      specialist: {
-        id: string
-        bio: string | null
-        radiusKm: number | null
-        visitPrice: number | null
-        kycStatus: 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'REJECTED'
-        avatarUrl: string | null
-        user: { name: string | null } | null
-      }
-    }
-
-    const data = rows.map((r: Row) => ({
+    const data = rows.map((r) => ({
       id: r.specialist.id,
       name: r.specialist.user?.name ?? 'Especialista',
       bio: r.specialist.bio ?? '',
       radiusKm: r.specialist.radiusKm,
       visitPrice: r.specialist.visitPrice,
+      pricingLabel: r.specialist.pricingLabel ?? null, // ✅ NUEVO
       kycStatus: r.specialist.kycStatus,
       avatarUrl: r.specialist.avatarUrl ?? null,
-    }))
+    }));
 
-    return res.json({ ok: true, count: data.length, specialists: data })
+    return res.json({ ok: true, count: data.length, specialists: data });
   } catch (e) {
     if (process.env.NODE_ENV !== 'production')
-      console.error('GET /specialists/by-category/:slug', e)
-    return res.status(500).json({ ok: false, error: 'server_error' })
+      console.error('GET /specialists/by-category/:slug', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
   }
-})
+});
 
 /* ─────────────────────────────────────────────────────────────────────
  * RUTAS PRIVADAS (auth)
  * ────────────────────────────────────────────────────────────────────*/
 
-/** ========= POST /specialists/kyc/upload ========= */
-router.post(
-  '/kyc/upload',
-  auth,
-  upload.single('file'),
-  async (req: MulterReq, res: Response) => {
-    try {
-      if (!req.file) return res.status(400).json({ ok: false, error: 'file_required' })
+/** POST /specialists/kyc/upload */
+router.post('/kyc/upload', auth, (req: Request, res: Response) => {
+  upload.single('file')(req, res, async (err: any) => {
+    const maybe = multerErrorToResponse(err, res);
+    if (maybe) return;
 
-      const meta = await sharp(req.file.path).rotate().metadata()
-      const minW = 800
-      const minH = 600
+    const r = req as MulterReq;
+
+    try {
+      if (!r.file) return res.status(400).json({ ok: false, error: 'file_required' });
+
+      const meta = await sharp(r.file.path).rotate().metadata();
+      const minW = 800;
+      const minH = 600;
+
       if (!meta.width || !meta.height || meta.width < minW || meta.height < minH) {
         try {
-          fs.unlinkSync(req.file.path)
+          fs.unlinkSync(r.file.path);
         } catch {}
-        return res.status(400).json({ ok: false, error: 'low_quality', minW, minH })
+        return res.status(400).json({ ok: false, error: 'low_quality', minW, minH });
       }
 
-      const webpPath = req.file.path + '.webp'
-      await sharp(req.file.path).rotate().webp({ quality: 82 }).toFile(webpPath)
+      const webpPath = r.file.path + '.webp';
+      await sharp(r.file.path).rotate().webp({ quality: 82 }).toFile(webpPath);
       try {
-        fs.unlinkSync(req.file.path)
+        fs.unlinkSync(r.file.path);
       } catch {}
 
-      const finalName = path.basename(webpPath)
-      const relative = `/uploads/${finalName}`
+      const relative = `/uploads/${path.basename(webpPath)}`;
 
       return res.json({
         ok: true,
@@ -412,25 +522,22 @@ router.post(
         width: meta.width,
         height: meta.height,
         format: 'webp',
-      })
-    } catch (e: any) {
-      if (e?.message === 'unsupported_type') {
-        return res.status(415).json({ ok: false, error: 'unsupported_type' })
-      }
-      if (process.env.NODE_ENV !== 'production')
-        console.error('POST /specialists/kyc/upload', e)
-      return res.status(500).json({ ok: false, error: 'server_error' })
+      });
+    } catch (e) {
+      if (process.env.NODE_ENV !== 'production') console.error('POST /specialists/kyc/upload', e);
+      return res.status(500).json({ ok: false, error: 'server_error' });
     }
-  },
-)
+  });
+});
 
-/** ========= POST /specialists/register ========= */
+/** POST /specialists/register */
 router.post('/register', auth, async (req: AuthReq, res: Response) => {
   try {
     const schema = z.object({
       specialties: z.array(z.string().min(1)).min(1),
       visitPrice: z.coerce.number().int().nonnegative().optional(),
       radiusKm: z.coerce.number().positive().optional(),
+      pricingLabel: z.string().max(40).optional().nullable(), // ✅ NUEVO (opt)
       availability: z.any().optional(),
       bio: z.string().optional().default(''),
       kyc: z.object({
@@ -438,60 +545,59 @@ router.post('/register', auth, async (req: AuthReq, res: Response) => {
         dniBackUrl: urlLike,
         selfieUrl: urlLike,
       }),
-    })
+    });
 
-    const data = schema.parse(req.body)
+    const data = schema.parse(req.body);
 
-    const userId = req.user?.id
-    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' })
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' });
 
     const kycAbs = {
       dniFrontUrl: toAbsoluteUrl(data.kyc.dniFrontUrl),
       dniBackUrl: toAbsoluteUrl(data.kyc.dniBackUrl),
       selfieUrl: toAbsoluteUrl(data.kyc.selfieUrl),
-    }
+    };
 
     const specialist = await prisma.specialistProfile.upsert({
       where: { userId },
       update: {
         ...(data.visitPrice !== undefined ? { visitPrice: data.visitPrice } : {}),
         ...(data.radiusKm !== undefined ? { radiusKm: data.radiusKm } : {}),
-        ...(data.availability !== undefined
-          ? { availability: data.availability as any }
-          : {}),
+        ...(data.pricingLabel !== undefined ? { pricingLabel: data.pricingLabel } : {}),
+        ...(data.availability !== undefined ? { availability: data.availability as any } : {}),
         bio: data.bio,
         kycStatus: 'PENDING',
+        availableNow: false,
       },
       create: {
         userId,
         visitPrice: data.visitPrice ?? null,
         radiusKm: data.radiusKm ?? null,
+        pricingLabel: data.pricingLabel ?? null,
         availability: (data.availability as any) ?? null,
         bio: data.bio,
         kycStatus: 'PENDING',
+        availableNow: false,
       },
       select: { id: true },
-    })
+    });
 
-    await prisma.specialistSpecialty.deleteMany({
-      where: { specialistId: specialist.id },
-    })
+    await prisma.specialistSpecialty.deleteMany({ where: { specialistId: specialist.id } });
+
     const cats = await prisma.serviceCategory.findMany({
       where: { slug: { in: data.specialties } },
       select: { id: true },
-    })
+    });
     if (cats.length === 0) {
-      return res.status(400).json({ ok: false, error: 'invalid_specialties' })
+      return res.status(400).json({ ok: false, error: 'invalid_specialties' });
     }
-    await prisma.specialistSpecialty.createMany({
-      data: cats.map((c: { id: string }) => ({
-        specialistId: specialist.id,
-        categoryId: c.id,
-      })),
-      skipDuplicates: true,
-    })
 
-    await prisma.kycSubmission.create({
+    await prisma.specialistSpecialty.createMany({
+      data: cats.map((c) => ({ specialistId: specialist.id, categoryId: c.id })),
+      skipDuplicates: true,
+    });
+
+    const submission = await prisma.kycSubmission.create({
       data: {
         specialistId: specialist.id,
         dniFrontUrl: kycAbs.dniFrontUrl,
@@ -499,30 +605,29 @@ router.post('/register', auth, async (req: AuthReq, res: Response) => {
         selfieUrl: kycAbs.selfieUrl,
         status: 'PENDING',
       },
-    })
+      select: { id: true },
+    });
 
-    // 🔁 actualizar índice de búsqueda
-    await syncSearchIndexForUser(userId)
+    await notifyKycStatus({ userId, status: 'PENDING', submissionId: submission.id });
 
-    return res.json({ ok: true, specialistId: specialist.id })
+    await syncSearchIndexForUser(userId);
+
+    return res.json({ ok: true, specialistId: specialist.id });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return res
-        .status(400)
-        .json({ ok: false, error: 'invalid_input', details: err.flatten() })
+      return res.status(400).json({ ok: false, error: 'invalid_input', details: err.flatten() });
     }
-    if (process.env.NODE_ENV !== 'production')
-      console.error('POST /specialists/register', err)
-    return res.status(500).json({ ok: false, error: 'server_error' })
+    if (process.env.NODE_ENV !== 'production') console.error('POST /specialists/register', err);
+    return res.status(500).json({ ok: false, error: 'server_error' });
   }
-})
+});
 
-/** ===== helpers ===== */
+/** helpers PATCH /me */
 function pickBadge(avg: number | null, count: number | null): 'BRONZE' | 'SILVER' | 'GOLD' | null {
-  if (!avg || !count) return null
-  if (count >= 100 && avg >= 4.8) return 'GOLD'
-  if (count >= 20 && avg >= 4.5) return 'SILVER'
-  return 'BRONZE'
+  if (!avg || !count) return null;
+  if (count >= 100 && avg >= 4.8) return 'GOLD';
+  if (count >= 20 && avg >= 4.5) return 'SILVER';
+  return 'BRONZE';
 }
 
 const AvailabilitySchema = z.object({
@@ -530,25 +635,28 @@ const AvailabilitySchema = z.object({
   start: z.string().regex(/^\d{2}:\d{2}$/),
   end: z.string().regex(/^\d{2}:\d{2}$/),
   enabled: z.boolean().optional(),
-})
+});
 
-/** 👇 extendido con avatarUrl + centerLat/centerLng */
 const PatchMeSchema = z.object({
   bio: z.string().max(1000).optional(),
   available: z.boolean().optional(),
-  radiusKm: z.coerce.number().int().min(0).max(200).optional(),
+  radiusKm: z.coerce.number().int().min(0).max(30).optional(),
   visitPrice: z.coerce.number().int().min(0).max(10_000_000).optional(),
+
+  // ✅ NUEVO: etiqueta de forma de cobro
+  pricingLabel: z.string().max(40).optional().nullable(),
+
   availability: AvailabilitySchema.partial().optional(),
   avatarUrl: z.union([urlLike, z.literal(null)]).optional(),
   centerLat: z.coerce.number().optional(),
   centerLng: z.coerce.number().optional(),
-})
+});
 
-/** ========= GET /specialists/me ========= */
+/** GET /specialists/me */
 router.get('/me', auth, async (req: AuthReq, res: Response) => {
   try {
-    const userId = req.user?.id
-    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' })
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' });
 
     const profile = await prisma.specialistProfile.findUnique({
       where: { userId },
@@ -556,7 +664,7 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
         user: { select: { name: true, surname: true } },
         specialties: { include: { category: { select: { slug: true } } } },
       },
-    })
+    });
 
     if (!profile) {
       return res.json({
@@ -564,38 +672,40 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
         profile: {
           name: null,
           bio: '',
-          available: true,
+          available: false,
           radiusKm: 10,
           visitPrice: 0,
-          availability: {
-            days: [1, 2, 3, 4, 5],
-            start: '09:00',
-            end: '18:00',
-          },
+          pricingLabel: null, // ✅ NUEVO
+          availability: { days: [1, 2, 3, 4, 5], start: '09:00', end: '18:00' },
           ratingAvg: null,
           ratingCount: null,
           badge: null,
-          kycStatus: 'PENDING',
+          kycStatus: 'UNVERIFIED',
           specialties: [],
           avatarUrl: null,
           stats: { done: 0, canceled: 0 },
+          centerLat: null,
+          centerLng: null,
         },
-      })
+      });
     }
 
-    const rubros = profile.specialties.map((s) => s.category.slug)
-    console.log('[GET /specialists/me] specialties slugs =', rubros)
+    const avail = (profile.availability as any) || null;
+    const isVerified = profile.kycStatus === 'VERIFIED';
 
-    const avail = (profile.availability as any) || null
-    const available = typeof avail?.enabled === 'boolean' ? !!avail.enabled : true
+    const available = isVerified
+      ? typeof profile.availableNow === 'boolean'
+        ? profile.availableNow
+        : typeof avail?.enabled === 'boolean'
+          ? !!avail.enabled
+          : false
+      : false;
 
-    // ⭐ Rating real del especialista
-    const ratingAvg = profile.ratingAvg ?? null
-    const ratingCount = profile.ratingCount ?? null
-    const badge = pickBadge(ratingAvg, ratingCount)
+    const ratingAvg = profile.ratingAvg ?? null;
+    const ratingCount = profile.ratingCount ?? null;
+    const badge = pickBadge(ratingAvg, ratingCount);
 
-    // ⭐ Stats reales del especialista
-    const { done, canceled } = await getSpecialistStatsById(profile.id)
+    const { done, canceled } = await getSpecialistStatsById(profile.id);
 
     return res.json({
       ok: true,
@@ -605,13 +715,8 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
         available,
         radiusKm: profile.radiusKm ?? 10,
         visitPrice: profile.visitPrice ?? 0,
-        availability:
-          avail ??
-          ({
-            days: [1, 2, 3, 4, 5],
-            start: '09:00',
-            end: '18:00',
-          } as any),
+        pricingLabel: (profile as any).pricingLabel ?? null, // ✅ NUEVO
+        availability: avail ?? ({ days: [1, 2, 3, 4, 5], start: '09:00', end: '18:00' } as any),
         ratingAvg,
         ratingCount,
         badge,
@@ -619,53 +724,45 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
         specialties: profile.specialties.map((s) => s.category.slug),
         avatarUrl: profile.avatarUrl ?? null,
         stats: { done, canceled },
+        centerLat: profile.centerLat ?? null,
+        centerLng: profile.centerLng ?? null,
       },
-    })
+    });
   } catch (e) {
-    if (process.env.NODE_ENV !== 'production') console.error('GET /specialists/me', e)
-    return res.status(500).json({ ok: false, error: 'server_error' })
+    if (process.env.NODE_ENV !== 'production') console.error('GET /specialists/me', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
   }
-})
+});
 
-/** ========= PATCH /specialists/me ========= */
+/** PATCH /specialists/me */
 router.patch('/me', auth, async (req: AuthReq, res: Response) => {
   try {
-    const userId = req.user?.id
-    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' })
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' });
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[PATCH /specialists/me] body =', req.body)
-    }
-
-    const data = PatchMeSchema.parse(req.body)
+    const data = PatchMeSchema.parse(req.body);
 
     const current = await prisma.specialistProfile.findUnique({
       where: { userId },
-      select: {
-        availability: true,
-        id: true,
-        centerLat: true,
-        centerLng: true,
-        radiusKm: true,
-      },
-    })
+      select: { availability: true, kycStatus: true },
+    });
 
-    const currentAvail =
-      (current?.availability as any) ?? {
-        days: [1, 2, 3, 4, 5],
-        start: '09:00',
-        end: '18:00',
-      }
+    const currentAvail = (current?.availability as any) ?? {
+      days: [1, 2, 3, 4, 5],
+      start: '09:00',
+      end: '18:00',
+    };
 
-    let nextAvail = currentAvail
-    if (data.availability) nextAvail = { ...currentAvail, ...data.availability }
-    if (typeof data.available === 'boolean') {
-      nextAvail = { ...nextAvail, enabled: data.available }
+    if (data.available === true) {
+      const kyc = current?.kycStatus ?? 'UNVERIFIED';
+      if (kyc !== 'VERIFIED') return res.status(403).json({ ok: false, error: 'kyc_required' });
     }
 
-    // 👇 valor que usaremos para availableNow en DB
-    const setAvailableNow =
-      typeof data.available === 'boolean' ? data.available : undefined
+    let nextAvail = currentAvail;
+    if (data.availability) nextAvail = { ...currentAvail, ...data.availability };
+    if (typeof data.available === 'boolean') nextAvail = { ...nextAvail, enabled: data.available };
+
+    const setAvailableNow = typeof data.available === 'boolean' ? data.available : undefined;
 
     const updated = await prisma.specialistProfile.upsert({
       where: { userId },
@@ -674,146 +771,133 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
         bio: data.bio ?? '',
         radiusKm: data.radiusKm ?? null,
         visitPrice: data.visitPrice ?? null,
+        pricingLabel: data.pricingLabel ?? null, // ✅ NUEVO
         availability: nextAvail as any,
         kycStatus: 'PENDING',
         avatarUrl: data.avatarUrl ?? null,
         centerLat: data.centerLat ?? null,
         centerLng: data.centerLng ?? null,
-        availableNow: setAvailableNow ?? true, // nuevo perfil: por defecto disponible
+        availableNow: false,
       },
       update: {
         ...(data.bio !== undefined ? { bio: data.bio } : {}),
         ...(data.radiusKm !== undefined ? { radiusKm: data.radiusKm } : {}),
         ...(data.visitPrice !== undefined ? { visitPrice: data.visitPrice } : {}),
+        ...(data.pricingLabel !== undefined ? { pricingLabel: data.pricingLabel } : {}), // ✅ NUEVO
         availability: nextAvail as any,
         ...(data.avatarUrl !== undefined ? { avatarUrl: data.avatarUrl } : {}),
         ...(data.centerLat !== undefined ? { centerLat: data.centerLat } : {}),
         ...(data.centerLng !== undefined ? { centerLng: data.centerLng } : {}),
-        ...(setAvailableNow !== undefined ? { availableNow: setAvailableNow } : {}),
+        ...(setAvailableNow !== undefined
+          ? { availableNow: current?.kycStatus === 'VERIFIED' ? setAvailableNow : false }
+          : {}),
       },
       select: { id: true },
-    })
+    });
 
-    // 🔁 después de guardar, sincronizamos índice de búsqueda
-    await syncSearchIndexForUser(userId)
+    await syncSearchIndexForUser(userId);
 
-    return res.json({ ok: true, id: updated.id })
+    return res.json({ ok: true, id: updated.id });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return res
-        .status(400)
-        .json({ ok: false, error: 'invalid_input', details: err.flatten() })
+      return res.status(400).json({ ok: false, error: 'invalid_input', details: err.flatten() });
     }
-    if (process.env.NODE_ENV !== 'production')
-      console.error('PATCH /specialists/me', err)
-    return res.status(500).json({ ok: false, error: 'server_error' })
+    if (process.env.NODE_ENV !== 'production') console.error('PATCH /specialists/me', err);
+    return res.status(500).json({ ok: false, error: 'server_error' });
   }
-})
+});
 
-/** ========= PATCH /specialists/specialties ========= */
+/** PATCH /specialists/specialties */
 router.patch('/specialties', auth, async (req: AuthReq, res: Response) => {
   try {
-    const userId = req.user?.id
-    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' })
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' });
 
-    const schema = z.object({
-      specialties: z.array(z.string().min(1)).min(1),
-    })
-    const { specialties } = schema.parse(req.body)
+    const schema = z.object({ specialties: z.array(z.string().min(1)).min(1) });
+    const { specialties } = schema.parse(req.body);
 
     const profile = await prisma.specialistProfile.upsert({
       where: { userId },
       create: { userId, kycStatus: 'PENDING' },
       update: {},
       select: { id: true },
-    })
+    });
 
     const cats = await prisma.serviceCategory.findMany({
       where: { slug: { in: specialties } },
       select: { id: true },
-    })
-    if (cats.length === 0) {
-      return res.status(400).json({ ok: false, error: 'invalid_specialties' })
-    }
+    });
+    if (cats.length === 0) return res.status(400).json({ ok: false, error: 'invalid_specialties' });
 
-    await prisma.specialistSpecialty.deleteMany({
-      where: { specialistId: profile.id },
-    })
+    await prisma.specialistSpecialty.deleteMany({ where: { specialistId: profile.id } });
     await prisma.specialistSpecialty.createMany({
-      data: cats.map((c: { id: string }) => ({
-        specialistId: profile.id,
-        categoryId: c.id,
-      })),
-    })
+      data: cats.map((c) => ({ specialistId: profile.id, categoryId: c.id })),
+      skipDuplicates: true,
+    });
 
-    // 🔁 actualizar índice de búsqueda
-    await syncSearchIndexForUser(userId)
+    await syncSearchIndexForUser(userId);
 
-    return res.json({ ok: true, count: cats.length })
+    return res.json({ ok: true, count: cats.length });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return res
-        .status(400)
-        .json({ ok: false, error: 'invalid_input', details: err.flatten() })
+      return res.status(400).json({ ok: false, error: 'invalid_input', details: err.flatten() });
     }
-    if (process.env.NODE_ENV !== 'production')
-      console.error('PATCH /specialists/specialties', err)
-    return res.status(500).json({ ok: false, error: 'server_error' })
+    if (process.env.NODE_ENV !== 'production') console.error('PATCH /specialists/specialties', err);
+    return res.status(500).json({ ok: false, error: 'server_error' });
   }
-})
+});
 
-/** ========= CERTIFICATIONS: upload + create/update + list ========= */
+/** ========= CERTIFICATIONS ========= */
 
-// Subida de archivo de certificación (PDF o imagen)
-router.post(
-  '/certifications/upload',
-  auth,
-  uploadAny.single('file'),
-  async (req: MulterReq, res: Response) => {
+/** POST /specialists/certifications/upload (PDF o imagen) */
+router.post('/certifications/upload', auth, (req: Request, res: Response) => {
+  uploadAny.single('file')(req, res, async (err: any) => {
+    const maybe = multerErrorToResponse(err, res);
+    if (maybe) return;
+
+    const r = req as MulterReq;
+
     try {
-      if (!req.file) return res.status(400).json({ ok: false, error: 'file_required' })
+      if (!r.file) return res.status(400).json({ ok: false, error: 'file_required' });
 
-      const isPdf = req.file.mimetype === 'application/pdf'
+      const isPdf = r.file.mimetype === 'application/pdf';
       if (isPdf) {
-        const relative = `/uploads/${path.basename(req.file.path)}`
-        return res.json({ ok: true, url: relative, format: 'pdf' })
+        const relative = `/uploads/${path.basename(r.file.path)}`;
+        return res.json({ ok: true, url: relative, format: 'pdf' });
       }
 
-      // Imagen → validar tamaño y convertir a webp
-      const meta = await sharp(req.file.path).rotate().metadata()
-      const minW = 800
-      const minH = 600
+      const meta = await sharp(r.file.path).rotate().metadata();
+      const minW = 800;
+      const minH = 600;
+
       if (!meta.width || !meta.height || meta.width < minW || meta.height < minH) {
         try {
-          fs.unlinkSync(req.file.path)
+          fs.unlinkSync(r.file.path);
         } catch {}
-        return res.status(400).json({ ok: false, error: 'low_quality', minW, minH })
+        return res.status(400).json({ ok: false, error: 'low_quality', minW, minH });
       }
 
-      const webpPath = req.file.path + '.webp'
-      await sharp(req.file.path).rotate().webp({ quality: 86 }).toFile(webpPath)
+      const webpPath = r.file.path + '.webp';
+      await sharp(r.file.path).rotate().webp({ quality: 86 }).toFile(webpPath);
       try {
-        fs.unlinkSync(req.file.path)
+        fs.unlinkSync(r.file.path);
       } catch {}
 
-      const relative = `/uploads/${path.basename(webpPath)}`
-      return res.json({ ok: true, url: relative, format: 'webp' })
-    } catch (e: any) {
-      if (e?.message === 'unsupported_type') {
-        return res.status(415).json({ ok: false, error: 'unsupported_type' })
-      }
+      const relative = `/uploads/${path.basename(webpPath)}`;
+      return res.json({ ok: true, url: relative, format: 'webp' });
+    } catch (e) {
       if (process.env.NODE_ENV !== 'production')
-        console.error('POST /specialists/certifications/upload', e)
-      return res.status(500).json({ ok: false, error: 'server_error' })
+        console.error('POST /specialists/certifications/upload', e);
+      return res.status(500).json({ ok: false, error: 'server_error' });
     }
-  },
-)
+  });
+});
 
-// Crear/actualizar certificación por rubro
+/** POST /specialists/certifications (upsert por rubro) */
 router.post('/certifications', auth, async (req: AuthReq, res: Response) => {
   try {
-    const userId = req.user?.id
-    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' })
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' });
 
     const schema = z.object({
       categorySlug: z.string().min(1),
@@ -821,27 +905,25 @@ router.post('/certifications', auth, async (req: AuthReq, res: Response) => {
       number: z.string().max(120).optional().nullable(),
       issuer: z.string().max(180).optional().nullable(),
       expiresAt: z.string().datetime().optional().nullable(),
-    })
-    const body = schema.parse(req.body)
+    });
+
+    const body = schema.parse(req.body);
 
     const spec = await prisma.specialistProfile.findUnique({
       where: { userId },
       select: { id: true },
-    })
-    if (!spec) return res.status(400).json({ ok: false, error: 'no_profile' })
+    });
+    if (!spec) return res.status(400).json({ ok: false, error: 'no_profile' });
 
     const cat = await prisma.serviceCategory.findUnique({
       where: { slug: body.categorySlug },
       select: { id: true },
-    })
-    if (!cat) return res.status(400).json({ ok: false, error: 'invalid_category' })
+    });
+    if (!cat) return res.status(400).json({ ok: false, error: 'invalid_category' });
 
     const created = await prisma.specialistCertification.upsert({
       where: {
-        specialistId_categoryId: {
-          specialistId: spec.id,
-          categoryId: cat.id,
-        },
+        specialistId_categoryId: { specialistId: spec.id, categoryId: cat.id },
       },
       create: {
         specialistId: spec.id,
@@ -860,60 +942,60 @@ router.post('/certifications', auth, async (req: AuthReq, res: Response) => {
         status: 'PENDING',
       },
       select: { id: true, status: true },
-    })
+    });
 
-    return res.json({ ok: true, certification: created })
+    return res.json({ ok: true, certification: created });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return res
-        .status(400)
-        .json({ ok: false, error: 'invalid_input', details: err.flatten() })
+      return res.status(400).json({ ok: false, error: 'invalid_input', details: err.flatten() });
     }
     if (process.env.NODE_ENV !== 'production')
-      console.error('POST /specialists/certifications', err)
-    return res.status(500).json({ ok: false, error: 'server_error' })
+      console.error('POST /specialists/certifications', err);
+    return res.status(500).json({ ok: false, error: 'server_error' });
   }
-})
+});
 
-// Listar certificaciones del especialista autenticado
+/** GET /specialists/certifications (listar del especialista) */
 router.get('/certifications', auth, async (req: AuthReq, res: Response) => {
   try {
-    const userId = req.user?.id
-    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' })
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' });
+
     const spec = await prisma.specialistProfile.findUnique({
       where: { userId },
       select: { id: true },
-    })
-    if (!spec) return res.json({ ok: true, items: [] })
+    });
+    if (!spec) return res.json({ ok: true, items: [] });
 
     const items = await prisma.specialistCertification.findMany({
       where: { specialistId: spec.id },
       include: { category: { select: { slug: true, name: true } } },
       orderBy: { createdAt: 'desc' },
-    })
+    });
 
-    return res.json({ ok: true, items })
+    return res.json({
+      ok: true,
+      items: items.map((x) => ({
+        ...x,
+        fileUrl: toAbsoluteUrl(x.fileUrl),
+      })),
+    });
   } catch (e) {
-    if (process.env.NODE_ENV !== 'production')
-      console.error('GET /specialists/certifications', e)
-    return res.status(500).json({ ok: false, error: 'server_error' })
+    if (process.env.NODE_ENV !== 'production') console.error('GET /specialists/certifications', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
   }
-})
+});
 
 /* ─────────────────────────────────────────────────────────────────────
  * RUTA PÚBLICA AL FINAL: GET /specialists/:id
  * ────────────────────────────────────────────────────────────────────*/
 
-/**
- * GET /specialists/:id?lat=-31.4&lng=-64.18
- */
 router.get('/:id', async (req, res) => {
   try {
-    const id = req.params.id
-    const lat = req.query.lat ? Number(req.query.lat) : undefined
-    const lng = req.query.lng ? Number(req.query.lng) : undefined
+    const id = req.params.id;
+    const lat = req.query.lat ? Number(req.query.lat) : undefined;
+    const lng = req.query.lng ? Number(req.query.lng) : undefined;
 
-    // Perfil base (por id de specialist, NO por userId)
     const spec = await prisma.specialistProfile.findUnique({
       where: { id },
       select: {
@@ -921,6 +1003,7 @@ router.get('/:id', async (req, res) => {
         userId: true,
         bio: true,
         visitPrice: true,
+        pricingLabel: true, // ✅ NUEVO
         currency: true,
         availableNow: true,
         kycStatus: true,
@@ -939,17 +1022,17 @@ router.get('/:id', async (req, res) => {
           },
         },
       },
-    })
-    if (!spec) return res.status(404).json({ ok: false, error: 'Not found' })
+    });
+    if (!spec) return res.status(404).json({ ok: false, error: 'Not found' });
 
-    // Usuario (nombre)
+    const safeAvailableNow = spec.kycStatus === 'VERIFIED' ? !!spec.availableNow : false;
+
     const user = await prisma.user.findUnique({
       where: { id: spec.userId },
       select: { name: true, surname: true },
-    })
+    });
 
-    // Distancia opcional
-    let distanceKm: number | undefined
+    let distanceKm: number | undefined;
     if (
       lat != null &&
       lng != null &&
@@ -958,36 +1041,34 @@ router.get('/:id', async (req, res) => {
       !Number.isNaN(lat) &&
       !Number.isNaN(lng)
     ) {
-      const toRad = (x: number) => (x * Math.PI) / 180
-      const dLat = toRad(spec.centerLat - lat)
-      const dLng = toRad(spec.centerLng - lng)
+      const toRad = (x: number) => (x * Math.PI) / 180;
+      const dLat = toRad(spec.centerLat - lat);
+      const dLng = toRad(spec.centerLng - lng);
       const a =
         Math.sin(dLat / 2) ** 2 +
-        Math.cos(toRad(lat)) *
-          Math.cos(toRad(spec.centerLat)) *
-          Math.sin(dLng / 2) ** 2
-      distanceKm = 2 * 6371 * Math.asin(Math.sqrt(a))
+        Math.cos(toRad(lat)) * Math.cos(toRad(spec.centerLat)) * Math.sin(dLng / 2) ** 2;
+      distanceKm = 2 * 6371 * Math.asin(Math.sqrt(a));
     }
 
-    // Categorías → servicios
-    const categoryIds = spec.specialties.map((s) => s.categoryId)
+    // enabled global (tiene al menos 1 cert APPROVED)
+    const hasApprovedCert = await prisma.specialistCertification.findFirst({
+      where: { specialistId: spec.id, status: 'APPROVED' },
+      select: { id: true },
+    });
+
+    const categoryIds = spec.specialties.map((s) => s.categoryId);
     const servicesRows = categoryIds.length
       ? await prisma.service.findMany({
           where: { categoryId: { in: categoryIds } },
           select: { id: true, name: true },
         })
-      : []
+      : [];
 
-    const servicesMap = new Map<string, { id: string; name: string }>()
-    for (const s of servicesRows) servicesMap.set(s.id, s)
-    const services = Array.from(servicesMap.values())
+    const services = servicesRows;
+    const defaultServiceId: string | null = null;
 
-    const defaultServiceId: string | null = null
+    const { done, canceled } = await getSpecialistStatsById(id);
 
-    // ⭐ Stats reales usando helper compartido
-    const { done, canceled } = await getSpecialistStatsById(id)
-
-    // ⭐ Reseñas reales del especialista
     const ratingRows = await prisma.rating.findMany({
       where: {
         order: {
@@ -1007,22 +1088,19 @@ router.get('/:id', async (req, res) => {
         score: true,
         comment: true,
         createdAt: true,
-        reviewer: {
-          select: { name: true, surname: true },
-        },
+        reviewer: { select: { name: true, surname: true } },
       },
       orderBy: { createdAt: 'desc' },
-    })
+    });
 
     const reviews = ratingRows.map((r) => ({
       id: r.orderId,
       rating: r.score,
       comment: r.comment ?? null,
-      author:
-        `${r.reviewer?.name ?? ''} ${r.reviewer?.surname ?? ''}`.trim() || 'Usuario',
+      author: `${r.reviewer?.name ?? ''} ${r.reviewer?.surname ?? ''}`.trim() || 'Usuario',
       avatarUrl: null,
       createdAt: r.createdAt.toISOString(),
-    }))
+    }));
 
     return res.json({
       id: spec.id,
@@ -1031,9 +1109,10 @@ router.get('/:id', async (req, res) => {
       ratingAvg: spec.ratingAvg,
       ratingCount: spec.ratingCount,
       badge: spec.badge,
-      enabled: spec.kycStatus === 'VERIFIED',
-      availableNow: spec.availableNow,
+      enabled: Boolean(hasApprovedCert),
+      availableNow: safeAvailableNow,
       visitPrice: spec.visitPrice,
+      pricingLabel: spec.pricingLabel ?? null, // ✅ NUEVO
       currency: spec.currency,
       bio: spec.bio,
       centerLat: spec.centerLat,
@@ -1050,20 +1129,11 @@ router.get('/:id', async (req, res) => {
       reviews,
       defaultServiceId,
       services,
-    })
+    });
   } catch (e) {
-    if (process.env.NODE_ENV !== 'production')
-      console.error('GET /specialists/:id', e)
-    return res.status(500).json({ ok: false, error: 'server_error' })
+    if (process.env.NODE_ENV !== 'production') console.error('GET /specialists/:id', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
   }
-})
+});
 
-export const specialistsRoutes = router
-
-
-
-
-
-
-
-
+export const specialistsRoutes = router;

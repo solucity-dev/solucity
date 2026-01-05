@@ -1,10 +1,10 @@
-import 'express'
+import 'express';
 
 declare module 'express-serve-static-core' {
   interface Request {
     user?: {
-      id: string
-      role: 'CUSTOMER' | 'SPECIALIST' | 'ADMIN'
-    }
+      id: string;
+      role: 'CUSTOMER' | 'SPECIALIST' | 'ADMIN';
+    };
   }
 }

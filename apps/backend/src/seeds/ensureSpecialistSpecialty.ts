@@ -1,15 +1,16 @@
 // apps/backend/src/seeds/ensureSpecialistSpecialty.ts
-import bcrypt from 'bcryptjs'
-import { prisma } from '../lib/prisma'
+import bcrypt from 'bcryptjs';
+
+import { prisma } from '../lib/prisma';
 
 type EnsureArgs = {
-  specialistEmail: string
-  categorySlug: string
-  createIfMissing?: boolean
-  name?: string
-  phone?: string
-  passwordPlain?: string // solo si hay que crearlo
-}
+  specialistEmail: string;
+  categorySlug: string;
+  createIfMissing?: boolean;
+  name?: string;
+  phone?: string;
+  passwordPlain?: string; // solo si hay que crearlo
+};
 
 export async function ensureSpecialistSpecialty(args: EnsureArgs) {
   const {
@@ -19,18 +20,18 @@ export async function ensureSpecialistSpecialty(args: EnsureArgs) {
     name = 'Demo Especialista',
     phone = null as string | null,
     passwordPlain = 'Solucity123',
-  } = args
+  } = args;
 
   // 1) Asegurar categoría
-  const category = await prisma.serviceCategory.findUnique({ where: { slug: categorySlug } })
-  if (!category) throw new Error(`No existe ServiceCategory.slug = ${categorySlug}`)
+  const category = await prisma.serviceCategory.findUnique({ where: { slug: categorySlug } });
+  if (!category) throw new Error(`No existe ServiceCategory.slug = ${categorySlug}`);
 
   // 2) Buscar user por email
-  let user = await prisma.user.findUnique({ where: { email: specialistEmail } })
+  let user = await prisma.user.findUnique({ where: { email: specialistEmail } });
 
   // 3) Crear si falta
   if (!user && createIfMissing) {
-    const passwordHash = await bcrypt.hash(passwordPlain, 10)
+    const passwordHash = await bcrypt.hash(passwordPlain, 10);
     user = await prisma.user.create({
       data: {
         email: specialistEmail,
@@ -39,19 +40,19 @@ export async function ensureSpecialistSpecialty(args: EnsureArgs) {
         name,
         phone,
       },
-    })
-    console.log(`✔ User SPECIALIST creado: ${specialistEmail}`)
+    });
+    console.log(`✔ User SPECIALIST creado: ${specialistEmail}`);
   }
 
   if (!user) {
-    throw new Error(`No existe SPECIALIST ${specialistEmail}`)
+    throw new Error(`No existe SPECIALIST ${specialistEmail}`);
   }
   if (user.role !== 'SPECIALIST') {
-    throw new Error(`El usuario ${specialistEmail} no es SPECIALIST (role=${user.role})`)
+    throw new Error(`El usuario ${specialistEmail} no es SPECIALIST (role=${user.role})`);
   }
 
   // 4) Asegurar SpecialistProfile
-  let sp = await prisma.specialistProfile.findUnique({ where: { userId: user.id } })
+  let sp = await prisma.specialistProfile.findUnique({ where: { userId: user.id } });
   if (!sp) {
     sp = await prisma.specialistProfile.create({
       data: {
@@ -62,8 +63,8 @@ export async function ensureSpecialistSpecialty(args: EnsureArgs) {
         availableNow: true,
         kycStatus: 'UNVERIFIED',
       },
-    })
-    console.log(`✔ SpecialistProfile creado: ${specialistEmail}`)
+    });
+    console.log(`✔ SpecialistProfile creado: ${specialistEmail}`);
   }
 
   // 5) Vincular a la categoría (SpecialistSpecialty)
@@ -76,7 +77,6 @@ export async function ensureSpecialistSpecialty(args: EnsureArgs) {
       specialistId: sp.id,
       categoryId: category.id,
     },
-  })
-  console.log(`✔ Vinculado ${specialistEmail} ↔ ${categorySlug}`)
+  });
+  console.log(`✔ Vinculado ${specialistEmail} ↔ ${categorySlug}`);
 }
-

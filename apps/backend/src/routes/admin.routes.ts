@@ -4,8 +4,6 @@ import jwt, { type Secret, type SignOptions } from 'jsonwebtoken';
 import { z } from 'zod';
 
 import { prisma } from '../lib/prisma';
-import { auth } from '../middlewares/auth';
-import { requireAdmin } from '../middlewares/requireAdmin';
 import { notifyCertificationStatus } from '../services/notifyCertification';
 import { notifyKycStatus } from '../services/notifyKyc';
 import { sendExpoPush } from '../services/pushExpo';
@@ -76,9 +74,6 @@ adminRouter.post('/auth/login', async (req, res) => {
 
   return res.json({ token });
 });
-
-// 🔐 Todo lo admin (menos login) requiere auth + admin
-adminRouter.use(auth, requireAdmin);
 
 /**
  * GET /admin/metrics

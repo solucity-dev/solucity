@@ -71,18 +71,38 @@ function slugify(name: string) {
 async function upsertCategories() {
   for (let i = 0; i < groups.length; i++) {
     const g = groups[i];
+
     const group = await prisma.serviceCategoryGroup.upsert({
       where: { slug: g.slug },
-      update: { sortOrder: i + 1, isActive: true },
-      create: { name: g.name, slug: g.slug, sortOrder: i + 1, isActive: true },
+      update: {
+        name: g.name,
+        sortOrder: i + 1,
+        isActive: true,
+      },
+      create: {
+        name: g.name,
+        slug: g.slug,
+        sortOrder: i + 1,
+        isActive: true,
+      },
     });
 
     for (const r of g.rubros) {
       const slug = slugify(r);
+
       await prisma.serviceCategory.upsert({
         where: { slug },
-        update: { isActive: true },
-        create: { name: r, slug, groupId: group.id, isActive: true },
+        update: {
+          name: r,
+          groupId: group.id, // por si antes estaba mal asociado
+          isActive: true,
+        },
+        create: {
+          name: r,
+          slug,
+          groupId: group.id,
+          isActive: true,
+        },
       });
     }
   }
@@ -91,7 +111,8 @@ async function upsertCategories() {
 async function createDemoUsers() {
   // Cliente demo
   const userCustomer = await prisma.user.upsert({
-    where: { phone: '+5493511111111' },
+    // ⚠️ Mejor por email (phone es opcional y puede ser null en prod)
+    where: { email: 'cliente.demo@solucity.dev' },
     update: {},
     create: {
       phone: '+5493511111111',
@@ -110,24 +131,53 @@ async function createDemoUsers() {
     create: { userId: userCustomer.id },
   });
 
-  // Dirección demo
-  const addr = await prisma.address.create({
-    data: {
-      formatted: 'Bv. San Juan 450, Córdoba',
-      lat: -31.4167,
-      lng: -64.1833,
-      placeId: 'demo_place',
-    },
-  });
+  // Dirección demo (⚠️ idempotente: buscamos por formatted+lat+lng)
+  const addr = await prisma.address
+    .upsert({
+      where: {
+        // No hay unique compuesto en Address, así que hacemos “findFirst + create”
+        // => simulamos con upsert manual:
+        id: await (async () => {
+          const existing = await prisma.address.findFirst({
+            where: { formatted: 'Bv. San Juan 450, Córdoba', lat: -31.4167, lng: -64.1833 },
+            select: { id: true },
+          });
+          return existing?.id ?? '___NO_ID___';
+        })(),
+      },
+      update: {},
+      create: {
+        formatted: 'Bv. San Juan 450, Córdoba',
+        lat: -31.4167,
+        lng: -64.1833,
+        placeId: 'demo_place',
+      },
+    })
+    .catch(async () => {
+      // Si el “upsert manual” cae por id inexistente, creamos o reutilizamos
+      const existing = await prisma.address.findFirst({
+        where: { formatted: 'Bv. San Juan 450, Córdoba', lat: -31.4167, lng: -64.1833 },
+      });
+      if (existing) return existing;
+
+      return prisma.address.create({
+        data: {
+          formatted: 'Bv. San Juan 450, Córdoba',
+          lat: -31.4167,
+          lng: -64.1833,
+          placeId: 'demo_place',
+        },
+      });
+    });
 
   await prisma.customerProfile.update({
     where: { id: customer.id },
     data: { defaultAddressId: addr.id },
   });
 
-  // Especialista demo (único, lo dejamos para compat y pruebas)
+  // Especialista demo
   const userSpec = await prisma.user.upsert({
-    where: { phone: '+5493512222222' },
+    where: { email: 'especialista.demo@solucity.dev' },
     update: {},
     create: {
       phone: '+5493512222222',
@@ -166,52 +216,63 @@ async function createDemoUsers() {
     },
   });
 
-  // Rubro Electricista
   const electricista = await prisma.serviceCategory.findUnique({
-    where: { slug: 'electricidad' }, // 👈 ojo: ahora el slug correcto de tu seed es "electricidad"
+    where: { slug: 'electricidad' },
   });
 
-  if (electricista) {
-    await prisma.specialistSpecialty.upsert({
-      where: {
-        specialistId_categoryId: {
-          specialistId: specialist.id,
-          categoryId: electricista.id,
-        },
-      },
-      update: {},
-      create: { specialistId: specialist.id, categoryId: electricista.id },
-    });
+  if (!electricista) {
+    console.warn("⚠️ No se encontró el rubro 'electricidad' (revisar slug en seed).");
+    return;
+  }
 
-    // Suscripción demo
-    await prisma.subscription.upsert({
-      where: { specialistId: specialist.id },
-      update: {},
-      create: {
+  await prisma.specialistSpecialty.upsert({
+    where: {
+      specialistId_categoryId: {
         specialistId: specialist.id,
-        status: SubscriptionStatus.TRIALING,
-        currentPeriodStart: new Date(),
-        currentPeriodEnd: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
-        trialEnd: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
-      },
-    });
-
-    // Servicio + orden demo
-    const service = await prisma.service.upsert({
-      where: {
-        categoryId_name: { categoryId: electricista.id, name: 'Visita técnica' },
-      },
-      update: {},
-      create: {
         categoryId: electricista.id,
-        name: 'Visita técnica',
-        description: 'Diagnóstico y presupuesto en sitio',
-        basePoints: 10,
-        slaHours: 24,
-        basePrice: 15000,
       },
-    });
+    },
+    update: {},
+    create: { specialistId: specialist.id, categoryId: electricista.id },
+  });
 
+  await prisma.subscription.upsert({
+    where: { specialistId: specialist.id },
+    update: {},
+    create: {
+      specialistId: specialist.id,
+      status: SubscriptionStatus.TRIALING,
+      currentPeriodStart: new Date(),
+      currentPeriodEnd: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
+      trialEnd: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
+    },
+  });
+
+  const service = await prisma.service.upsert({
+    where: { categoryId_name: { categoryId: electricista.id, name: 'Visita técnica' } },
+    update: {},
+    create: {
+      categoryId: electricista.id,
+      name: 'Visita técnica',
+      description: 'Diagnóstico y presupuesto en sitio',
+      basePoints: 10,
+      slaHours: 24,
+      basePrice: 15000,
+    },
+  });
+
+  // ⚠️ Evitar crear órdenes infinitas: check simple por description
+  const existingOrder = await prisma.serviceOrder.findFirst({
+    where: {
+      customerId: customer.id,
+      specialistId: specialist.id,
+      serviceId: service.id,
+      description: 'Salta el disyuntor al encender el microondas.',
+    },
+    select: { id: true },
+  });
+
+  if (!existingOrder) {
     const order = await prisma.serviceOrder.create({
       data: {
         customerId: customer.id,
@@ -236,8 +297,6 @@ async function createDemoUsers() {
         payload: { note: 'Aceptada por especialista demo' },
       },
     });
-  } else {
-    console.warn("⚠️ No se encontró el rubro 'electricidad' (revisar slug en seed).");
   }
 }
 
@@ -245,9 +304,7 @@ async function createDemoUsers() {
  * ========= NUEVO: especialistas demo para TODOS los rubros =========
  */
 async function createDemoSpecialists() {
-  const allCats = await prisma.serviceCategory.findMany({
-    include: { group: true },
-  });
+  const allCats = await prisma.serviceCategory.findMany({ include: { group: true } });
   if (!allCats.length) {
     console.warn('⚠️ Aún no hay categorías. Llamá a upsertCategories() antes.');
     return;
@@ -260,7 +317,6 @@ async function createDemoSpecialists() {
     for (let i = 0; i < 2; i++) {
       const email = `spec.${cat.slug}.${i + 1}@demo.solucity.dev`;
 
-      // 👇 upsert por email (idempotente) y sin phone
       const user = await prisma.user.upsert({
         where: { email },
         update: {},
@@ -273,7 +329,6 @@ async function createDemoSpecialists() {
         },
       });
 
-      // Si ya tenía perfil, seguimos con el siguiente
       const existingSpec = await prisma.specialistProfile.findUnique({
         where: { userId: user.id },
       });
@@ -336,21 +391,47 @@ async function createDemoSpecialists() {
 }
 
 /**
- * ========= MAIN =========
- * Está al final del archivo (acá 👇). Acá llamás lo necesario.
+ * ✅ EXPORT para producción (endpoint /admin/seed)
  */
-async function main() {
+export async function runSeed() {
+  const seedDemos = String(process.env.SEED_DEMOS ?? '').toLowerCase() === 'true';
+
+  // Camino A: siempre catálogo
   await upsertCategories();
-  await createDemoUsers();
-  await createDemoSpecialists(); // 👈 importante
-  console.log('✅ Seed completado');
+
+  // Solo si querés demos explícitamente
+  if (seedDemos) {
+    await createDemoUsers();
+    await createDemoSpecialists();
+  }
+
+  const [groupsCount, catsCount, usersCount] = await Promise.all([
+    prisma.serviceCategoryGroup.count(),
+    prisma.serviceCategory.count(),
+    prisma.user.count(),
+  ]);
+
+  return {
+    seedDemos,
+    counts: { groups: groupsCount, categories: catsCount, users: usersCount },
+  };
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+/**
+ * CLI compat: pnpm prisma db seed
+ */
+async function main() {
+  const result = await runSeed();
+  console.log('✅ Seed completado:', result);
+}
+
+if (require.main === module) {
+  main()
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}

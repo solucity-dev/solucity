@@ -23,6 +23,7 @@ import { orderAttachments } from './routes/orderAttachments.routes';
 import { orders, runAutoCancelExpiredPendingOrders } from './routes/orders.routes';
 import { profileRoutes } from './routes/profile.routes';
 import registerRoutes from './routes/register.routes';
+import seedRoutes from './routes/seed.routes';
 import specialistAvatarRoutes from './routes/specialistAvatar.routes';
 import { specialistsRoutes } from './routes/specialists.routes';
 import { subscriptionsRouter } from './routes/subscriptions';
@@ -119,6 +120,7 @@ app.use('/notifications', notificationsRouter);
 app.use('/subscriptions', subscriptionsRouter);
 app.use('/customers', customerLocationRoutes);
 app.use('/customers', customersMeRoutes);
+app.use('/admin', seedRoutes);
 app.use('/admin', adminRoutes);
 
 // 🔹 NUEVO: subida de adjuntos de órdenes

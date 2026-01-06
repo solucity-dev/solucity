@@ -1,5 +1,6 @@
 // apps/backend/src/lib/mailer.ts
 import nodemailer, { type Transporter } from 'nodemailer';
+
 import type SMTPTransport from 'nodemailer/lib/smtp-transport';
 import type StreamTransport from 'nodemailer/lib/stream-transport';
 
@@ -60,7 +61,7 @@ export async function sendOtpEmail(to: string, code: string) {
 
   if (!hasSmtpCreds) {
     // Modo “fake”/stream: no se envía email, solo avisamos en consola
-    console.log('📨 [FAKE SMTP] Email simulado ->', { to, subject });
+    console.log('📨 [FAKE SMTP] Email simulado ->', { to, subject, code });
   } else {
     console.log('📨 Email enviado:', info.messageId);
   }

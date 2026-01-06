@@ -18,17 +18,25 @@ function httpError(message: string, status = 400) {
 
 export async function startEmailRegistration(email: string) {
   const normalized = email.trim().toLowerCase();
+
   const exists = await prisma.user.findUnique({ where: { email: normalized } });
   if (exists) throw httpError('email_in_use', 409);
 
   const code = generateOtp();
   const expiresAt = addMinutes(new Date(), OTP_MINUTES);
 
-  await prisma.emailOtp.create({ data: { email: normalized, code, expiresAt } });
+  await prisma.emailOtp.create({
+    data: { email: normalized, code, expiresAt },
+  });
+
   await sendOtpEmail(normalized, code);
-  if (process.env.NODE_ENV !== 'production') {
-    console.log(`🔐 [DEV OTP] ${normalized} -> ${code} (expira ${expiresAt.toISOString()})`);
+
+  // ✅ Logs controlados por flag para poder testear en Render
+  const debugOtp = process.env.DEBUG_OTP === 'true';
+  if (debugOtp || process.env.NODE_ENV !== 'production') {
+    console.log(`🔐 [OTP] ${normalized} -> ${code} (expira ${expiresAt.toISOString()})`);
   }
+
   return { otpId: 'ok', expiresAt };
 }
 
@@ -46,16 +54,28 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
   const code = args.code.trim();
 
   // OTP checks
-  const otp = await prisma.emailOtp.findFirst({ where: { email }, orderBy: { createdAt: 'desc' } });
+  const otp = await prisma.emailOtp.findFirst({
+    where: { email },
+    orderBy: { createdAt: 'desc' },
+  });
+
   if (!otp) throw httpError('otp_not_found', 400);
   if (otp.usedAt) throw httpError('otp_already_used', 400);
   if (otp.attempts >= OTP_MAX_ATTEMPTS) throw httpError('otp_blocked', 429);
   if (isAfter(new Date(), otp.expiresAt)) throw httpError('otp_expired', 400);
+
   if (otp.code !== code) {
-    await prisma.emailOtp.update({ where: { id: otp.id }, data: { attempts: { increment: 1 } } });
+    await prisma.emailOtp.update({
+      where: { id: otp.id },
+      data: { attempts: { increment: 1 } },
+    });
     throw httpError('otp_invalid', 400);
   }
-  await prisma.emailOtp.update({ where: { id: otp.id }, data: { usedAt: new Date() } });
+
+  await prisma.emailOtp.update({
+    where: { id: otp.id },
+    data: { usedAt: new Date() },
+  });
 
   // password
   if (!args.password || args.password.length < 8) throw httpError('weak_password', 400);
@@ -65,13 +85,13 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
     where: { OR: [{ email }, ...(args.phone ? [{ phone: args.phone }] : [])] },
     select: { email: true, phone: true },
   });
+
   if (existing?.email?.toLowerCase() === email) throw httpError('email_in_use', 409);
   if (args.phone && existing?.phone === args.phone) throw httpError('phone_in_use', 409);
 
   const passwordHash = await bcrypt.hash(args.password, 10);
 
   try {
-    // Crear según role
     const user = await prisma.user.create({
       data: {
         email,
@@ -85,6 +105,7 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
       },
       select: { id: true, email: true, role: true },
     });
+
     return user;
   } catch (e: any) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {

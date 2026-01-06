@@ -1,3 +1,4 @@
+//apps/backend/src/lib/otp.ts
 export function generateOtp(length = 6): string {
   const digits = '0123456789';
   let out = '';

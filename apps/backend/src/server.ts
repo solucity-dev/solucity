@@ -75,8 +75,7 @@ app.use(
 app.options('*', cors({ origin: ALLOWED_ORIGINS.length ? ALLOWED_ORIGINS : true }));
 
 /** ================== Static uploads (DEV/PROD) ================== **/
-const uploadsPath = path.resolve(__dirname, '..', 'uploads');
-// __dirname = apps/backend/src
+const uploadsPath = path.resolve(process.cwd(), 'uploads');
 // '..' = apps/backend
 // 'uploads' = apps/backend/uploads  ✅ donde debería estar guardando multer
 

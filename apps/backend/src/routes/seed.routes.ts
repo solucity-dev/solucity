@@ -1,6 +1,10 @@
+// apps/backend/src/routes/seed.routes.ts
 import { Router } from 'express';
 
 const router = Router();
+
+// ✅ ping rápido para probar en navegador
+router.get('/seed', (_req, res) => res.json({ ok: true, route: '/admin/seed' }));
 
 router.post('/seed', async (req, res) => {
   const token = String(req.header('x-seed-token') ?? '').trim();
@@ -9,20 +13,13 @@ router.post('/seed', async (req, res) => {
   if (!expected) {
     return res.status(500).json({ ok: false, error: 'seed_token_not_configured' });
   }
-
   if (!token || token !== expected) {
     return res.status(401).json({ ok: false, error: 'unauthorized' });
   }
 
-  try {
-    // 👇 IMPORTANTE: extensión .js por NodeNext / dist
-    const { runSeed } = await import('../../prisma/seed.js');
-    const result = await runSeed();
-    return res.json({ ok: true, result });
-  } catch (e) {
-    console.error('[seed] error', e);
-    return res.status(500).json({ ok: false, error: 'seed_failed' });
-  }
+  const { runSeed } = await import('../../prisma/seed.js');
+  const result = await runSeed();
+  return res.json({ ok: true, result });
 });
 
 export default router;

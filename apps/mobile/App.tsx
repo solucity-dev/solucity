@@ -11,13 +11,10 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from './src/auth/AuthProvider';
 import { queryClient } from './src/lib/reactQuery';
-import RootNavigator from './src/navigation/RootNavigator';
-
-// React Query
-
-// 🔔 provider de notificaciones
-
 import { flushPendingNav, navigationRef } from './src/navigation/navigationRef';
+import RootNavigator from './src/navigation/RootNavigator';
+// React Query
+// 🔔 provider de notificaciones
 import { NotificationsProvider } from './src/notifications/NotificationsProvider';
 
 // ✅ NUEVO: navigationRef global

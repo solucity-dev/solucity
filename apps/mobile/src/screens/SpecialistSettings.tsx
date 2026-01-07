@@ -18,8 +18,7 @@ import { useAuth } from '../auth/AuthProvider';
 
 export default function SpecialistSettings() {
   const insets = useSafeAreaInsets();
-  const { signOut } = useAuth();
-
+  const { logout } = useAuth();
   // Campos de ejemplo (puedes conectarlos a tu API si quieres guardado instantáneo)
   const [fullname, setFullname] = useState('');
   const [email, setEmail] = useState('');
@@ -40,7 +39,7 @@ export default function SpecialistSettings() {
   };
 
   const onLogout = async () => {
-    await signOut();
+    await logout();
   };
 
   return (

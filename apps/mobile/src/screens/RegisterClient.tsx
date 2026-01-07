@@ -52,7 +52,7 @@ function msgFromZod(details?: ZodDetails): string | null {
 export default function RegisterClient() {
   const nav = useNavigation();
   const insets = useSafeAreaInsets();
-  const { signIn } = useAuth();
+  const { login } = useAuth();
 
   const [step, setStep] = useState<Step>(1);
   const [fullName, setFullName] = useState('');
@@ -152,7 +152,7 @@ export default function RegisterClient() {
 
       if (res.data?.ok && res.data.token) {
         // 👉 Esto setea axios + AsyncStorage y dispara re-render del RootNavigator → Main
-        await signIn(res.data.token);
+        await login(res.data.token);
         return;
       }
       Alert.alert('No se pudo crear la cuenta', 'Intentá nuevamente.');

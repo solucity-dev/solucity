@@ -10,6 +10,13 @@ import { prisma } from '../lib/prisma';
 const OTP_MINUTES = 10;
 const OTP_MAX_ATTEMPTS = 5;
 
+/**
+ * Rate limit simple por email (sin Redis):
+ * - Máx 3 códigos en 10 minutos por email
+ */
+const OTP_RATE_WINDOW_MINUTES = 10;
+const OTP_RATE_MAX_PER_WINDOW = 3;
+
 function httpError(message: string, status = 400) {
   const err: any = new Error(message);
   err.status = status;
@@ -19,9 +26,31 @@ function httpError(message: string, status = 400) {
 export async function startEmailRegistration(email: string) {
   const normalized = email.trim().toLowerCase();
 
+  // 1) No permitir si ya existe usuario
   const exists = await prisma.user.findUnique({ where: { email: normalized } });
   if (exists) throw httpError('email_in_use', 409);
 
+  // 2) Limpieza de OTP expirados de ese email (higiene)
+  await prisma.emailOtp.deleteMany({
+    where: { email: normalized, expiresAt: { lt: new Date() } },
+  });
+
+  // 3) Rate limit por email (cuántos OTP emití en los últimos X minutos)
+  const since = addMinutes(new Date(), -OTP_RATE_WINDOW_MINUTES);
+  const sentCount = await prisma.emailOtp.count({
+    where: { email: normalized, createdAt: { gte: since } },
+  });
+  if (sentCount >= OTP_RATE_MAX_PER_WINDOW) {
+    throw httpError('too_many_requests', 429);
+  }
+
+  // 4) Invalidar OTPs previos no usados (evita múltiples OTP válidos a la vez)
+  await prisma.emailOtp.updateMany({
+    where: { email: normalized, usedAt: null },
+    data: { usedAt: new Date() },
+  });
+
+  // 5) Generar y guardar OTP
   const code = generateOtp();
   const expiresAt = addMinutes(new Date(), OTP_MINUTES);
 
@@ -29,9 +58,10 @@ export async function startEmailRegistration(email: string) {
     data: { email: normalized, code, expiresAt },
   });
 
+  // 6) Enviar email (SMTP real si hay credenciales, fake si no)
   await sendOtpEmail(normalized, code);
 
-  // ✅ Logs controlados por flag para poder testear en Render
+  // 7) Log controlado (Render)
   const debugOtp = process.env.DEBUG_OTP === 'true';
   if (debugOtp || process.env.NODE_ENV !== 'production') {
     console.log(`🔐 [OTP] ${normalized} -> ${code} (expira ${expiresAt.toISOString()})`);
@@ -72,6 +102,7 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
     throw httpError('otp_invalid', 400);
   }
 
+  // Marcar OTP como usado
   await prisma.emailOtp.update({
     where: { id: otp.id },
     data: { usedAt: new Date() },

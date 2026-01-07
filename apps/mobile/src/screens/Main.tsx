@@ -1,12 +1,12 @@
 // apps/mobile/src/screens/Main.tsx
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { AuthContext } from '../contexts/AuthContext';
+import { useAuth } from '../auth/AuthProvider';
 import { api } from '../lib/api';
 
 export default function Main() {
-  const { user, logout } = React.useContext(AuthContext);
+  const { user, logout } = useAuth();
   const [meJson, setMeJson] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 

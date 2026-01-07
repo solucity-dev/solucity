@@ -25,7 +25,7 @@ type LoginResponse = {
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
-  const nav = useNavigation();
+  const nav = useNavigation<any>(); // 👈 para poder navegar sin tipado del stack
   const { login } = useAuth();
 
   const [email, setEmail] = useState('');
@@ -44,8 +44,7 @@ export default function LoginScreen() {
 
       if (res.data?.ok && res.data.token) {
         await login(res.data.token);
-
-        // No navegamos manual: RootNavigator detecta token y dibuja Main
+        // RootNavigator detecta token y dibuja Main/MainSpecialist
         return;
       }
       Alert.alert('No se pudo iniciar sesión', 'Verificá tus credenciales e intentá de nuevo.');
@@ -69,6 +68,12 @@ export default function LoginScreen() {
 
   const goBack = () => nav.goBack();
 
+  const onForgotPassword = () => {
+    // Opcional: si ya escribió email, lo mandamos precargado
+    const prefill = email.trim().toLowerCase();
+    nav.navigate('ForgotPassword', prefill ? { email: prefill } : undefined);
+  };
+
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
@@ -88,6 +93,7 @@ export default function LoginScreen() {
             >
               <Text style={{ color: '#E9FEFF', fontSize: 30, lineHeight: 30 }}>‹</Text>
             </Pressable>
+
             <Text style={{ color: '#fff', fontSize: 26, fontWeight: '800', marginTop: 8 }}>
               Iniciar sesión
             </Text>
@@ -114,6 +120,7 @@ export default function LoginScreen() {
               autoCapitalize="none"
               autoComplete="email"
             />
+
             <LabeledInput
               label="Contraseña"
               placeholder="Mínimo 8 caracteres"
@@ -133,6 +140,14 @@ export default function LoginScreen() {
               ]}
             >
               <Text style={styles.primaryText}>{loading ? 'Ingresando...' : 'Ingresar'}</Text>
+            </Pressable>
+
+            {/* 👇 Link de recuperación */}
+            <Pressable
+              onPress={onForgotPassword}
+              style={({ pressed }) => [styles.forgotWrap, pressed && { opacity: 0.85 }]}
+            >
+              <Text style={styles.forgotText}>¿Olvidaste tu contraseña?</Text>
             </Pressable>
           </View>
 
@@ -181,4 +196,15 @@ const styles = StyleSheet.create({
   },
   btnDisabled: { opacity: 0.5 },
   primaryText: { color: '#0B6B76', fontWeight: '800', letterSpacing: 0.5, fontSize: 16 },
+
+  forgotWrap: {
+    alignSelf: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginTop: 2,
+  },
+  forgotText: {
+    color: '#E9FEFF',
+    fontWeight: '800',
+  },
 });

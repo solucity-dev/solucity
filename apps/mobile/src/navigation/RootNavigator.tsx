@@ -3,20 +3,22 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 
+import ClientTabs from './ClientTabs';
+import { setNavRole } from './navigationRef';
+import SpecialistTabs from './SpecialistTabs';
 import { useAuth } from '../auth/AuthProvider';
 import ChooseRole from '../screens/ChooseRole';
+import ForgotPassword from '../screens/ForgotPassword';
 import KycStatusScreen from '../screens/KycStatusScreen';
 import KycUploadScreen from '../screens/KycUploadScreen';
 import LoginScreen from '../screens/LoginScreen';
 import Onboarding from '../screens/Onboarding';
 import RegisterClient from '../screens/RegisterClient';
 import RegisterSpecialist from '../screens/RegisterSpecialist';
+import ResetPassword from '../screens/ResetPassword';
 import SpecialistWizard from '../screens/SpecialistWizard';
 import Splash from '../screens/Splash';
 import Welcome from '../screens/Welcome';
-import ClientTabs from './ClientTabs';
-import SpecialistTabs from './SpecialistTabs';
-import { setNavRole } from './navigationRef';
 
 const Stack = createNativeStackNavigator();
 const ONBOARDING_KEY = 'onboarding:seen';
@@ -103,6 +105,10 @@ export default function RootNavigator() {
       />
 
       <Stack.Screen name="Login" component={LoginScreen} />
+
+      {/* ✅ Recuperación de contraseña */}
+      <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
+      <Stack.Screen name="ResetPassword" component={ResetPassword} />
 
       <Stack.Screen
         name="ChooseRole"

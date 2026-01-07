@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { AxiosRequestHeaders, InternalAxiosRequestConfig } from 'axios';
 import axios from 'axios';
 import Constants from 'expo-constants';
+
+import type { AxiosRequestHeaders, InternalAxiosRequestConfig } from 'axios';
 
 const fromExtra = (Constants.expoConfig?.extra as { API_URL?: string })?.API_URL;
 const fromEnv = process.env.EXPO_PUBLIC_API_URL;

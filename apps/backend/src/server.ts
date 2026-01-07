@@ -21,6 +21,7 @@ import meRoutes from './routes/me.routes';
 import { notificationsRouter } from './routes/notifications';
 import { orderAttachments } from './routes/orderAttachments.routes';
 import { orders, runAutoCancelExpiredPendingOrders } from './routes/orders.routes';
+import passwordRoutes from './routes/password.routes';
 import { profileRoutes } from './routes/profile.routes';
 import registerRoutes from './routes/register.routes';
 import seedRoutes from './routes/seed.routes';
@@ -121,6 +122,7 @@ app.use('/customers', customerLocationRoutes);
 app.use('/customers', customersMeRoutes);
 app.use('/admin', seedRoutes);
 app.use('/admin', adminRoutes);
+app.use('/auth', passwordRoutes);
 
 // 🔹 NUEVO: subida de adjuntos de órdenes
 app.use(orderAttachments);

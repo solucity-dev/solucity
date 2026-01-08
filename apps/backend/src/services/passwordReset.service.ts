@@ -1,4 +1,4 @@
-//apps/backend/src/services/passwordReset.service.ts
+// apps/backend/src/services/passwordReset.service.ts
 import bcrypt from 'bcryptjs';
 import { addMinutes, isAfter } from 'date-fns';
 
@@ -40,7 +40,12 @@ export async function startPasswordReset(email: string) {
     data: { email: normalized, code, expiresAt },
   });
 
-  await sendOtpEmail(normalized, code);
+  // ✅ IMPORTANT: no romper flujo si falla el proveedor de email
+  try {
+    await sendOtpEmail(normalized, code);
+  } catch (e) {
+    console.error('[MAIL][OTP] send failed', { to: normalized, err: e });
+  }
 
   const debugOtp = process.env.DEBUG_OTP === 'true';
   if (debugOtp || process.env.NODE_ENV !== 'production') {
@@ -100,9 +105,10 @@ export async function verifyPasswordReset(args: VerifyResetArgs) {
     data: { passwordHash },
   });
 
-  // ✅ Recomendado: invalidar refresh tokens (si los usás)
-  // Si tu modelo se llama RefreshToken y tiene userId:
-  // await prisma.refreshToken.deleteMany({ where: { userId: user.id } });
+  // ✅ INVALIDAR refresh tokens (tu schema tiene RefreshToken con userId)
+  await prisma.refreshToken.deleteMany({
+    where: { userId: user.id },
+  });
 
   return { id: user.id, email: user.email, role: user.role };
 }

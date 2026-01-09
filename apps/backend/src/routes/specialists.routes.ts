@@ -7,6 +7,7 @@ import multer from 'multer';
 import sharp from 'sharp';
 import { z } from 'zod';
 
+import { signToken } from '../lib/jwt';
 import { prisma } from '../lib/prisma';
 import { auth } from '../middlewares/auth';
 import { notifyKycStatus } from '../services/notifyKyc';
@@ -558,6 +559,7 @@ router.post('/register', auth, async (req: AuthReq, res: Response) => {
       selfieUrl: toAbsoluteUrl(data.kyc.selfieUrl),
     };
 
+    // 1) upsert profile
     const specialist = await prisma.specialistProfile.upsert({
       where: { userId },
       update: {
@@ -582,6 +584,7 @@ router.post('/register', auth, async (req: AuthReq, res: Response) => {
       select: { id: true },
     });
 
+    // 2) specialties
     await prisma.specialistSpecialty.deleteMany({ where: { specialistId: specialist.id } });
 
     const cats = await prisma.serviceCategory.findMany({
@@ -597,6 +600,7 @@ router.post('/register', auth, async (req: AuthReq, res: Response) => {
       skipDuplicates: true,
     });
 
+    // 3) kyc submission
     const submission = await prisma.kycSubmission.create({
       data: {
         specialistId: specialist.id,
@@ -610,9 +614,24 @@ router.post('/register', auth, async (req: AuthReq, res: Response) => {
 
     await notifyKycStatus({ userId, status: 'PENDING', submissionId: submission.id });
 
+    // ✅ 4) IMPORTANTÍSIMO: asegurar rol SPECIALIST + token nuevo
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { role: 'SPECIALIST' },
+      select: { id: true, role: true, email: true, name: true, surname: true, phone: true },
+    });
+
+    const token = signToken({ sub: updatedUser.id, role: updatedUser.role });
+
+    // 5) sync index
     await syncSearchIndexForUser(userId);
 
-    return res.json({ ok: true, specialistId: specialist.id });
+    return res.json({
+      ok: true,
+      specialistId: specialist.id,
+      user: updatedUser,
+      token,
+    });
   } catch (err) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ ok: false, error: 'invalid_input', details: err.flatten() });

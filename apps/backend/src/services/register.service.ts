@@ -74,14 +74,20 @@ type VerifyArgs = {
   email: string;
   code: string;
   name: string;
+  surname?: string;
   password: string;
   phone: string | null;
   role: 'CUSTOMER' | 'SPECIALIST';
 };
 
 export async function verifyEmailRegistration(args: VerifyArgs) {
+  // ✅ Normalización consistente (IMPORTANTE)
   const email = args.email.trim().toLowerCase();
   const code = args.code.trim();
+
+  const name = args.name.trim();
+  const surname = args.surname?.trim();
+  const phone = args.phone?.trim() || null;
 
   // OTP checks
   const otp = await prisma.emailOtp.findFirst({
@@ -113,12 +119,12 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
 
   // unicidad clara
   const existing = await prisma.user.findFirst({
-    where: { OR: [{ email }, ...(args.phone ? [{ phone: args.phone }] : [])] },
+    where: { OR: [{ email }, ...(phone ? [{ phone }] : [])] },
     select: { email: true, phone: true },
   });
 
   if (existing?.email?.toLowerCase() === email) throw httpError('email_in_use', 409);
-  if (args.phone && existing?.phone === args.phone) throw httpError('phone_in_use', 409);
+  if (phone && existing?.phone === phone) throw httpError('phone_in_use', 409);
 
   const passwordHash = await bcrypt.hash(args.password, 10);
 
@@ -126,8 +132,9 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
     const user = await prisma.user.create({
       data: {
         email,
-        phone: args.phone ?? null,
-        name: args.name,
+        phone,
+        name,
+        surname: surname ? surname : null,
         passwordHash,
         role: args.role === 'SPECIALIST' ? 'SPECIALIST' : 'CUSTOMER',
         ...(args.role === 'SPECIALIST'

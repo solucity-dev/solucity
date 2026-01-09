@@ -28,9 +28,15 @@ type KycUploadRes = { ok: true; url: string };
 type Category = { id: string; name: string; slug: string };
 type CategoryGroup = { id: string; name: string; slug: string; categories: Category[] };
 
+type PickedFile = {
+  uri: string;
+  name?: string | null;
+  mimeType?: string | null;
+};
+
 export default function RegisterSpecialist() {
   const insets = useSafeAreaInsets();
-  useNavigation(); // 🔧 evitamos warning "nav never used" sin romper nada
+  useNavigation(); // ✅ evitamos ESLint "unused var" y mantenemos el hook para futuro
   const { setMode, login } = useAuth();
 
   const [step, setStep] = useState<Step>(1);
@@ -97,6 +103,9 @@ export default function RegisterSpecialist() {
           'Ese correo ya está en uso. Probá iniciar sesión.',
         );
       }
+      if (e?.response?.status === 429 || err === 'too_many_requests') {
+        return Alert.alert('Demasiados intentos', 'Esperá unos minutos y reintentá.');
+      }
       Alert.alert('Error', 'No se pudo enviar el código.');
     } finally {
       setLoadingStart(false);
@@ -117,10 +126,10 @@ export default function RegisterSpecialist() {
 
       const r = await api.post('/auth/register/verify', {
         email: email.trim().toLowerCase(),
-        code: otp,
-        name,
-        surname: surname || undefined,
-        phone: phone || undefined,
+        code: otp.trim(),
+        name: name.trim(),
+        surname: surname.trim() ? surname.trim() : undefined,
+        phone: phone.trim() ? phone.trim() : undefined,
         password,
         role: 'SPECIALIST',
       });
@@ -140,6 +149,8 @@ export default function RegisterSpecialist() {
         Alert.alert('Correo ya registrado', 'Ese correo ya está en uso. Probá iniciar sesión.');
       else if (err === 'weak_password')
         Alert.alert('Contraseña débil', 'Usá una contraseña de al menos 8 caracteres.');
+      else if (e?.response?.status === 429 || err === 'otp_blocked')
+        Alert.alert('Demasiados intentos', 'Esperá unos minutos y pedí un nuevo código.');
       else Alert.alert('Error', 'No se pudo verificar el código.');
     } finally {
       setLoadingVerify(false);
@@ -176,7 +187,11 @@ export default function RegisterSpecialist() {
     if (step2Complete) setStep2Hint(null);
   }, [step2Complete]);
 
-  const pickFrom = async (from: 'camera' | 'gallery', setter: (uri: string) => void) => {
+  const pickFrom = async (
+    from: 'camera' | 'gallery',
+    setter: (uri: string) => void,
+    opts?: { cameraType?: ImagePicker.CameraType },
+  ) => {
     try {
       if (from === 'camera') {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -196,10 +211,9 @@ export default function RegisterSpecialist() {
       const res = await fn({
         quality: 1,
         allowsMultipleSelection: false,
-        exif: true,
-        mediaTypes: ['images'],
-        cameraType: ImagePicker.CameraType.front, // ✅ ayuda para selfie
-      } as any);
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        cameraType: opts?.cameraType,
+      });
 
       if (!res.canceled && res.assets?.[0]?.uri) setter(res.assets[0].uri);
     } catch (e) {
@@ -209,7 +223,7 @@ export default function RegisterSpecialist() {
   };
 
   // ✅ picker para PDF/imagen desde archivos (solo para matrícula/título)
-  const pickDocument = async (setter: (uri: string) => void) => {
+  const pickDocument = async (setter: (file: PickedFile) => void) => {
     try {
       const res = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'image/jpeg', 'image/png'],
@@ -218,7 +232,8 @@ export default function RegisterSpecialist() {
       });
 
       if (!res.canceled && res.assets?.[0]?.uri) {
-        setter(res.assets[0].uri);
+        const a = res.assets[0];
+        setter({ uri: a.uri, name: a.name, mimeType: a.mimeType });
       }
     } catch (e) {
       console.log('[document picker]', e);
@@ -226,7 +241,13 @@ export default function RegisterSpecialist() {
     }
   };
 
-  const isPdfUri = (uri: string) => uri.toLowerCase().includes('.pdf');
+  // ✅ FIX: devuelve boolean SIEMPRE (nunca boolean | undefined)
+  const isPdf = (file: PickedFile | null): boolean => {
+    if (!file) return false;
+    const byMime = file.mimeType === 'application/pdf';
+    const byName = !!file.name && file.name.toLowerCase().endsWith('.pdf');
+    return byMime || byName;
+  };
 
   // Compresión previa (ayuda en Android) - SOLO imágenes
   const compress = async (uri: string) => {
@@ -301,7 +322,7 @@ export default function RegisterSpecialist() {
   // ===== PASO 3: rubros + matrícula opcional ===============================
   const [groups, setGroups] = useState<CategoryGroup[]>([]);
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
-  const [licenseFile, setLicenseFile] = useState<string | null>(null);
+  const [licenseFile, setLicenseFile] = useState<PickedFile | null>(null);
   const [finalizing, setFinalizing] = useState(false);
 
   // ✅ hint suave paso 3
@@ -343,19 +364,27 @@ export default function RegisterSpecialist() {
     );
   };
 
-  // ✅ Matrícula/Título: ahora soporta imagen o PDF (misma ruta upload KYC)
-  const uploadLicense = async (uri: string): Promise<string> => {
+  // ✅ Matrícula/Título: soporta imagen o PDF (misma ruta upload KYC)
+  const uploadLicense = async (file: PickedFile): Promise<string> => {
     if (!pendingToken) throw new Error('missing_temp_token');
 
-    const pdf = isPdfUri(uri);
-    const src = pdf ? uri : await compress(uri);
+    const pdf = isPdf(file);
+    const src = pdf ? file.uri : await compress(file.uri);
 
     const fd = new FormData();
 
     if (pdf) {
-      fd.append('file', { uri: src, name: 'matricula.pdf', type: 'application/pdf' } as any);
+      fd.append('file', {
+        uri: src,
+        name: file.name ?? 'matricula.pdf',
+        type: 'application/pdf',
+      } as any);
     } else {
-      fd.append('file', { uri: src, name: 'matricula.jpg', type: 'image/jpeg' } as any);
+      fd.append('file', {
+        uri: src,
+        name: file.name ?? 'matricula.jpg',
+        type: 'image/jpeg',
+      } as any);
     }
 
     const r = await api.post<KycUploadRes>('/specialists/kyc/upload', fd, {
@@ -382,7 +411,7 @@ export default function RegisterSpecialist() {
 
       setFinalizing(true);
 
-      // matrícula opcional
+      // matrícula opcional (subimos pero no bloqueamos el registro si falla)
       if (licenseFile) {
         try {
           await uploadLicense(licenseFile);
@@ -391,14 +420,22 @@ export default function RegisterSpecialist() {
         }
       }
 
-      await api.post(
+      const r2 = await api.post(
         '/specialists/register',
         { specialties: selectedSlugs, bio: '', kyc: kycUrls },
         { headers: { ...tempAuthHeaders() } },
       );
 
-      // ✅ IMPORTANTÍSIMO: login primero (setea role), luego mode (solo UI)
-      await login(pendingToken);
+      const newToken = r2.data?.token as string | undefined;
+      if (!newToken) {
+        // fallback: si por alguna razón no viene token, al menos mantenemos sesión
+        await login(pendingToken);
+        await setMode('specialist');
+        return;
+      }
+
+      // ✅ ahora sí: token nuevo con role SPECIALIST
+      await login(newToken);
       await setMode('specialist');
     } catch (e: any) {
       console.log('[specialists/register]', e?.response?.data || e.message);
@@ -569,7 +606,9 @@ export default function RegisterSpecialist() {
               label="DNI frente"
               mode="dni"
               uri={dniFront}
-              onPickCamera={() => pickFrom('camera', setDniFront)}
+              onPickCamera={() =>
+                pickFrom('camera', setDniFront, { cameraType: ImagePicker.CameraType.back })
+              }
               onPickGallery={() => pickFrom('gallery', setDniFront)}
               onClear={() => setDniFront(null)}
             />
@@ -578,7 +617,9 @@ export default function RegisterSpecialist() {
               label="DNI dorso"
               mode="dni"
               uri={dniBack}
-              onPickCamera={() => pickFrom('camera', setDniBack)}
+              onPickCamera={() =>
+                pickFrom('camera', setDniBack, { cameraType: ImagePicker.CameraType.back })
+              }
               onPickGallery={() => pickFrom('gallery', setDniBack)}
               onClear={() => setDniBack(null)}
             />
@@ -587,7 +628,9 @@ export default function RegisterSpecialist() {
               label="Selfie"
               mode="selfie"
               uri={selfie}
-              onPickCamera={() => pickFrom('camera', setSelfie)}
+              onPickCamera={() =>
+                pickFrom('camera', setSelfie, { cameraType: ImagePicker.CameraType.front })
+              }
               onPickGallery={() => pickFrom('gallery', setSelfie)}
               onClear={() => setSelfie(null)}
             />
@@ -643,9 +686,16 @@ export default function RegisterSpecialist() {
 
             {/* ✅ Matrícula UI premium */}
             <PickBoxLicense
-              uri={licenseFile}
-              onPickCamera={() => pickFrom('camera', setLicenseFile)}
-              onPickGallery={() => pickFrom('gallery', setLicenseFile)}
+              uri={licenseFile?.uri ?? null}
+              isPdf={isPdf(licenseFile)} // ✅ boolean seguro
+              onPickCamera={() =>
+                pickFrom('camera', (u) => setLicenseFile((prev) => ({ ...(prev ?? {}), uri: u })), {
+                  cameraType: ImagePicker.CameraType.back,
+                })
+              }
+              onPickGallery={() =>
+                pickFrom('gallery', (u) => setLicenseFile((prev) => ({ ...(prev ?? {}), uri: u })))
+              }
               onPickDocument={() => pickDocument(setLicenseFile)}
               onClear={() => setLicenseFile(null)}
             />
@@ -772,19 +822,19 @@ function PickBoxKyc({
 /** PickBox para Matrícula/Título: imagen o PDF (UI premium) */
 function PickBoxLicense({
   uri,
+  isPdf,
   onPickCamera,
   onPickGallery,
   onPickDocument,
   onClear,
 }: {
   uri: string | null;
+  isPdf: boolean;
   onPickCamera: () => void;
   onPickGallery: () => void;
   onPickDocument: () => void;
   onClear?: () => void;
 }) {
-  const isPdf = uri ? uri.toLowerCase().includes('.pdf') : false;
-
   return (
     <View style={s.licenseCard}>
       <View style={s.licenseHeader}>

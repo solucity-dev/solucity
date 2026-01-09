@@ -1,3 +1,4 @@
+//apps/mobile/src/auth/AuthProvider.tsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
@@ -13,6 +14,7 @@ export type AuthUser = {
   email: string;
   role: Role;
   name?: string | null;
+  surname?: string | null;
   phone?: string | null;
 };
 
@@ -23,6 +25,7 @@ type MeResponse = {
     email: string;
     role: Role;
     name?: string | null;
+    surname?: string | null;
     phone?: string | null;
   };
   profiles?: { customerId: string | null; specialistId: string | null };
@@ -94,7 +97,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!r.data?.ok) throw new Error('auth_me_failed');
 
     const u = r.data.user;
-    setUser({ id: u.id, email: u.email, role: u.role, name: u.name, phone: u.phone });
+    setUser({
+      id: u.id,
+      email: u.email,
+      role: u.role,
+      name: u.name,
+      surname: u.surname, // ✅
+      phone: u.phone,
+    });
 
     setNavRole(u.role);
 
@@ -152,20 +162,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (cancelled) return;
 
-        if (storedMode === 'specialist' || storedMode === 'client') {
-          console.log('[Auth][hydrate] restoring mode from storage ->', storedMode);
-          setModeState(storedMode);
-        }
-
+        // ✅ Si NO hay token → estado logged out
         if (!storedToken) {
           clearAuthToken();
           setTokenState(null);
           setUser(null);
           setNavRole(null);
+
+          // (opcional) si querés restaurar mode aun sin token:
+          if (storedMode === 'specialist' || storedMode === 'client') {
+            setModeState(storedMode);
+          }
+
           console.log('[Auth][hydrate] no token -> logged out state');
           return;
         }
 
+        // ✅ Hay token -> lo seteamos y primero buscamos /auth/me
         setAuthToken(storedToken);
         setTokenState(storedToken);
         console.log('[Auth] token loaded from storage');
@@ -176,10 +189,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log('[Auth][hydrate] /auth/me role =', role);
         console.log('[Auth][hydrate] storedMode BEFORE rule =', storedMode ?? '(none)');
 
+        // ✅ Reglas de mode DESPUÉS de conocer role (evita flash)
         if (role !== 'SPECIALIST') {
           console.log('[Auth][hydrate] role is not SPECIALIST -> forcing mode=client');
           await AsyncStorage.setItem(MODE_KEY, 'client');
           setModeState('client');
+        } else {
+          // role === SPECIALIST
+          // Preferimos lo guardado si existe; si no, dejamos client por defecto.
+          // Si querés que especialista default sea specialist, cambiá 'client' por 'specialist'.
+          const nextMode: Mode =
+            storedMode === 'specialist' || storedMode === 'client'
+              ? (storedMode as Mode)
+              : 'client';
+
+          console.log('[Auth][hydrate] role is SPECIALIST -> restoring mode =', nextMode);
+          setModeState(nextMode);
         }
       } catch (e) {
         console.log('[Auth][hydrate] error -> clearing token', e);

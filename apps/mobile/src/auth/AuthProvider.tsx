@@ -3,12 +3,10 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { ActivityIndicator, View } from 'react-native';
 
 import { api, clearAuthToken, setAuthToken, setOnUnauthorizedHandler } from '../lib/api';
-
-// ✅ NUEVO: role global para navigationRef
 import { setNavRole } from '../navigation/navigationRef';
 
 type Role = 'ADMIN' | 'CUSTOMER' | 'SPECIALIST';
-type Mode = 'client' | 'specialist'; // preferencia UI (NO fuente de verdad)
+type Mode = 'client' | 'specialist';
 
 export type AuthUser = {
   id: string;
@@ -38,11 +36,9 @@ type AuthContextT = {
   loading: boolean;
   ready: boolean;
 
-  // 👇 preferencia (solo UI)
   mode: Mode;
   setMode: (m: Mode) => Promise<void>;
 
-  // API de auth
   login: (token: string) => Promise<void>;
   logout: () => Promise<void>;
   setUser: React.Dispatch<React.SetStateAction<AuthUser | null>>;
@@ -78,15 +74,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     console.log('[Auth][logout] start');
 
-    // ✅ limpia storage + headers
     await AsyncStorage.removeItem(TOKEN_KEY);
     clearAuthToken();
 
-    // ✅ limpia estado local
     setTokenState(null);
     setUser(null);
 
-    // ✅ limpia role global del nav
     setNavRole(null);
 
     console.log('[Auth][logout] done');
@@ -94,6 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchMe = useCallback(async () => {
     console.log('[Auth][fetchMe] GET /auth/me ...');
+
     const r = await api.get<MeResponse>('/auth/me', {
       headers: { 'Cache-Control': 'no-cache' },
     });
@@ -102,7 +96,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const u = r.data.user;
     setUser({ id: u.id, email: u.email, role: u.role, name: u.name, phone: u.phone });
 
-    // ✅ CLAVE: seteamos role global para navegación deep
     setNavRole(u.role);
 
     console.log('[Auth][fetchMe] ok -> role =', u.role);
@@ -121,8 +114,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         console.log('[Auth][login] calling /auth/me...');
         const role = await fetchMe();
+
         console.log('[Auth][login] /auth/me role =', role);
-        console.log('[Auth][login] mode BEFORE rule =', storedMode ?? '(none)', 'state=', mode);
+        console.log('[Auth][login] storedMode BEFORE rule =', storedMode ?? '(none)');
 
         // ✅ si el usuario NO es specialist, forzamos mode=client
         if (role !== 'SPECIALIST') {
@@ -136,11 +130,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw e;
       }
     },
-    // ✅ no dependas de mode acá para no recrear login y evitar closures raros
-    [fetchMe, logout, mode],
+    [fetchMe, logout],
   );
 
-  // Hydrate inicial (token + mode + /auth/me)
   useEffect(() => {
     let cancelled = false;
 
@@ -180,10 +172,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         console.log('[Auth][hydrate] calling /auth/me...');
         const role = await fetchMe();
-        console.log('[Auth][hydrate] /auth/me role =', role);
-        console.log('[Auth][hydrate] mode BEFORE rule =', storedMode ?? '(none)');
 
-        // ✅ regla de oro: si no es specialist, no puede quedar en mode=specialist
+        console.log('[Auth][hydrate] /auth/me role =', role);
+        console.log('[Auth][hydrate] storedMode BEFORE rule =', storedMode ?? '(none)');
+
         if (role !== 'SPECIALIST') {
           console.log('[Auth][hydrate] role is not SPECIALIST -> forcing mode=client');
           await AsyncStorage.setItem(MODE_KEY, 'client');
@@ -192,7 +184,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (e) {
         console.log('[Auth][hydrate] error -> clearing token', e);
 
-        // token inválido → limpiar
         await AsyncStorage.removeItem(TOKEN_KEY);
         clearAuthToken();
         setTokenState(null);
@@ -209,7 +200,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [fetchMe]);
 
-  // Handler global 401 con Authorization => logout
   useEffect(() => {
     setOnUnauthorizedHandler(async () => {
       console.log('[Auth][401] unauthorized -> logout()');

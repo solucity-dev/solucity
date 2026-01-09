@@ -22,6 +22,29 @@ function toAbsoluteUrl(u: string | null | undefined): string | null {
   return `${base}${u.startsWith('/') ? '' : '/'}${u}`;
 }
 
+function requireAdmin(req: any, res: any, next: any) {
+  try {
+    const auth = String(req.headers.authorization ?? '');
+    const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+    if (!token) return res.status(401).json({ ok: false, error: 'missing_token' });
+
+    const JWT_SECRET = process.env.JWT_SECRET;
+    if (!JWT_SECRET) return res.status(500).json({ ok: false, error: 'jwt_not_configured' });
+
+    const payload = jwt.verify(token, JWT_SECRET as Secret) as any;
+    if (payload?.role !== 'ADMIN') {
+      return res.status(403).json({ ok: false, error: 'admin_only' });
+    }
+
+    // opcional: guardar sub/role si lo necesitás después
+    (req as any).admin = payload;
+
+    return next();
+  } catch {
+    return res.status(401).json({ ok: false, error: 'invalid_token' });
+  }
+}
+
 /**
  * POST /admin/auth/login
  * Login de admin contra variables de entorno (ADMIN_EMAIL / ADMIN_PASSWORD).
@@ -982,6 +1005,117 @@ adminRouter.patch('/specialists/:specialistId/grant-days', async (req, res) => {
       userId: spec.userId,
     },
   });
+});
+
+/**
+ * DELETE /admin/users/:userId
+ * Query:
+ *  - mode=anonymize (default)  => libera email (recomendado para testing)
+ *  - mode=hard                => hard delete (riesgoso si hay FKs)
+ */
+adminRouter.delete('/users/:userId', requireAdmin, async (req, res) => {
+  const userId = String(req.params.userId ?? '').trim();
+  const mode = String(req.query.mode ?? 'anonymize').trim(); // anonymize | hard
+
+  if (!userId) return res.status(400).json({ ok: false, error: 'userId_required' });
+  if (!['anonymize', 'hard'].includes(mode)) {
+    return res.status(400).json({ ok: false, error: 'invalid_mode' });
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      email: true,
+      role: true,
+      status: true,
+      specialist: { select: { id: true } },
+      customer: { select: { id: true } },
+    },
+  });
+
+  if (!user) return res.status(404).json({ ok: false, error: 'not_found' });
+
+  const oldEmail = user.email;
+  const specialistId = user.specialist?.id ?? null;
+  const customerId = user.customer?.id ?? null;
+
+  // ✅ MODO SEGURO: libera el email y corta sesiones/tokens.
+  if (mode === 'anonymize') {
+    const newEmail = `deleted+${Date.now()}_${userId}@deleted.local`.toLowerCase();
+
+    await prisma.$transaction(async (tx) => {
+      // cortar acceso/sesiones
+      await tx.pushToken.deleteMany({ where: { userId } });
+      await tx.notification.deleteMany({ where: { userId } });
+
+      // si querés bloquear para que no aparezca como activo
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          email: newEmail,
+          status: 'BLOCKED', // o el status que uses como inactivo
+          name: user.role === 'ADMIN' ? 'Admin' : 'Deleted',
+          surname: null,
+        },
+      });
+
+      // opcional: también podés “marcar” perfiles
+      if (specialistId) {
+        await tx.specialistProfile
+          .update({
+            where: { id: specialistId },
+            data: { kycStatus: 'UNVERIFIED' },
+          })
+          .catch(() => {});
+      }
+    });
+
+    return res.json({ ok: true, mode, userId, oldEmail, newEmail });
+  }
+
+  // 🧨 MODO HARD: intenta borrar relaciones principales.
+  // Nota: si tenés FKs estrictas, puede fallar y te conviene el anonymize.
+  try {
+    await prisma.$transaction(async (tx) => {
+      // tokens / notifs
+      await tx.pushToken.deleteMany({ where: { userId } });
+      await tx.notification.deleteMany({ where: { userId } });
+
+      // specialist related
+      if (specialistId) {
+        await tx.kycSubmission.deleteMany({ where: { specialistId } }).catch(() => {});
+        await tx.specialistCertification.deleteMany({ where: { specialistId } }).catch(() => {});
+        await tx.subscription.deleteMany({ where: { specialistId } }).catch(() => {});
+
+        // join table de specialties (según tu schema real puede variar)
+        // si existe: specialistSpecialty / specialistCategory / etc.
+        await (tx as any).specialistSpecialty
+          ?.deleteMany?.({ where: { specialistId } })
+          .catch(() => {});
+
+        await tx.specialistProfile.delete({ where: { id: specialistId } }).catch(() => {});
+      }
+
+      // customer related (si existe en tu schema)
+      if (customerId) {
+        // si hay tablas dependientes (orders etc), acá se deberían borrar/actualizar
+        await tx.customerProfile?.delete?.({ where: { id: customerId } }).catch(() => {});
+      }
+
+      await tx.user.delete({ where: { id: userId } });
+    });
+
+    return res.json({ ok: true, mode, userId, oldEmail });
+  } catch (e: any) {
+    console.warn('[admin delete user] hard delete failed:', e?.message ?? e);
+    return res.status(409).json({
+      ok: false,
+      error: 'hard_delete_failed',
+      message:
+        'No se pudo hacer hard delete (probables FKs). Usá mode=anonymize para liberar el email sin riesgo.',
+    });
+  }
 });
 
 export default adminRouter;

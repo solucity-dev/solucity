@@ -1,6 +1,7 @@
+// apps/admin-web/src/pages/Specialists.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { type AdminSpecialistRow } from '../api/adminApi';
+import { deleteAdminUser, type AdminSpecialistRow } from '../api/adminApi';
 import { useAdminSpecialists } from '../hooks/useAdminSpecialists';
 import './specialists.css';
 
@@ -45,6 +46,11 @@ export default function Specialists() {
   const [filterSub, setFilterSub] = useState<SubFilter>(initialSub);
   const [filterCat, setFilterCat] = useState<SpecialtyFilter>(initialCat);
 
+  // ✅ acción por fila
+  const [rowActionId, setRowActionId] = useState<string | null>(null);
+  const [rowOk, setRowOk] = useState<string | null>(null);
+  const [rowErr, setRowErr] = useState<string | null>(null);
+
   useEffect(() => {
     const nextQ = searchParams.get('q') ?? '';
     const nextKyc = normalizeKyc(searchParams.get('kyc'));
@@ -68,10 +74,9 @@ export default function Specialists() {
     setSearchParams(params, { replace: true });
   }, [q, filterKyc, filterSub, filterCat, setSearchParams]);
 
-  // ✅ Opciones de rubros sacadas de los especialistas (sin fetch extra)
   const specialtyOptions = useMemo(() => {
     const list: AdminSpecialistRow[] = data ?? [];
-    const map = new Map<string, string>(); // slug -> name
+    const map = new Map<string, string>();
 
     for (const r of list) {
       for (const s of r.specialties ?? []) {
@@ -89,7 +94,7 @@ export default function Specialists() {
     const query = q.trim().toLowerCase();
 
     return list
-      .filter((r: AdminSpecialistRow) => {
+      .filter((r) => {
         if (!query) return true;
         return (
           r.email.toLowerCase().includes(query) ||
@@ -98,19 +103,13 @@ export default function Specialists() {
           (r.specialistId ?? '').toLowerCase().includes(query)
         );
       })
-      .filter((r: AdminSpecialistRow) => {
-        if (filterKyc === 'ALL') return true;
-        return r.kycStatus === filterKyc;
-      })
-      .filter((r: AdminSpecialistRow) => {
+      .filter((r) => (filterKyc === 'ALL' ? true : r.kycStatus === filterKyc))
+      .filter((r) => {
         if (filterSub === 'ALL') return true;
         if (filterSub === 'NONE') return !r.subscription;
         return r.subscription?.status === filterSub;
       })
-      .filter((r: AdminSpecialistRow) => {
-        if (filterCat === 'ALL') return true;
-        return (r.specialtySlugs ?? []).includes(filterCat);
-      });
+      .filter((r) => (filterCat === 'ALL' ? true : (r.specialtySlugs ?? []).includes(filterCat)));
   }, [data, q, filterKyc, filterSub, filterCat]);
 
   const summary = useMemo(() => {
@@ -129,6 +128,33 @@ export default function Specialists() {
     nav(`/app/specialists/${id}`);
   };
 
+  async function handleFreeEmailRow(r: AdminSpecialistRow) {
+    if (!r.userId || !r.email) return;
+
+    const ok = window.confirm(
+      `¿Liberar email para:\n${r.name}\n${r.email}\n\nEsto cambia el email a deleted+... y lo bloquea.\n✅ Te permite registrar otra vez con el email original.`,
+    );
+    if (!ok) return;
+
+    setRowOk(null);
+    setRowErr(null);
+    setRowActionId(r.userId);
+
+    try {
+      const resp = await deleteAdminUser(r.userId, 'anonymize');
+      if (!resp.ok) throw new Error('No se pudo liberar el email');
+      setRowOk(`✅ Email liberado: ${r.email} → ${resp.newEmail ?? 'deleted+...@deleted.local'}`);
+      await reload();
+    } catch (e: unknown) {
+  const msg =
+    e instanceof Error ? e.message : typeof e === 'string' ? e : 'Error al liberar email';
+  setRowErr(msg);
+}
+    finally {
+      setRowActionId(null);
+    }
+  }
+
   return (
     <div className="specShell">
       <div className="specTop">
@@ -144,6 +170,9 @@ export default function Specialists() {
 
       {error && <div className="specState">Error: {error}</div>}
       {!data && !error && <div className="specState">Cargando…</div>}
+
+      {rowOk && <div className="specState">{rowOk}</div>}
+      {rowErr && <div className="specState" style={{ color: '#b00020' }}>{rowErr}</div>}
 
       {data && (
         <>
@@ -178,11 +207,7 @@ export default function Specialists() {
               onChange={(e) => setQ(e.target.value)}
             />
 
-            <select
-              className="specSelect"
-              value={filterKyc}
-              onChange={(e) => setFilterKyc(e.target.value as KycFilter)}
-            >
+            <select className="specSelect" value={filterKyc} onChange={(e) => setFilterKyc(e.target.value as KycFilter)}>
               <option value="ALL">KYC: Todos</option>
               <option value="PENDING">Pendiente</option>
               <option value="VERIFIED">Verificado</option>
@@ -190,11 +215,7 @@ export default function Specialists() {
               <option value="UNVERIFIED">Sin verificar</option>
             </select>
 
-            <select
-              className="specSelect"
-              value={filterSub}
-              onChange={(e) => setFilterSub(e.target.value as SubFilter)}
-            >
+            <select className="specSelect" value={filterSub} onChange={(e) => setFilterSub(e.target.value as SubFilter)}>
               <option value="ALL">Suscripción: Todas</option>
               <option value="ACTIVE">Activa</option>
               <option value="TRIALING">Trial</option>
@@ -203,7 +224,6 @@ export default function Specialists() {
               <option value="NONE">Sin suscripción</option>
             </select>
 
-            {/* ✅ NUEVO: filtro por rubro */}
             <select
               className="specSelect"
               value={filterCat}
@@ -237,7 +257,7 @@ export default function Specialists() {
               </thead>
 
               <tbody>
-                {rows.map((r: AdminSpecialistRow) => (
+                {rows.map((r) => (
                   <tr key={r.userId}>
                     <td>
                       <strong>{r.name}</strong>
@@ -247,13 +267,9 @@ export default function Specialists() {
                         <span style={{ opacity: 0.8 }}>ID:</span> {r.specialistId ?? r.userId}
                       </div>
 
-                      {/* ✅ Opcional: mostrar rubros resumidos */}
                       {r.specialties?.length ? (
                         <div className="muted" style={{ marginTop: 4 }}>
-                          {r.specialties
-                            .slice(0, 3)
-                            .map((x) => x.name)
-                            .join(' · ')}
+                          {r.specialties.slice(0, 3).map((x) => x.name).join(' · ')}
                           {r.specialties.length > 3 ? ` · +${r.specialties.length - 3}` : ''}
                         </div>
                       ) : null}
@@ -277,9 +293,19 @@ export default function Specialists() {
                       <Pill>{r.status}</Pill>
                     </td>
 
-                    <td>
+                    <td style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                       <button className="rowBtn" onClick={() => goDetail(r)}>
                         Ver
+                      </button>
+
+                      <button
+                        className="rowBtn"
+                        onClick={() => handleFreeEmailRow(r)}
+                        disabled={rowActionId === r.userId}
+                        style={{ background: '#ffe6e6', color: '#8b0000' }}
+                        title="Libera el email (anonymize) para poder registrarlo de nuevo"
+                      >
+                        {rowActionId === r.userId ? '...' : 'Liberar email'}
                       </button>
                     </td>
                   </tr>
@@ -294,6 +320,7 @@ export default function Specialists() {
     </div>
   );
 }
+
 
 
 

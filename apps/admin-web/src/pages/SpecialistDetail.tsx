@@ -4,8 +4,9 @@ import { Link, useParams } from 'react-router-dom';
 import {
   approveCertification,
   approveKyc,
+  deleteAdminUser,
   rejectCertification,
-  rejectKyc,
+  rejectKyc, // ✅ NUEVO
   type AdminSpecialistDetail,
 } from '../api/adminApi';
 import { useAdminSpecialistDetail } from '../hooks/useAdminSpecialistDetail';
@@ -71,7 +72,6 @@ function formatDaysLeft(days?: number | null) {
 }
 
 function getAdminToken(): string {
-  // Ajustá este key si tu proyecto usa otro nombre
   return String(localStorage.getItem('admin_token') ?? '').trim();
 }
 
@@ -86,9 +86,7 @@ export default function SpecialistDetail() {
   const { id } = useParams<{ id: string }>();
   const { data, loading, error, reload } = useAdminSpecialistDetail(id);
 
-  // usamos el type centralizado del adminApi.ts
   const typed = data as unknown as (AdminSpecialistDetail & {
-    // ✅ compat: tu hook parece que trae estos extras
     subscription?: (SubscriptionDTO | null) & { daysLeft?: number | null };
     kyc?: (NonNullable<AdminSpecialistDetail['kyc']> & { id?: string }) | null;
   }) | null;
@@ -101,19 +99,24 @@ export default function SpecialistDetail() {
   const [grantError, setGrantError] = useState<string | null>(null);
   const [grantOk, setGrantOk] = useState<string | null>(null);
 
-  // ✅ UI KYC actions
+  // UI KYC actions
   const [kycActionLoading, setKycActionLoading] = useState(false);
   const [showReject, setShowReject] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [kycError, setKycError] = useState<string | null>(null);
   const [kycOk, setKycOk] = useState<string | null>(null);
 
-  // ✅ UI CERT actions
+  // UI CERT actions
   const [certActionLoading, setCertActionLoading] = useState(false);
   const [certError, setCertError] = useState<string | null>(null);
   const [certOk, setCertOk] = useState<string | null>(null);
   const [rejectCertId, setRejectCertId] = useState<string | null>(null);
   const [rejectCertReason, setRejectCertReason] = useState('');
+
+  // ✅ Peligro / liberar email
+  const [dangerLoading, setDangerLoading] = useState(false);
+  const [dangerErr, setDangerErr] = useState<string | null>(null);
+  const [dangerOk, setDangerOk] = useState<string | null>(null);
 
   const initials = useMemo(() => {
     const n = typed?.name?.trim() || '';
@@ -148,7 +151,7 @@ export default function SpecialistDetail() {
   const sub = (typed?.subscription ?? null) as SubscriptionDTO | null;
   const daysLeft = sub?.daysLeft ?? null;
 
-  const API_URL = String(import.meta.env.VITE_API_URL ?? '').replace(/\/$/, ''); // sin trailing /
+  const API_URL = String(import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
   async function safeReadJson<T>(resp: Response): Promise<T | null> {
     const text = await resp.text();
@@ -156,7 +159,7 @@ export default function SpecialistDetail() {
     try {
       return JSON.parse(text) as T;
     } catch {
-      return null; // era HTML o algo no JSON
+      return null;
     }
   }
 
@@ -221,7 +224,6 @@ export default function SpecialistDetail() {
     }
   }
 
-  // ✅ KYC approve / reject
   async function handleApproveKyc() {
     if (!typed?.kyc?.id) return;
 
@@ -268,7 +270,6 @@ export default function SpecialistDetail() {
 
   const canReviewKyc = typed?.kycStatus === 'PENDING' && !!typed?.kyc?.id;
 
-  // ✅ CERT approve / reject
   async function handleApproveCert(certId: string) {
     setCertError(null);
     setCertOk(null);
@@ -309,6 +310,34 @@ export default function SpecialistDetail() {
     }
   }
 
+  // ✅ liberar email (anonymize)
+  async function handleFreeEmail() {
+    if (!typed?.userId || !typed?.email) return;
+
+    const ok = window.confirm(
+      `¿Liberar el email "${typed.email}"?\n\nEsto cambia el email del usuario a deleted+... y lo bloquea.\n✅ Te permite registrar otra vez con el email original.`,
+    );
+    if (!ok) return;
+
+    setDangerErr(null);
+    setDangerOk(null);
+    setDangerLoading(true);
+    try {
+      const r = await deleteAdminUser(typed.userId, 'anonymize');
+      if (!r.ok) throw new Error('No se pudo liberar el email');
+      setDangerOk(`Listo ✅ Email liberado. Nuevo email: ${r.newEmail ?? '—'}`);
+      await reload();
+    } catch (e: unknown) {
+  const msg =
+    e instanceof Error ? e.message : typeof e === 'string' ? e : 'Error al liberar email';
+  setDangerErr(msg);
+}
+
+    finally {
+      setDangerLoading(false);
+    }
+  }
+
   return (
     <div className="sdShell">
       <div className="sdTop">
@@ -332,11 +361,12 @@ export default function SpecialistDetail() {
 
       {id && error && <div className="sdState sdError">Error: {error}</div>}
 
-      {id && !error && !typed && <div className="sdState">{loading ? 'Cargando…' : 'Sin datos'}</div>}
+      {id && !error && !typed && (
+        <div className="sdState">{loading ? 'Cargando…' : 'Sin datos'}</div>
+      )}
 
       {typed && (
         <>
-          {/* Header ficha */}
           <div className="sdHero">
             <div className="sdAvatar">
               {avatarSrc ? (
@@ -357,7 +387,11 @@ export default function SpecialistDetail() {
 
                 <Chip tone={kycTone}>KYC: {typed.kycStatus}</Chip>
 
-                {sub ? <Chip tone={subTone}>SUB: {sub.status}</Chip> : <Chip tone="neutral">Sin suscripción</Chip>}
+                {sub ? (
+                  <Chip tone={subTone}>SUB: {sub.status}</Chip>
+                ) : (
+                  <Chip tone="neutral">Sin suscripción</Chip>
+                )}
               </div>
 
               <div className="sdMeta">
@@ -387,14 +421,17 @@ export default function SpecialistDetail() {
             </div>
           </div>
 
-          {/* Grid */}
           <div className="sdGrid">
             <Card title="Perfil">
               <div className="sdKV">
                 <div className="k">
                   <span>Disponible ahora</span>
                   <strong>
-                    {typeof typed.availableNow === 'boolean' ? (typed.availableNow ? 'Sí' : 'No') : '—'}
+                    {typeof typed.availableNow === 'boolean'
+                      ? typed.availableNow
+                        ? 'Sí'
+                        : 'No'
+                      : '—'}
                   </strong>
                 </div>
 
@@ -432,7 +469,6 @@ export default function SpecialistDetail() {
               )}
             </Card>
 
-            {/* ✅ NUEVO: Matrículas */}
             <Card title="Matrículas / Certificaciones">
               {!typed.certifications || typed.certifications.length === 0 ? (
                 <div className="sdMuted">No tiene matrículas subidas.</div>
@@ -440,7 +476,9 @@ export default function SpecialistDetail() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {typed.certifications
                     .slice()
-                    .sort((a, b) => (a.category?.name ?? '').localeCompare(b.category?.name ?? '', 'es'))
+                    .sort((a, b) =>
+                      (a.category?.name ?? '').localeCompare(b.category?.name ?? '', 'es'),
+                    )
                     .map((c) => {
                       const fileHref = absoluteMediaUrl(c.fileUrl) ?? '#';
                       const pending = c.status === 'PENDING';
@@ -458,17 +496,32 @@ export default function SpecialistDetail() {
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                             <div style={{ minWidth: 0 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 10,
+                                  flexWrap: 'wrap',
+                                }}
+                              >
                                 <strong>{c.category?.name ?? c.category?.slug ?? 'Rubro'}</strong>
                                 <Chip tone={certTone(c.status)}>DOC: {c.status}</Chip>
                               </div>
 
                               <div style={{ marginTop: 6, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                                {!!c.createdAt && <span className="sdMuted">Subido: {formatDateAR(c.createdAt)}</span>}
-                                {!!c.reviewedAt && <span className="sdMuted">Revisado: {formatDateAR(c.reviewedAt)}</span>}
+                                {!!c.createdAt && (
+                                  <span className="sdMuted">Subido: {formatDateAR(c.createdAt)}</span>
+                                )}
+                                {!!c.reviewedAt && (
+                                  <span className="sdMuted">
+                                    Revisado: {formatDateAR(c.reviewedAt)}
+                                  </span>
+                                )}
                                 {!!c.number && <span className="sdMuted">N°: {c.number}</span>}
                                 {!!c.issuer && <span className="sdMuted">Emisor: {c.issuer}</span>}
-                                {!!c.expiresAt && <span className="sdMuted">Vence: {formatDateAR(c.expiresAt)}</span>}
+                                {!!c.expiresAt && (
+                                  <span className="sdMuted">Vence: {formatDateAR(c.expiresAt)}</span>
+                                )}
                               </div>
 
                               {c.rejectionReason ? (
@@ -510,7 +563,9 @@ export default function SpecialistDetail() {
                                   setRejectCertReason('');
                                 }}
                                 disabled={certActionLoading || !pending}
-                                style={!pending ? { opacity: 0.5 } : { backgroundColor: '#ffe6e6', color: '#8b0000' }}
+                                style={
+                                  !pending ? { opacity: 0.5 } : { backgroundColor: '#ffe6e6', color: '#8b0000' }
+                                }
                                 title={!pending ? 'Sólo se puede rechazar si está PENDING' : 'Rechazar matrícula'}
                               >
                                 ❌ Rechazar
@@ -559,11 +614,7 @@ export default function SpecialistDetail() {
                       );
                     })}
 
-                  {certOk && (
-                    <div className="sdState" style={{ marginTop: 10 }}>
-                      {certOk}
-                    </div>
-                  )}
+                  {certOk && <div className="sdState" style={{ marginTop: 10 }}>{certOk}</div>}
                   {certError && (
                     <div className="sdState sdError" style={{ marginTop: 10 }}>
                       {certError}
@@ -584,9 +635,15 @@ export default function SpecialistDetail() {
                   </div>
 
                   <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {!!typed.kyc.createdAt && <span className="sdMuted">Enviado: {formatDateAR(typed.kyc.createdAt)}</span>}
-                    {!!typed.kyc.reviewedAt && <span className="sdMuted">Revisado: {formatDateAR(typed.kyc.reviewedAt)}</span>}
-                    {!!typed.kyc.rejectionReason && <span className="sdMuted">Motivo: {typed.kyc.rejectionReason}</span>}
+                    {!!typed.kyc.createdAt && (
+                      <span className="sdMuted">Enviado: {formatDateAR(typed.kyc.createdAt)}</span>
+                    )}
+                    {!!typed.kyc.reviewedAt && (
+                      <span className="sdMuted">Revisado: {formatDateAR(typed.kyc.reviewedAt)}</span>
+                    )}
+                    {!!typed.kyc.rejectionReason && (
+                      <span className="sdMuted">Motivo: {typed.kyc.rejectionReason}</span>
+                    )}
                   </div>
 
                   <div className="sdKycLinks" style={{ marginTop: 10 }}>
@@ -676,7 +733,11 @@ export default function SpecialistDetail() {
                       )}
 
                       {kycOk && <div className="sdState" style={{ marginTop: 10 }}>{kycOk}</div>}
-                      {kycError && <div className="sdState sdError" style={{ marginTop: 10 }}>{kycError}</div>}
+                      {kycError && (
+                        <div className="sdState sdError" style={{ marginTop: 10 }}>
+                          {kycError}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -733,12 +794,40 @@ export default function SpecialistDetail() {
                 </>
               )}
             </Card>
+
+            {/* ✅ NUEVO: Peligro */}
+            <Card title="Peligro (testing)">
+              <div className="sdMuted" style={{ marginBottom: 10 }}>
+                Usá esto para volver a registrar con el mismo correo.
+              </div>
+
+              <button
+                className="sdBtn"
+                onClick={handleFreeEmail}
+                disabled={dangerLoading}
+                style={{ backgroundColor: '#ffe6e6', color: '#8b0000' }}
+              >
+                {dangerLoading ? 'Procesando…' : '🧹 Liberar email (recomendado)'}
+              </button>
+
+              {dangerOk && <div className="sdState" style={{ marginTop: 10 }}>{dangerOk}</div>}
+              {dangerErr && (
+                <div className="sdState sdError" style={{ marginTop: 10 }}>
+                  {dangerErr}
+                </div>
+              )}
+
+              <div className="sdMuted" style={{ marginTop: 12 }}>
+                Nota: “Hard delete” existe en backend pero puede fallar por FKs. Para testing usá anonymize.
+              </div>
+            </Card>
           </div>
         </>
       )}
     </div>
   );
 }
+
 
 
 

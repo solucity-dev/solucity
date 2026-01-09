@@ -4,8 +4,19 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useMemo, useState } from 'react';
-import { Alert, Image, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Alert,
+  Animated,
+  Easing,
+  Image,
+  Keyboard,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -24,6 +35,19 @@ export default function RegisterSpecialist() {
 
   const [step, setStep] = useState<Step>(1);
 
+  // ===== UI: progreso animado =====
+  const progressAnim = useRef(new Animated.Value(1 / 3)).current;
+
+  useEffect(() => {
+    const target = step / 3;
+    Animated.timing(progressAnim, {
+      toValue: target,
+      duration: 320,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [step, progressAnim]);
+
   // ===== PASO 1: identidad + OTP ===========================================
   const [email, setEmail] = useState('');
   const [otpSent, setOtpSent] = useState(false);
@@ -40,10 +64,23 @@ export default function RegisterSpecialist() {
   // token temporal que nos da /auth/register/verify
   const [pendingToken, setPendingToken] = useState<string | null>(null);
 
+  // ✅ checks paso 1
+  const step1Checks = useMemo(() => {
+    const checks = [
+      { ok: email.trim().includes('@'), label: 'Email' },
+      { ok: otpSent, label: 'Código enviado' },
+      { ok: otp.trim().length === 6, label: 'Código 6 dígitos' },
+      { ok: name.trim().length >= 2, label: 'Nombre' },
+      { ok: password.length >= 8, label: 'Contraseña (8+)' },
+      { ok: password.length >= 8 && password === password2, label: 'Confirmación' },
+    ];
+    return checks;
+  }, [email, otpSent, otp, name, password, password2]);
+
   const sendCode = async () => {
     if (loadingStart) return;
     try {
-      Keyboard.dismiss(); // ✅ para que no haya que tocar 2 veces
+      Keyboard.dismiss();
       setLoadingStart(true);
 
       const trimmed = email.trim().toLowerCase();
@@ -74,7 +111,6 @@ export default function RegisterSpecialist() {
 
       if (!otp || otp.length < 6) return Alert.alert('Código inválido', 'Ingresá los 6 dígitos.');
       if (!name.trim()) return Alert.alert('Falta tu nombre', 'Ingresá tu nombre.');
-      // ✅ Backend pide min 8 (tu zod)
       if (!password || password.length < 8)
         return Alert.alert('Contraseña inválida', 'Mínimo 8 caracteres.');
       if (password !== password2) return Alert.alert('Las contraseñas no coinciden');
@@ -116,19 +152,60 @@ export default function RegisterSpecialist() {
   const [selfie, setSelfie] = useState<string | null>(null);
   const [loadingUpload, setLoadingUpload] = useState(false);
 
+  // ✅ checks paso 2
+  const step2Checks = useMemo(
+    () => [
+      { ok: !!dniFront, label: 'DNI frente' },
+      { ok: !!dniBack, label: 'DNI dorso' },
+      { ok: !!selfie, label: 'Selfie' },
+    ],
+    [dniFront, dniBack, selfie],
+  );
+
+  const step2Complete = !!dniFront && !!dniBack && !!selfie;
+
+  // ✅ hint suave paso 2 (exactamente qué falta)
+  const [step2Hint, setStep2Hint] = useState<string | null>(null);
+
+  const step2MissingLabels = useMemo(() => {
+    const missing = step2Checks.filter((c) => !c.ok).map((c) => c.label);
+    return missing;
+  }, [step2Checks]);
+
+  useEffect(() => {
+    if (step2Complete) setStep2Hint(null);
+  }, [step2Complete]);
+
   const pickFrom = async (from: 'camera' | 'gallery', setter: (uri: string) => void) => {
-    const fn =
-      from === 'camera' ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync;
+    try {
+      if (from === 'camera') {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) {
+          return Alert.alert('Permiso requerido', 'Necesitamos acceso a la cámara.');
+        }
+      } else {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+          return Alert.alert('Permiso requerido', 'Necesitamos acceso a tus fotos.');
+        }
+      }
 
-    const res = await fn({
-      quality: 1,
-      allowsMultipleSelection: false,
-      exif: true,
-      // ✅ evita warning deprecated
-      mediaTypes: ['images'],
-    } as any);
+      const fn =
+        from === 'camera' ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync;
 
-    if (!res.canceled && res.assets?.[0]?.uri) setter(res.assets[0].uri);
+      const res = await fn({
+        quality: 1,
+        allowsMultipleSelection: false,
+        exif: true,
+        mediaTypes: ['images'],
+        cameraType: ImagePicker.CameraType.front, // ✅ ayuda para selfie
+      } as any);
+
+      if (!res.canceled && res.assets?.[0]?.uri) setter(res.assets[0].uri);
+    } catch (e) {
+      console.log('[pickFrom]', e);
+      Alert.alert('Error', 'No se pudo abrir la cámara o la galería.');
+    }
   };
 
   // ✅ picker para PDF/imagen desde archivos (solo para matrícula/título)
@@ -177,11 +254,17 @@ export default function RegisterSpecialist() {
 
     const r = await api.post<KycUploadRes>('/specialists/kyc/upload', fd, {
       headers: { 'Content-Type': 'multipart/form-data', ...tempAuthHeaders() },
-      timeout: 60000, // 60s para uploads pesados
+      timeout: 60000,
     });
 
     return r.data.url;
   };
+
+  const [kycUrls, setKycUrls] = useState<{
+    dniFrontUrl: string;
+    dniBackUrl: string;
+    selfieUrl: string;
+  } | null>(null);
 
   const continueToStep3 = async () => {
     try {
@@ -193,8 +276,7 @@ export default function RegisterSpecialist() {
       const [f, b, s] = await Promise.all([upload(dniFront), upload(dniBack), upload(selfie)]);
       setKycUrls({ dniFrontUrl: f, dniBackUrl: b, selfieUrl: s });
 
-      // ✅ opcional pro: si existe este endpoint, deja el KYC en PENDING ya mismo.
-      // No rompe nada si falla (catch vacío).
+      // opcional pro: si existe este endpoint, deja el KYC en PENDING ya mismo.
       try {
         await api.post(
           '/specialists/kyc/submit',
@@ -216,17 +298,27 @@ export default function RegisterSpecialist() {
     }
   };
 
-  const [kycUrls, setKycUrls] = useState<{
-    dniFrontUrl: string;
-    dniBackUrl: string;
-    selfieUrl: string;
-  } | null>(null);
-
   // ===== PASO 3: rubros + matrícula opcional ===============================
   const [groups, setGroups] = useState<CategoryGroup[]>([]);
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
   const [licenseFile, setLicenseFile] = useState<string | null>(null);
   const [finalizing, setFinalizing] = useState(false);
+
+  // ✅ hint suave paso 3
+  const [step3Hint, setStep3Hint] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (selectedSlugs.length > 0) setStep3Hint(null);
+  }, [selectedSlugs.length]);
+
+  // ✅ checks paso 3
+  const step3Checks = useMemo(
+    () => [
+      { ok: selectedSlugs.length > 0, label: 'Rubros' },
+      { ok: true, label: 'Matrícula (opcional)' }, // siempre ok
+    ],
+    [selectedSlugs.length],
+  );
 
   useEffect(() => {
     const load = async () => {
@@ -251,7 +343,7 @@ export default function RegisterSpecialist() {
     );
   };
 
-  // ✅ Matrícula/Título: ahora soporta imagen o PDF
+  // ✅ Matrícula/Título: ahora soporta imagen o PDF (misma ruta upload KYC)
   const uploadLicense = async (uri: string): Promise<string> => {
     if (!pendingToken) throw new Error('missing_temp_token');
 
@@ -275,18 +367,22 @@ export default function RegisterSpecialist() {
   };
 
   const finalize = async () => {
-    if (finalizing) return; // ✅ anti doble tap
+    if (finalizing) return;
     try {
       Keyboard.dismiss();
 
       if (!pendingToken)
         return Alert.alert('Error', 'Sesión pendiente perdida. Reintentá el registro.');
       if (!kycUrls) return Alert.alert('Error', 'Faltan las imágenes de identidad.');
-      if (selectedSlugs.length === 0) return Alert.alert('Elegí al menos un rubro.');
+
+      if (selectedSlugs.length === 0) {
+        setStep3Hint('Elegí al menos un rubro para continuar.');
+        return Alert.alert('Falta un paso', 'Elegí al menos un rubro para poder finalizar.');
+      }
 
       setFinalizing(true);
 
-      // ✅ subimos matrícula opcional (PDF o imagen) sin romper flujo
+      // matrícula opcional
       if (licenseFile) {
         try {
           await uploadLicense(licenseFile);
@@ -297,17 +393,13 @@ export default function RegisterSpecialist() {
 
       await api.post(
         '/specialists/register',
-        {
-          specialties: selectedSlugs,
-          bio: '',
-          kyc: kycUrls,
-        },
+        { specialties: selectedSlugs, bio: '', kyc: kycUrls },
         { headers: { ...tempAuthHeaders() } },
       );
 
-      // ✅ modo (preferencia UI) y login real (AuthProvider)
-      await setMode('specialist');
+      // ✅ IMPORTANTÍSIMO: login primero (setea role), luego mode (solo UI)
       await login(pendingToken);
+      await setMode('specialist');
     } catch (e: any) {
       console.log('[specialists/register]', e?.response?.data || e.message);
       Alert.alert('Error', e?.response?.data?.error ?? 'No se pudo finalizar el registro.');
@@ -315,6 +407,8 @@ export default function RegisterSpecialist() {
       setFinalizing(false);
     }
   };
+
+  const checksForStep = step === 1 ? step1Checks : step === 2 ? step2Checks : step3Checks;
 
   // ===== UI ================================================================
   return (
@@ -326,12 +420,43 @@ export default function RegisterSpecialist() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           padding: 16,
-          // ✅ clave: deja espacio REAL para navbar / gesto + botón final
           paddingBottom: insets.bottom + 140,
         }}
       >
         <Text style={s.h1}>Registro especialista</Text>
-        <Text style={s.h2}>Paso {step} de 3</Text>
+
+        {/* ✅ progreso animado */}
+        <View style={{ marginTop: 8, marginBottom: 10 }}>
+          <View style={s.progressTrack}>
+            <Animated.View
+              style={[
+                s.progressFill,
+                {
+                  width: progressAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0%', '100%'],
+                  }),
+                },
+              ]}
+            />
+          </View>
+
+          <View style={s.progressRow}>
+            <Text style={s.h2}>Paso {step} de 3</Text>
+            <View style={s.stepDots}>
+              <Dot active={step >= 1} />
+              <Dot active={step >= 2} />
+              <Dot active={step >= 3} />
+            </View>
+          </View>
+        </View>
+
+        {/* ✅ mini checks */}
+        <View style={s.checksWrap}>
+          {checksForStep.map((c) => (
+            <MiniCheck key={c.label} ok={c.ok} label={c.label} />
+          ))}
+        </View>
 
         {step === 1 && (
           <View style={s.card}>
@@ -440,33 +565,59 @@ export default function RegisterSpecialist() {
 
         {step === 2 && (
           <View style={s.card}>
-            <Text style={s.label}>DNI frente</Text>
             <PickBoxKyc
+              label="DNI frente"
+              mode="dni"
               uri={dniFront}
               onPickCamera={() => pickFrom('camera', setDniFront)}
               onPickGallery={() => pickFrom('gallery', setDniFront)}
+              onClear={() => setDniFront(null)}
             />
 
-            <Text style={s.label}>DNI dorso</Text>
             <PickBoxKyc
+              label="DNI dorso"
+              mode="dni"
               uri={dniBack}
               onPickCamera={() => pickFrom('camera', setDniBack)}
               onPickGallery={() => pickFrom('gallery', setDniBack)}
+              onClear={() => setDniBack(null)}
             />
 
-            <Text style={s.label}>Selfie</Text>
             <PickBoxKyc
+              label="Selfie"
+              mode="selfie"
               uri={selfie}
               onPickCamera={() => pickFrom('camera', setSelfie)}
               onPickGallery={() => pickFrom('gallery', setSelfie)}
+              onClear={() => setSelfie(null)}
             />
 
+            {/* ✅ hint suave paso 2 */}
+            {step2Hint ? <Text style={s.hint}>{step2Hint}</Text> : null}
+
             <Pressable
-              onPress={continueToStep3}
-              disabled={loadingUpload}
-              style={[s.btn, loadingUpload && s.disabled]}
+              onPress={() => {
+                if (!step2Complete) {
+                  const missing = step2MissingLabels;
+                  setStep2Hint(
+                    missing.length
+                      ? `Falta: ${missing.join(', ')}. Completalo para continuar.`
+                      : 'Te faltan fotos para continuar.',
+                  );
+                  return;
+                }
+                continueToStep3();
+              }}
+              disabled={loadingUpload || !step2Complete}
+              style={[s.btn, (loadingUpload || !step2Complete) && s.disabled]}
             >
-              <Text style={s.btnT}>{loadingUpload ? 'Subiendo…' : 'Continuar ▸ Paso 3'}</Text>
+              <Text style={s.btnT}>
+                {loadingUpload
+                  ? 'Subiendo…'
+                  : !step2Complete
+                    ? 'Completá las fotos'
+                    : 'Continuar ▸ Paso 3'}
+              </Text>
             </Pressable>
           </View>
         )}
@@ -474,6 +625,7 @@ export default function RegisterSpecialist() {
         {step === 3 && (
           <View style={s.card}>
             <Text style={s.label}>Seleccioná tus rubros</Text>
+
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               {flatCategories.map((c) => {
                 const active = selectedSlugs.includes(c.slug);
@@ -489,14 +641,17 @@ export default function RegisterSpecialist() {
               })}
             </View>
 
-            <Text style={[s.label, { marginTop: 12 }]}>Matrícula/Título (opcional)</Text>
-
+            {/* ✅ Matrícula UI premium */}
             <PickBoxLicense
               uri={licenseFile}
               onPickCamera={() => pickFrom('camera', setLicenseFile)}
               onPickGallery={() => pickFrom('gallery', setLicenseFile)}
               onPickDocument={() => pickDocument(setLicenseFile)}
+              onClear={() => setLicenseFile(null)}
             />
+
+            {/* ✅ hint suave paso 3 */}
+            {step3Hint ? <Text style={s.hint}>{step3Hint}</Text> : null}
 
             <Pressable
               onPress={finalize}
@@ -512,78 +667,259 @@ export default function RegisterSpecialist() {
   );
 }
 
-/** PickBox original para KYC (solo imagen) */
-function PickBoxKyc({
-  uri,
-  onPickCamera,
-  onPickGallery,
-}: {
-  uri: string | null;
-  onPickCamera: () => void;
-  onPickGallery: () => void;
-}) {
+/** UI: punto de pasos */
+function Dot({ active }: { active: boolean }) {
+  return <View style={[s.dot, active && s.dotActive]} />;
+}
+
+/** UI: mini check */
+function MiniCheck({ ok, label }: { ok: boolean; label: string }) {
   return (
-    <Pressable style={s.pick} onPress={onPickGallery} onLongPress={onPickCamera}>
-      {uri ? (
-        <Image source={{ uri }} style={s.preview} />
-      ) : (
-        <Text style={{ color: '#cfe' }}>Tomar/ Elegir foto…</Text>
-      )}
-    </Pressable>
+    <View style={s.checkItem}>
+      <View style={[s.checkIcon, ok ? s.checkIconOk : s.checkIconNo]}>
+        <Text style={[s.checkIconT, ok ? { color: '#0B6B76' } : { color: '#fff' }]}>
+          {ok ? '✓' : '·'}
+        </Text>
+      </View>
+      <Text style={s.checkLabel}>{label}</Text>
+    </View>
   );
 }
 
-/** PickBox para Matrícula/Título: imagen o PDF */
-function PickBoxLicense({
+/** PickBox KYC mejorado (DNI: cámara/galería, Selfie: cámara directa) */
+function PickBoxKyc({
   uri,
+  label,
+  mode,
   onPickCamera,
   onPickGallery,
-  onPickDocument,
+  onClear,
 }: {
   uri: string | null;
+  label: string;
+  mode: 'dni' | 'selfie';
   onPickCamera: () => void;
   onPickGallery: () => void;
-  onPickDocument: () => void;
+  onClear?: () => void;
 }) {
-  const isPdf = uri ? uri.toLowerCase().includes('.pdf') : false;
-
   if (!uri) {
     return (
-      <View style={[s.pick, { gap: 10 }]}>
-        <Pressable onPress={onPickGallery}>
-          <Text style={{ color: '#cfe' }}>🖼️ Elegir imagen (galería)</Text>
-        </Pressable>
-        <Pressable onPress={onPickCamera}>
-          <Text style={{ color: '#cfe' }}>📷 Tomar foto (cámara)</Text>
-        </Pressable>
-        <Pressable onPress={onPickDocument}>
-          <Text style={{ color: '#cfe' }}>📄 Subir documento (PDF)</Text>
-        </Pressable>
+      <View style={s.pickCard}>
+        <View style={s.pickHeader}>
+          <Text style={s.pickTitle}>{label}</Text>
+          <View style={[s.badge, { backgroundColor: 'rgba(255,255,255,0.12)' }]}>
+            <Text style={s.badgeT}>Pendiente</Text>
+          </View>
+        </View>
+
+        <View style={s.pickButtonsRow}>
+          {mode === 'dni' ? (
+            <>
+              <Pressable onPress={onPickGallery} style={[s.smallBtn, s.smallBtnSoft]}>
+                <Text style={s.smallBtnT}>🖼️ Galería</Text>
+              </Pressable>
+              <Pressable onPress={onPickCamera} style={[s.smallBtn, s.smallBtnSoft]}>
+                <Text style={s.smallBtnT}>📷 Cámara</Text>
+              </Pressable>
+            </>
+          ) : (
+            <Pressable onPress={onPickCamera} style={[s.smallBtn, s.smallBtnStrong]}>
+              <Text style={[s.smallBtnT, { color: '#0B6B76' }]}>🤳 Sacar selfie</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
     );
   }
 
   return (
-    <View style={s.pick}>
-      {isPdf ? (
-        <Text style={{ color: '#fff', fontWeight: '800' }}>📄 Documento seleccionado</Text>
-      ) : (
-        <Image source={{ uri }} style={s.preview} />
-      )}
-      <Text style={{ color: '#cfe', marginTop: 8 }}>Tocá para cambiar</Text>
-      <Pressable onPress={onPickDocument} style={{ marginTop: 6 }}>
-        <Text style={{ color: '#cfe' }}>Elegir otro documento (PDF)</Text>
-      </Pressable>
-      <Pressable onPress={onPickGallery} style={{ marginTop: 6 }}>
-        <Text style={{ color: '#cfe' }}>Elegir otra imagen</Text>
-      </Pressable>
+    <View style={s.pickCard}>
+      <View style={s.pickHeader}>
+        <Text style={s.pickTitle}>{label}</Text>
+        <View style={[s.badge, { backgroundColor: 'rgba(255,255,255,0.96)' }]}>
+          <Text style={[s.badgeT, { color: '#0B6B76' }]}>✓ Listo</Text>
+        </View>
+      </View>
+
+      <Image source={{ uri }} style={s.previewBig} />
+
+      <View style={s.previewActionsRow}>
+        {mode === 'dni' ? (
+          <>
+            <Pressable onPress={onPickGallery} style={[s.smallBtn, s.smallBtnSoft]}>
+              <Text style={s.smallBtnT}>🖼️ Cambiar</Text>
+            </Pressable>
+            <Pressable onPress={onPickCamera} style={[s.smallBtn, s.smallBtnSoft]}>
+              <Text style={s.smallBtnT}>📷 Otra</Text>
+            </Pressable>
+          </>
+        ) : (
+          <Pressable onPress={onPickCamera} style={[s.smallBtn, s.smallBtnSoft]}>
+            <Text style={s.smallBtnT}>🤳 Otra selfie</Text>
+          </Pressable>
+        )}
+
+        {!!onClear && (
+          <Pressable onPress={onClear} style={[s.smallBtn, s.smallBtnDanger]}>
+            <Text style={s.smallBtnT}>✕</Text>
+          </Pressable>
+        )}
+      </View>
+    </View>
+  );
+}
+
+/** PickBox para Matrícula/Título: imagen o PDF (UI premium) */
+function PickBoxLicense({
+  uri,
+  onPickCamera,
+  onPickGallery,
+  onPickDocument,
+  onClear,
+}: {
+  uri: string | null;
+  onPickCamera: () => void;
+  onPickGallery: () => void;
+  onPickDocument: () => void;
+  onClear?: () => void;
+}) {
+  const isPdf = uri ? uri.toLowerCase().includes('.pdf') : false;
+
+  return (
+    <View style={s.licenseCard}>
+      <View style={s.licenseHeader}>
+        <View>
+          <Text style={s.licenseTitle}>Matrícula / Título</Text>
+          <Text style={s.licenseSub}>Opcional. Podés subir foto o PDF.</Text>
+        </View>
+
+        <View style={[s.badge, uri ? s.badgeOk : s.badgePending]}>
+          <Text style={[s.badgeT, uri ? s.badgeTOk : null]}>{uri ? '✓' : 'Opcional'}</Text>
+        </View>
+      </View>
+
+      <View style={s.licensePreviewWrap}>
+        {!uri ? (
+          <View style={s.licenseEmpty}>
+            <Text style={s.licenseEmptyIcon}>📎</Text>
+            <Text style={s.licenseEmptyText}>Sin archivo seleccionado</Text>
+          </View>
+        ) : isPdf ? (
+          <View style={s.pdfRow}>
+            <Text style={s.pdfIcon}>📄</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.pdfTitle}>PDF seleccionado</Text>
+              <Text style={s.pdfHint}>Podés cambiarlo con los botones</Text>
+            </View>
+            {!!onClear && (
+              <Pressable onPress={onClear} style={s.trashBtn}>
+                <Text style={s.trashText}>✕</Text>
+              </Pressable>
+            )}
+          </View>
+        ) : (
+          <View style={{ width: '100%' }}>
+            <Image source={{ uri }} style={s.licensePreviewImg} />
+            <View style={s.previewActions}>
+              <Text style={s.previewLabel}>Imagen seleccionada</Text>
+              {!!onClear && (
+                <Pressable onPress={onClear} style={s.trashBtn}>
+                  <Text style={s.trashText}>✕</Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
+        )}
+      </View>
+
+      <View style={s.licenseBtnRow}>
+        <Pressable onPress={onPickGallery} style={[s.licenseBtn, s.licenseBtnSoft]}>
+          <Text style={s.licenseBtnIcon}>🖼️</Text>
+          <Text style={s.licenseBtnText}>Galería</Text>
+        </Pressable>
+
+        <Pressable onPress={onPickCamera} style={[s.licenseBtn, s.licenseBtnSoft]}>
+          <Text style={s.licenseBtnIcon}>📷</Text>
+          <Text style={s.licenseBtnText}>Cámara</Text>
+        </Pressable>
+
+        <Pressable onPress={onPickDocument} style={[s.licenseBtn, s.licenseBtnStrong]}>
+          <Text style={s.licenseBtnIcon}>📄</Text>
+          <Text style={[s.licenseBtnText, { color: '#0B6B76' }]}>PDF</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
 
 const s = StyleSheet.create({
   h1: { color: '#fff', fontSize: 28, fontWeight: '800' },
-  h2: { color: 'rgba(233,254,255,0.92)', marginBottom: 8 },
+  h2: { color: 'rgba(233,254,255,0.92)' },
+
+  // progreso
+  progressTrack: {
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+  },
+  progressRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  stepDots: { flexDirection: 'row', gap: 6 },
+  dot: { width: 8, height: 8, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.25)' },
+  dotActive: { backgroundColor: 'rgba(255,255,255,0.96)' },
+
+  // checks
+  checksWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  checkItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    height: 34,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+  },
+  checkIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkIconOk: { backgroundColor: 'rgba(255,255,255,0.96)' },
+  checkIconNo: { backgroundColor: 'rgba(255,255,255,0.18)' },
+  checkIconT: { fontWeight: '900' },
+  checkLabel: { color: 'rgba(233,254,255,0.92)', fontWeight: '800', fontSize: 12 },
+
+  // hints
+  hint: {
+    marginTop: 6,
+    color: 'rgba(233,254,255,0.92)',
+    fontWeight: '900',
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+  },
+
+  // card base
   card: { backgroundColor: 'rgba(255,255,255,0.10)', borderRadius: 16, padding: 14, gap: 10 },
   label: { color: '#fff', fontWeight: '700' },
   input: {
@@ -603,15 +939,8 @@ const s = StyleSheet.create({
   },
   btnT: { color: '#0B6B76', fontWeight: '800' },
   disabled: { opacity: 0.5 },
-  pick: {
-    minHeight: 140,
-    padding: 12,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  preview: { width: '100%', height: 140, borderRadius: 12 },
+
+  // chips
   chip: {
     paddingHorizontal: 10,
     height: 34,
@@ -623,4 +952,108 @@ const s = StyleSheet.create({
   chipActive: { backgroundColor: 'rgba(255,255,255,0.96)' },
   chipT: { color: '#e9feff', fontWeight: '700' },
   chipTActive: { color: '#0B6B76' },
+
+  // badges
+  badge: {
+    paddingHorizontal: 10,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeT: { color: 'rgba(233,254,255,0.92)', fontWeight: '900' },
+  badgeOk: { backgroundColor: 'rgba(255,255,255,0.96)' },
+  badgeTOk: { color: '#0B6B76' },
+  badgePending: { backgroundColor: 'rgba(255,255,255,0.12)' },
+
+  // pick cards (kyc)
+  pickCard: {
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderRadius: 16,
+    padding: 12,
+    gap: 10,
+  },
+  pickHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  pickTitle: { color: '#fff', fontWeight: '900' },
+  pickButtonsRow: { flexDirection: 'row', gap: 10 },
+  previewBig: { width: '100%', height: 170, borderRadius: 14 },
+
+  previewActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  smallBtn: {
+    flex: 1,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  smallBtnSoft: { backgroundColor: 'rgba(255,255,255,0.12)' },
+  smallBtnStrong: { backgroundColor: 'rgba(255,255,255,0.96)' },
+  smallBtnDanger: { maxWidth: 46, backgroundColor: 'rgba(255,255,255,0.12)' },
+  smallBtnT: { color: '#e9feff', fontWeight: '900' },
+
+  // ===== Matrícula/Título premium =====
+  licenseCard: {
+    marginTop: 12,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderRadius: 16,
+    padding: 14,
+    gap: 10,
+  },
+  licenseHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  licenseTitle: { color: '#fff', fontWeight: '900', fontSize: 15 },
+  licenseSub: { color: 'rgba(233,254,255,0.85)', fontSize: 12, marginTop: 2 },
+
+  licensePreviewWrap: {
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderRadius: 14,
+    padding: 12,
+  },
+  licenseEmpty: { alignItems: 'center', justifyContent: 'center', paddingVertical: 14, gap: 6 },
+  licenseEmptyIcon: { fontSize: 22 },
+  licenseEmptyText: { color: 'rgba(233,254,255,0.85)', fontWeight: '700' },
+
+  licensePreviewImg: { width: '100%', height: 160, borderRadius: 12 },
+  previewActions: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  previewLabel: { color: 'rgba(233,254,255,0.92)', fontWeight: '800' },
+
+  pdfRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
+  pdfIcon: { fontSize: 20 },
+  pdfTitle: { color: '#fff', fontWeight: '900' },
+  pdfHint: { color: 'rgba(233,254,255,0.80)', fontSize: 12, marginTop: 2 },
+
+  trashBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trashText: { color: '#fff', fontWeight: '900' },
+
+  licenseBtnRow: { flexDirection: 'row', gap: 10 },
+  licenseBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  licenseBtnSoft: { backgroundColor: 'rgba(255,255,255,0.12)' },
+  licenseBtnStrong: { backgroundColor: 'rgba(255,255,255,0.96)' },
+  licenseBtnIcon: { fontSize: 16 },
+  licenseBtnText: { color: '#e9feff', fontWeight: '900' },
 });

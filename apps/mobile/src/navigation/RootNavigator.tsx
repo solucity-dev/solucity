@@ -52,9 +52,14 @@ export default function RootNavigator() {
     return <Splash duration={1200} />;
   }
 
-  // Con token → stack privado (según role real)
+  // ✅ Con token → stack privado (PERO solo cuando ya tenemos user)
+  // Esto elimina el flash al Home cliente mientras /auth/me todavía está cargando.
   if (token) {
-    const isSpecialist = user?.role === 'SPECIALIST';
+    if (!user) {
+      return <Splash duration={1200} />;
+    }
+
+    const isSpecialist = user.role === 'SPECIALIST';
 
     return (
       <Stack.Navigator screenOptions={{ headerShown: false }}>

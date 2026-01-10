@@ -6,7 +6,7 @@ import type { AxiosRequestHeaders, InternalAxiosRequestConfig } from 'axios';
 
 const fromExtra = (Constants.expoConfig?.extra as { API_URL?: string })?.API_URL;
 const fromEnv = process.env.EXPO_PUBLIC_API_URL;
-const FALLBACK = 'http://192.168.0.102:3000';
+const FALLBACK = 'http://192.168.0.103:3000';
 
 export const API_URL = fromEnv || fromExtra || FALLBACK;
 

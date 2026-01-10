@@ -1,4 +1,4 @@
-//apps/mobile/src/auth/AuthProvider.tsx
+// apps/mobile/src/auth/AuthProvider.tsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
@@ -68,6 +68,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [mode, setModeState] = useState<Mode>('client');
   const [loading, setLoading] = useState(true);
 
+  // ✅ Nuevo: carga específica de /auth/me (útil en login/registro)
+  const [meLoading, setMeLoading] = useState(false);
+
   const setMode = useCallback(async (m: Mode) => {
     console.log('[Auth][setMode] ->', m);
     await AsyncStorage.setItem(MODE_KEY, m);
@@ -102,7 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: u.email,
       role: u.role,
       name: u.name,
-      surname: u.surname, // ✅
+      surname: u.surname,
       phone: u.phone,
     });
 
@@ -119,6 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setTokenState(newToken);
       console.log('[Auth] login: token set');
 
+      setMeLoading(true);
       try {
         const storedMode = await AsyncStorage.getItem(MODE_KEY);
 
@@ -138,6 +142,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log('[Auth][login] error -> logout()', e);
         await logout();
         throw e;
+      } finally {
+        setMeLoading(false);
       }
     },
     [fetchMe, logout],
@@ -169,7 +175,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(null);
           setNavRole(null);
 
-          // (opcional) si querés restaurar mode aun sin token:
           if (storedMode === 'specialist' || storedMode === 'client') {
             setModeState(storedMode);
           }
@@ -189,15 +194,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log('[Auth][hydrate] /auth/me role =', role);
         console.log('[Auth][hydrate] storedMode BEFORE rule =', storedMode ?? '(none)');
 
-        // ✅ Reglas de mode DESPUÉS de conocer role (evita flash)
+        // ✅ Reglas de mode DESPUÉS de conocer role
         if (role !== 'SPECIALIST') {
           console.log('[Auth][hydrate] role is not SPECIALIST -> forcing mode=client');
           await AsyncStorage.setItem(MODE_KEY, 'client');
           setModeState('client');
         } else {
-          // role === SPECIALIST
-          // Preferimos lo guardado si existe; si no, dejamos client por defecto.
-          // Si querés que especialista default sea specialist, cambiá 'client' por 'specialist'.
           const nextMode: Mode =
             storedMode === 'specialist' || storedMode === 'client'
               ? (storedMode as Mode)
@@ -233,22 +235,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => setOnUnauthorizedHandler(null);
   }, [logout]);
 
+  // ✅ loading real = hydrate o fetchMe en proceso (login/registro)
+  const effectiveLoading = loading || meLoading;
+
   const value = useMemo(
     () => ({
       token,
       user,
-      loading,
-      ready: !loading,
+      loading: effectiveLoading,
+      ready: !effectiveLoading,
       mode,
       setMode,
       login,
       logout,
       setUser,
     }),
-    [token, user, loading, mode, setMode, login, logout],
+    [token, user, effectiveLoading, mode, setMode, login, logout],
   );
 
-  if (loading) {
+  if (effectiveLoading) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         <ActivityIndicator />

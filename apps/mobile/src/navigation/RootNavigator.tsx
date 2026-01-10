@@ -47,18 +47,20 @@ export default function RootNavigator() {
     };
   }, []);
 
-  // Mientras hidrata auth + onboarding, mostramos splash
+  // ✅ Mientras hidrata auth + onboarding, mostramos splash
   if (loading || !bootReady || onboardingSeen === null) {
     return <Splash duration={1200} />;
   }
 
-  // ✅ Con token → stack privado (PERO solo cuando ya tenemos user)
-  // Esto elimina el flash al Home cliente mientras /auth/me todavía está cargando.
-  if (token) {
-    if (!user) {
-      return <Splash duration={1200} />;
-    }
+  // ✅ CLAVE anti-flash:
+  // Si hay token pero todavía no tenemos user (todavía está corriendo /auth/me),
+  // NO renderizamos ClientTabs "por defecto". Mostramos Splash.
+  if (token && !user) {
+    return <Splash duration={600} />;
+  }
 
+  // ✅ Con token → stack privado (según role real)
+  if (token && user) {
     const isSpecialist = user.role === 'SPECIALIST';
 
     return (
@@ -69,14 +71,14 @@ export default function RootNavigator() {
           <Stack.Screen name="Main" component={ClientTabs} />
         )}
 
-        {/* ✅ Global: accesible desde cualquier lado (Home/Perfil/etc) */}
+        {/* ✅ Global */}
         <Stack.Screen name="KycStatus" component={KycStatusScreen} />
         <Stack.Screen name="KycUpload" component={KycUploadScreen} />
       </Stack.Navigator>
     );
   }
 
-  // Sin token → flujo público
+  // ✅ Sin token → flujo público
   return (
     <Stack.Navigator
       screenOptions={{ headerShown: false }}
@@ -111,7 +113,6 @@ export default function RootNavigator() {
 
       <Stack.Screen name="Login" component={LoginScreen} />
 
-      {/* ✅ Recuperación de contraseña */}
       <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
       <Stack.Screen name="ResetPassword" component={ResetPassword} />
 

@@ -2,7 +2,6 @@
 import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import { useEffect, useMemo, useState } from 'react';
@@ -17,9 +16,11 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { API_URL, api } from '../lib/api';
+
+import type { HomeStackParamList } from '../types';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { HomeStackParamList } from '../types';
 
 type Route = RouteProp<HomeStackParamList, 'SpecialistProfile'>;
 
@@ -43,20 +44,15 @@ type SpecialistDetails = {
   enabled?: boolean;
   availableNow?: boolean;
   visitPrice?: number | null;
-  pricingLabel?: string | null; // ✅ NUEVO
+  pricingLabel?: string | null;
   currency?: string | null;
   bio?: string | null;
   distanceKm?: number | null;
   availability?: { days: number[]; start: string; end: string } | null;
   specialties?: { id: string; name: string; slug: string }[];
   stats?: { done: number; canceled: number };
-  reviews: Review[]; // 👈 nuevo campo
+  reviews: Review[];
 };
-
-const API_URL =
-  (Constants.expoConfig?.extra as any)?.API_URL ??
-  (Constants.manifest2 as any)?.extra?.API_URL ??
-  (Constants.manifest as any)?.extra?.API_URL;
 
 function absoluteUrl(u?: string | null): string | undefined {
   if (!u) return undefined;
@@ -80,37 +76,47 @@ export default function SpecialistProfileScreen() {
 
   const insets = useSafeAreaInsets();
   const tabBarHeightRaw = useBottomTabBarHeight();
-  const tabBarHeight = Math.max(tabBarHeightRaw, 60); // fallback seguro
-
-  const ctaBottom = tabBarHeight + insets.bottom + 12; // margen visual
+  const tabBarHeight = Math.max(tabBarHeightRaw, 60);
+  const ctaBottom = tabBarHeight + insets.bottom + 12;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [spec, setSpec] = useState<SpecialistDetails | null>(null);
 
   useEffect(() => {
+    let alive = true;
+
     (async () => {
       try {
         setLoading(true);
         setError(null);
 
-        // 1) obtener ubicación para distancia
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          throw new Error('No se pudo obtener tu ubicación');
+        // ✅ BONUS: si vienen lat/lng desde la lista, los usamos y NO pedimos GPS.
+        // (Si tu tipo HomeStackParamList no los tiene aún, igual funciona por runtime.)
+        const maybeLat = (params as any)?.lat as number | undefined;
+        const maybeLng = (params as any)?.lng as number | undefined;
+
+        let lat: number;
+        let lng: number;
+
+        if (typeof maybeLat === 'number' && typeof maybeLng === 'number') {
+          lat = maybeLat;
+          lng = maybeLng;
+        } else {
+          // fallback: pedir ubicación
+          const perm = await Location.requestForegroundPermissionsAsync();
+          if (perm.status !== 'granted') throw new Error('No se pudo obtener tu ubicación');
+
+          const pos = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          lat = pos.coords.latitude;
+          lng = pos.coords.longitude;
         }
 
-        const pos = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-
-        // 2) pedir datos del especialista
-        const url = `${API_URL}/specialists/${params.id}?lat=${lat}&lng=${lng}`;
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as any;
+        // ✅ FIX: usar api (axios) para que vaya con Authorization + interceptores
+        const res = await api.get(`/specialists/${params.id}`, { params: { lat, lng } });
+        const data = res.data as any;
 
         const normalized: SpecialistDetails = {
           id: data.id,
@@ -122,7 +128,7 @@ export default function SpecialistProfileScreen() {
           enabled: data.enabled,
           availableNow: data.availableNow,
           visitPrice: data.visitPrice,
-          pricingLabel: data.pricingLabel ?? null, // ✅ NUEVO
+          pricingLabel: data.pricingLabel ?? null,
           currency: data.currency,
           bio: data.bio,
           distanceKm: data.distanceKm,
@@ -132,14 +138,25 @@ export default function SpecialistProfileScreen() {
           reviews: Array.isArray(data.reviews) ? data.reviews : [],
         };
 
+        if (!alive) return;
         setSpec(normalized);
       } catch (e: any) {
-        setError(e?.message ?? 'No se pudo cargar el perfil.');
+        if (!alive) return;
+
+        const status = e?.response?.status;
+        if (status === 401) setError('Tu sesión venció. Volvé a iniciar sesión.');
+        else if (status) setError(`Error del servidor (HTTP ${status}).`);
+        else setError(e?.message ?? 'No se pudo cargar el perfil.');
       } finally {
+        if (!alive) return;
         setLoading(false);
       }
     })();
-  }, [params.id]);
+
+    return () => {
+      alive = false;
+    };
+  }, [params]);
 
   const avatarSource = useMemo(() => {
     const url = absoluteUrl(spec?.avatarUrl ?? null);
@@ -155,7 +172,6 @@ export default function SpecialistProfileScreen() {
   };
 
   const badgeText = spec?.badge ? BADGE_LABEL[spec.badge] : 'Bronce';
-
   const availability = spec?.availability ?? { days: [], start: '09:00', end: '18:00' };
   const days = availability.days ?? [];
 
@@ -176,7 +192,6 @@ export default function SpecialistProfileScreen() {
             <Ionicons name="chevron-back" size={26} color="#E9FEFF" />
           </Pressable>
           <Text style={styles.headerTitle}>Perfil</Text>
-          {/* spacer derecho para balancear layout */}
           <View style={{ width: 32 }} />
         </View>
 
@@ -188,20 +203,19 @@ export default function SpecialistProfileScreen() {
         ) : error ? (
           <View style={styles.center}>
             <Text style={{ color: '#ffd5d5', fontWeight: '700' }}>Ups</Text>
-            <Text style={{ color: '#FFECEC', marginTop: 4 }}>{error}</Text>
+            <Text style={{ color: '#FFECEC', marginTop: 4, textAlign: 'center' }}>{error}</Text>
           </View>
         ) : !spec ? (
           <View style={styles.center}>
             <Text style={{ color: '#E9FEFF' }}>No encontramos este especialista.</Text>
           </View>
         ) : (
-          // 👇 Contenedor principal: Scroll + botón fijo abajo
           <View style={styles.body}>
             <ScrollView
               style={{ flex: 1 }}
               contentContainerStyle={{
                 paddingHorizontal: 16,
-                paddingBottom: ctaBottom + 90, // espacio para que el final quede visible
+                paddingBottom: ctaBottom + 90,
               }}
               showsVerticalScrollIndicator={false}
             >
@@ -210,6 +224,7 @@ export default function SpecialistProfileScreen() {
                 <View style={styles.avatarWrap}>
                   <Image source={avatarSource} style={styles.avatar} />
                 </View>
+
                 <View style={{ flex: 1, marginLeft: 14 }}>
                   <Text style={styles.name}>{spec.name}</Text>
 
@@ -236,12 +251,11 @@ export default function SpecialistProfileScreen() {
                 </View>
               </View>
 
-              {/* Precio / etiqueta dinámica */}
+              {/* Precio */}
               <View style={styles.priceCard}>
                 <MDI name="camera-metering-spot" size={18} color="#0A5B63" />
                 <Text style={styles.priceText}>
                   {spec.pricingLabel?.trim() || 'Visita'}
-
                   {spec.visitPrice != null ? `: $${spec.visitPrice.toLocaleString('es-AR')}` : ''}
                 </Text>
               </View>
@@ -311,7 +325,7 @@ export default function SpecialistProfileScreen() {
                 </View>
               )}
 
-              {/* Contrataciones: realizados / cancelados */}
+              {/* Contrataciones */}
               <View style={styles.sectionCard}>
                 <View style={styles.sectionHeader}>
                   <MDI name="clipboard-check-outline" size={18} color="#E9FEFF" />
@@ -355,13 +369,7 @@ export default function SpecialistProfileScreen() {
                           {rev.author}
                         </Text>
 
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            gap: 4,
-                          }}
-                        >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                           <Ionicons name="star" size={14} color="#FFD166" />
                           <Text style={styles.sectionBody}>{rev.rating.toFixed(1)}</Text>
                         </View>
@@ -390,9 +398,7 @@ export default function SpecialistProfileScreen() {
                   pressed && { opacity: 0.95, transform: [{ scale: 0.99 }] },
                 ]}
                 onPress={() => {
-                  nav.navigate('CreateOrder', {
-                    specialistId: spec.id,
-                  });
+                  nav.navigate('CreateOrder', { specialistId: spec.id });
                 }}
               >
                 <Text style={styles.mainCtaText}>Solicitar contratación</Text>
@@ -570,9 +576,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 70,
     paddingHorizontal: 20,
-    paddingBottom: 24, // queda por encima de la bottom-tab
+    paddingBottom: 24,
   },
   mainCta: {
     backgroundColor: '#E9FEFF',

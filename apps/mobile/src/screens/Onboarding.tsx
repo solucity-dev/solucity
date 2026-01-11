@@ -1,7 +1,9 @@
 // apps/mobile/src/screens/Onboarding.tsx
+import { Asset } from 'expo-asset';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
   FlatList,
   Image,
@@ -61,8 +63,31 @@ const IMG_WIDTH = SCREEN_WIDTH * 0.7; // 70% del ancho de pantalla
 
 export default function Onboarding({ onFinish }: OnboardingProps) {
   const [index, setIndex] = useState(0);
+  const [assetsReady, setAssetsReady] = useState(false);
   const listRef = useRef<FlatList<Slide>>(null);
   const insets = useSafeAreaInsets();
+
+  // ✅ Precarga de assets (evita “tardan en cargar”)
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        await Promise.all([
+          Asset.fromModule(Img1).downloadAsync(),
+          Asset.fromModule(Img2).downloadAsync(),
+          Asset.fromModule(Img3).downloadAsync(),
+        ]);
+      } catch (e) {
+        // Si falla la precarga, igual dejamos continuar (no bloqueamos onboarding)
+        console.log('[onboarding preload] error', e);
+      } finally {
+        if (mounted) setAssetsReady(true);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     if (viewableItems[0]?.index != null) setIndex(viewableItems[0].index);
@@ -90,41 +115,55 @@ export default function Onboarding({ onFinish }: OnboardingProps) {
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={styles.container}>
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <FlatList
-          ref={listRef}
-          data={SLIDES}
-          keyExtractor={(it) => it.key}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onViewableItemsChanged={onViewableItemsChanged.current}
-          viewabilityConfig={viewConfigRef.current}
-          getItemLayout={getItemLayout}
-          initialNumToRender={3}
-          decelerationRate="fast"
-          renderItem={({ item }) => (
-            <View style={styles.slide}>
-              <View style={styles.slideContent}>
-                <Image
-                  source={item.image}
-                  resizeMode="contain"
-                  style={styles.image}
-                  accessible
-                  accessibilityRole="image"
-                />
-                <View style={styles.textBox}>
-                  <Text style={styles.title}>
-                    <Text style={styles.titleBold}>{item.h1}</Text>
-                    {item.h2 ? `\n${item.h2}` : ''}
-                  </Text>
-                  {!!item.body && <Text style={styles.body}>{item.body}</Text>}
+        {/* ✅ Loader corto mientras se precargan imágenes */}
+        {!assetsReady ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator />
+            <Text style={styles.loadingText}>Cargando…</Text>
+          </View>
+        ) : (
+          <FlatList
+            ref={listRef}
+            data={SLIDES}
+            keyExtractor={(it) => it.key}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onViewableItemsChanged={onViewableItemsChanged.current}
+            viewabilityConfig={viewConfigRef.current}
+            getItemLayout={getItemLayout}
+            // ✅ performance: NO renderizar los 3 de golpe
+            initialNumToRender={1}
+            maxToRenderPerBatch={1}
+            windowSize={3}
+            updateCellsBatchingPeriod={40}
+            removeClippedSubviews
+            decelerationRate="fast"
+            renderItem={({ item }) => (
+              <View style={styles.slide}>
+                <View style={styles.slideContent}>
+                  <Image
+                    source={item.image}
+                    resizeMode="contain"
+                    style={styles.image}
+                    fadeDuration={150} // ✅ Android: suave al aparecer
+                    accessible
+                    accessibilityRole="image"
+                  />
+                  <View style={styles.textBox}>
+                    <Text style={styles.title}>
+                      <Text style={styles.titleBold}>{item.h1}</Text>
+                      {item.h2 ? `\n${item.h2}` : ''}
+                    </Text>
+                    {!!item.body && <Text style={styles.body}>{item.body}</Text>}
+                  </View>
                 </View>
               </View>
-            </View>
-          )}
-        />
+            )}
+          />
+        )}
 
-        {/* Footer con safe area para que no quede pegado al borde */}
+        {/* Footer con safe area */}
         <View style={[styles.footer, { paddingBottom: Math.max(14, insets.bottom + 8) }]}>
           <View style={styles.dots}>
             {SLIDES.map((_, i) => (
@@ -153,6 +192,14 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   safe: { flex: 1 },
 
+  loadingWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  loadingText: { color: 'rgba(255,255,255,0.9)', fontWeight: '800' },
+
   slide: {
     width: SCREEN_WIDTH,
     flex: 1,
@@ -163,7 +210,7 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 24,
     alignItems: 'center',
-    justifyContent: 'center', // centra vertical y horizontal
+    justifyContent: 'center',
   },
 
   image: {

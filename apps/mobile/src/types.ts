@@ -54,7 +54,7 @@ export type HomeStackParamList = {
   ClientHome: undefined;
   Category: { id: CategorySlug };
   SpecialistsList: { categorySlug: CategorySlug; title: string };
-  SpecialistProfile: { id: string; title?: string };
+  SpecialistProfile: { id: string; lat?: number; lng?: number };
 
   CreateOrder: {
     specialistId: string;

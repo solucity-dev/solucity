@@ -22,7 +22,7 @@ export default function SpecialistWizard({ onClose }: Props) {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.brand}>solucity</Text>
+          <Text style={styles.brand}>Solucity</Text>
           <Pressable
             onPress={handleClose}
             hitSlop={8}

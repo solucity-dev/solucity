@@ -7,9 +7,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ROOT_CATEGORY_MAP, SUBCATEGORIES } from '../data/categories';
 
+import type { CategorySlug, HomeStackParamList, RootCategoryId } from '../types';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { CategorySlug, HomeStackParamList, RootCategoryId } from '../types';
 
 // 👇 alias de slugs → ids raíz
 const CATEGORY_ALIAS: Record<string, RootCategoryId> = {
@@ -46,7 +46,7 @@ export default function CategoryScreen() {
               style={styles.logo}
               resizeMode="contain"
             />
-            <Text style={styles.brandText}>solucity</Text>
+            <Text style={styles.brandText}>Solucity</Text>
           </View>
         </View>
 

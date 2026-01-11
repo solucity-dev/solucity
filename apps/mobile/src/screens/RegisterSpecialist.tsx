@@ -64,6 +64,10 @@ export default function RegisterSpecialist() {
   const [password, setPassword] = useState('');
   const [password2, setPassword2] = useState('');
 
+  // ✅ ojitos
+  const [showPass1, setShowPass1] = useState(false);
+  const [showPass2, setShowPass2] = useState(false);
+
   const [loadingStart, setLoadingStart] = useState(false);
   const [loadingVerify, setLoadingVerify] = useState(false);
 
@@ -428,13 +432,11 @@ export default function RegisterSpecialist() {
 
       const newToken = r2.data?.token as string | undefined;
       if (!newToken) {
-        // fallback: si por alguna razón no viene token, al menos mantenemos sesión
         await login(pendingToken);
         await setMode('specialist');
         return;
       }
 
-      // ✅ ahora sí: token nuevo con role SPECIALIST
       await login(newToken);
       await setMode('specialist');
     } catch (e: any) {
@@ -564,26 +566,25 @@ export default function RegisterSpecialist() {
                 />
 
                 <Text style={s.label}>Contraseña</Text>
-                <TextInput
-                  style={s.input}
-                  secureTextEntry
+                <PasswordInputRow
                   value={password}
                   onChangeText={setPassword}
                   placeholder="Mínimo 8 caracteres"
-                  placeholderTextColor="#cfe"
+                  visible={showPass1}
+                  onToggle={() => setShowPass1((v) => !v)}
+                  onSubmitEditing={() => {}}
                   returnKeyType="next"
                 />
 
                 <Text style={s.label}>Confirmar contraseña</Text>
-                <TextInput
-                  style={s.input}
-                  secureTextEntry
+                <PasswordInputRow
                   value={password2}
                   onChangeText={setPassword2}
                   placeholder="Repetí la contraseña"
-                  placeholderTextColor="#cfe"
-                  returnKeyType="done"
+                  visible={showPass2}
+                  onToggle={() => setShowPass2((v) => !v)}
                   onSubmitEditing={verifyAndContinue}
+                  returnKeyType="done"
                 />
 
                 <Pressable
@@ -635,7 +636,6 @@ export default function RegisterSpecialist() {
               onClear={() => setSelfie(null)}
             />
 
-            {/* ✅ hint suave paso 2 */}
             {step2Hint ? <Text style={s.hint}>{step2Hint}</Text> : null}
 
             <Pressable
@@ -684,10 +684,9 @@ export default function RegisterSpecialist() {
               })}
             </View>
 
-            {/* ✅ Matrícula UI premium */}
             <PickBoxLicense
               uri={licenseFile?.uri ?? null}
-              isPdf={isPdf(licenseFile)} // ✅ boolean seguro
+              isPdf={isPdf(licenseFile)}
               onPickCamera={() =>
                 pickFrom('camera', (u) => setLicenseFile((prev) => ({ ...(prev ?? {}), uri: u })), {
                   cameraType: ImagePicker.CameraType.back,
@@ -700,7 +699,6 @@ export default function RegisterSpecialist() {
               onClear={() => setLicenseFile(null)}
             />
 
-            {/* ✅ hint suave paso 3 */}
             {step3Hint ? <Text style={s.hint}>{step3Hint}</Text> : null}
 
             <Pressable
@@ -714,6 +712,36 @@ export default function RegisterSpecialist() {
         )}
       </KeyboardAwareScrollView>
     </LinearGradient>
+  );
+}
+
+/** ✅ Password input con ojito, mantiene mismo look del s.input */
+function PasswordInputRow(props: {
+  value: string;
+  onChangeText: (t: string) => void;
+  placeholder?: string;
+  visible: boolean;
+  onToggle: () => void;
+  returnKeyType?: 'done' | 'next' | 'send';
+  onSubmitEditing?: () => void;
+}) {
+  const { visible, onToggle, ...rest } = props;
+  return (
+    <View style={pwd.wrap}>
+      <TextInput
+        {...rest}
+        style={pwd.input}
+        secureTextEntry={!visible}
+        placeholderTextColor="#cfe"
+      />
+      <Pressable
+        onPress={onToggle}
+        hitSlop={10}
+        style={({ pressed }) => [pwd.eyeBtn, pressed && { opacity: 0.75 }]}
+      >
+        <Text style={pwd.eyeText}>{visible ? '🙈' : '👁️'}</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -901,6 +929,32 @@ function PickBoxLicense({
     </View>
   );
 }
+
+const pwd = StyleSheet.create({
+  wrap: {
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 12,
+    paddingRight: 6,
+  },
+  input: {
+    flex: 1,
+    color: '#fff',
+    height: '100%',
+    paddingRight: 10,
+  },
+  eyeBtn: {
+    height: 36,
+    minWidth: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eyeText: { fontSize: 18, lineHeight: 18 },
+});
 
 const s = StyleSheet.create({
   h1: { color: '#fff', fontSize: 28, fontWeight: '800' },

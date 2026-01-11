@@ -1,18 +1,33 @@
+// apps/mobile/src/lib/api.ts
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import Constants from 'expo-constants';
 
 import type { AxiosRequestHeaders, InternalAxiosRequestConfig } from 'axios';
 
+/**
+ * 1) URLS
+ * - ENV (preferido): EXPO_PUBLIC_API_URL
+ * - extra (app.config / app.json)
+ * - fallback PROD (Render) ✅
+ */
 const fromExtra = (Constants.expoConfig?.extra as { API_URL?: string })?.API_URL;
 const fromEnv = process.env.EXPO_PUBLIC_API_URL;
-const FALLBACK = 'http://192.168.0.103:3000';
 
-export const API_URL = fromEnv || fromExtra || FALLBACK;
+// ✅ TU URL REAL DE RENDER (HTTPS)
+const PROD_FALLBACK = 'https://solucity-backend.onrender.com';
 
+// Si estás en DEV y querés forzar local, seteá EXPO_PUBLIC_API_URL con tu LAN.
+// const LOCAL_FALLBACK = 'http://192.168.0.103:3000';
+
+export const API_URL = (fromEnv || fromExtra || PROD_FALLBACK).replace(/\/+$/, '');
+
+/**
+ * 2) Axios instance
+ */
 export const api = axios.create({
   baseURL: API_URL,
-  timeout: 10000,
+  timeout: 25000, // Render cold start + internet lenta
 });
 
 /** ── Handler global para 401 ─────────────────────────────── */
@@ -28,20 +43,57 @@ let unauthorizedNotified = false;
 /** ── Auth token en memoria ─────────────────────────────── */
 let AUTH_TOKEN: string | null = null;
 
+/** ──────────────────────────────────────────────────────
+ *  Helpers JWT (sin dependencias) → sacar sub del token
+ *  Evitamos llamar /auth/me para cada request (causaba bloqueos/lentitud)
+ * ────────────────────────────────────────────────────── */
+function base64UrlDecode(input: string) {
+  const pad = '='.repeat((4 - (input.length % 4)) % 4);
+  const base64 = (input + pad).replace(/-/g, '+').replace(/_/g, '/');
+
+  // atob existe en Expo/RN. Si alguna vez falla, lo ajustamos.
+  const raw = atob(base64);
+
+  // Convertimos a UTF-8 safe
+  return decodeURIComponent(
+    Array.prototype.map
+      .call(raw, (c: string) => `%${('00' + c.charCodeAt(0).toString(16)).slice(-2)}`)
+      .join(''),
+  );
+}
+
+function getUserIdFromJwt(token: string | null): string | null {
+  try {
+    if (!token) return null;
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const payload = JSON.parse(base64UrlDecode(parts[1]));
+    return typeof payload?.sub === 'string' ? payload.sub : null;
+  } catch {
+    return null;
+  }
+}
+
+/** ── x-user-id cache ───────────────────────────────
+ *  Ya NO hacemos /auth/me en cada request.
+ *  Lo resolvemos desde el JWT al loguear.
+ */
+let cachedUserId: string | null = null;
+
 export function setAuthToken(token: string | null) {
   AUTH_TOKEN = token;
 
-  // ⚠️ importante
-  cachedUserId = null;
-  meInFlight = null;
+  // ✅ clave: setear userId desde JWT (sin pedir /auth/me)
+  cachedUserId = getUserIdFromJwt(token);
 
   if (token) {
-    unauthorizedNotified = false; // nuevo login → rearmamos el handler
+    unauthorizedNotified = false;
     api.defaults.headers.common.Authorization = `Bearer ${token}`;
-    console.log('[API] Authorization set (Bearer ...)');
+    if (__DEV__)
+      console.log('[API] Authorization set (Bearer ...)', { cachedUserId, baseURL: API_URL });
   } else {
     delete api.defaults.headers.common.Authorization;
-    console.log('[API] Authorization cleared');
+    if (__DEV__) console.log('[API] Authorization cleared');
   }
 }
 
@@ -54,56 +106,31 @@ export function getAuthToken() {
   return AUTH_TOKEN;
 }
 
-/** ── x-user-id ─────────────────────────────── */
-type MeResponse = { ok: boolean; user?: { id?: string } };
-
-let cachedUserId: string | null = null;
-let meInFlight: Promise<string | null> | null = null;
-
-async function fetchUserId(): Promise<string | null> {
-  try {
-    const r = await api.get<MeResponse>('/auth/me', {
-      headers: { 'Cache-Control': 'no-cache' },
-    });
-    const uid = r.data?.user?.id ?? null;
-    cachedUserId = uid;
-    return uid;
-  } catch {
-    return null;
-  } finally {
-    meInFlight = null;
-  }
-}
-
-async function ensureUserId(): Promise<string | null> {
-  if (cachedUserId) return cachedUserId;
-  if (meInFlight) return meInFlight;
-  meInFlight = fetchUserId();
-  return meInFlight;
-}
-
-/** ── REQUEST INTERCEPTOR ─────────────────────────────── */
+/** ── REQUEST INTERCEPTOR ───────────────────────────────
+ *  Importante: NO bloquear requests esperando /auth/me.
+ */
 api.interceptors.request.use(
   async (config: InternalAxiosRequestConfig): Promise<InternalAxiosRequestConfig> => {
     const url = String(config.url || '');
-    if (url.startsWith('/auth/me')) return config;
 
     const headers = {
       ...(config.headers || {}),
     } as AxiosRequestHeaders;
 
+    // Copiar auth por default si existe
     const defaultAuth = api.defaults.headers.common?.Authorization;
     if (!headers['Authorization'] && defaultAuth) {
       headers['Authorization'] = defaultAuth as any;
     }
 
+    // Si hay token en memoria y no vino header, lo agregamos
     if (AUTH_TOKEN && !headers['Authorization']) {
       headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
     }
 
-    if (!headers['x-user-id']) {
-      const uid = await ensureUserId();
-      if (uid) headers['x-user-id'] = uid;
+    // ✅ x-user-id SIN await: si lo tenemos, lo mandamos. Si no, seguimos.
+    if (!headers['x-user-id'] && cachedUserId) {
+      headers['x-user-id'] = cachedUserId;
     }
 
     config.headers = headers;
@@ -112,9 +139,7 @@ api.interceptors.request.use(
 );
 
 /**
- * 🔥 ──────────────────────────────────────────────────────
- *      RESPONSE INTERCEPTOR → auto-logout si recibe 401
- * ────────────────────────────────────────────────────────
+ * ── RESPONSE INTERCEPTOR → auto-logout si recibe 401 ─────────────────
  */
 api.interceptors.response.use(
   (res) => res,
@@ -123,38 +148,37 @@ api.interceptors.response.use(
     const reqUrl = String(err?.config?.url || '');
     const reqAuth = err?.config?.headers?.Authorization || err?.config?.headers?.authorization;
 
-    // 1) Si es /auth/me, NO hacemos logout automático
-    if (status === 401 && reqUrl.startsWith('/auth/me')) {
-      return Promise.reject(err);
+    // LOG útil para diferenciar "network" vs "backend"
+    if (__DEV__) {
+      console.log('[API ERROR]', {
+        baseURL: API_URL,
+        url: reqUrl,
+        status,
+        code: err?.code,
+        message: err?.message,
+      });
     }
 
-    // 2) Si el request NO tenía Authorization → era una llamada suelta.
-    //    NO limpies token (evita el loop infinito).
+    // Si el request NO tenía Authorization → no tocar sesión (evita loops)
     if (status === 401 && !reqAuth) {
-      if (__DEV__) {
-        console.log('[API] 401 without Authorization → ignoring logout', reqUrl);
-      }
+      if (__DEV__) console.log('[API] 401 without Authorization → ignoring logout', reqUrl);
       return Promise.reject(err);
     }
 
-    // 3) Si había Authorization y aun así dio 401 → token inválido => logout real
+    // Si había Authorization y dio 401 → token inválido => logout real
     if (status === 401) {
-      console.log('[API] 401 with Authorization → clearing token');
+      if (__DEV__) console.log('[API] 401 with Authorization → clearing token');
 
       await AsyncStorage.removeItem('auth:token');
       clearAuthToken();
       cachedUserId = null;
-      meInFlight = null;
 
-      // Avisar UNA sola vez al handler global (AuthProvider)
       if (!unauthorizedNotified && onUnauthorizedHandler) {
         unauthorizedNotified = true;
         try {
           await onUnauthorizedHandler();
         } catch (e) {
-          if (__DEV__) {
-            console.log('[API] onUnauthorized handler error', e);
-          }
+          if (__DEV__) console.log('[API] onUnauthorized handler error', e);
         }
       }
     }
@@ -163,10 +187,12 @@ api.interceptors.response.use(
   },
 );
 
-/** Ping de salud */
-api
-  .get('/health')
-  .then((r) => console.log('[health OK]', r.status, r.data))
-  .catch((e) => console.log('[health ERROR]', e.code, e.response?.status, e.message));
+/** Ping de salud (solo dev) */
+if (__DEV__) {
+  api
+    .get('/health')
+    .then((r) => console.log('[health OK]', r.status, r.data))
+    .catch((e) => console.log('[health ERROR]', e.code, e.response?.status, e.message));
 
-console.log('[API] baseURL =>', API_URL);
+  console.log('[API] baseURL =>', API_URL);
+}

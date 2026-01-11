@@ -1,7 +1,8 @@
 // apps/mobile/src/screens/ResetPassword.tsx
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity } from 'react-native';
+import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { passwordVerify } from '../api/password';
@@ -13,13 +14,15 @@ export default function ResetPassword({ route, navigation }: any) {
 
   const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const onConfirm = async () => {
     const c = code.trim();
     if (c.length < 4) return Alert.alert('Error', 'Ingresá el código (OTP)');
-    if (newPassword.trim().length < 8)
+    if (newPassword.trim().length < 8) {
       return Alert.alert('Error', 'La contraseña debe tener al menos 8 caracteres');
+    }
 
     try {
       setLoading(true);
@@ -61,14 +64,33 @@ export default function ResetPassword({ route, navigation }: any) {
         />
 
         <Text style={styles.label}>Nueva contraseña</Text>
-        <TextInput
-          style={styles.input}
-          value={newPassword}
-          onChangeText={setNewPassword}
-          secureTextEntry
-          placeholder="Mínimo 8 caracteres"
-          placeholderTextColor="rgba(255,255,255,0.6)"
-        />
+
+        <View style={styles.passWrap}>
+          <TextInput
+            style={[styles.input, styles.passInput]}
+            value={newPassword}
+            onChangeText={setNewPassword}
+            secureTextEntry={!showPassword}
+            placeholder="Mínimo 8 caracteres"
+            placeholderTextColor="rgba(255,255,255,0.6)"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+
+          <TouchableOpacity
+            onPress={() => setShowPassword((v) => !v)}
+            style={styles.eyeBtn}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityRole="button"
+            accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+          >
+            <Ionicons
+              name={showPassword ? 'eye-off' : 'eye'}
+              size={22}
+              color="rgba(255,255,255,0.9)"
+            />
+          </TouchableOpacity>
+        </View>
 
         <TouchableOpacity style={styles.btn} onPress={onConfirm} disabled={loading}>
           <Text style={styles.btnT}>{loading ? 'Confirmando...' : 'Confirmar'}</Text>
@@ -87,6 +109,7 @@ const styles = StyleSheet.create({
   title: { color: '#fff', fontSize: 26, fontWeight: '900' },
   sub: { color: 'rgba(255,255,255,0.85)', marginTop: 6, marginBottom: 18 },
   label: { color: '#E9FEFF', fontWeight: '700', marginBottom: 6 },
+
   input: {
     backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: 12,
@@ -95,6 +118,25 @@ const styles = StyleSheet.create({
     minHeight: 46,
     marginBottom: 14,
   },
+
+  passWrap: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
+
+  passInput: {
+    marginBottom: 14,
+    paddingRight: 44, // espacio para el icono
+  },
+
+  eyeBtn: {
+    position: 'absolute',
+    right: 12,
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
   btn: {
     height: 48,
     borderRadius: 14,

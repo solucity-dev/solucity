@@ -7,10 +7,12 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Image,
+  InteractionManager,
   Modal,
   Pressable,
   ScrollView,
@@ -34,8 +36,8 @@ import {
 import { getMySubscription, type SubscriptionInfo } from '../lib/subscriptionApi';
 import { useNotifications } from '../notifications/NotificationsProvider';
 
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { SpecialistHomeStackParamList } from '../types';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 type SpecProfile = {
   bio: string;
@@ -43,7 +45,6 @@ type SpecProfile = {
   radiusKm: number | null;
   visitPrice: number | null;
 
-  // ✅ NUEVO: etiqueta de forma de cobro (por visita, por hora, etc.)
   pricingLabel?: string | null;
 
   availability: { days: number[]; start: string; end: string; enabled?: boolean };
@@ -137,10 +138,11 @@ export default function SpecialistHome() {
   const token: string | null = auth.token ?? null;
   const logout: (() => void) | undefined = auth.logout;
 
+  // ✅ Loading real
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
   const [profile, setProfile] = useState<SpecProfile | null>(null);
-  const [locationRequested, setLocationRequested] = useState(false);
 
   // avatar
   const [avatar, setAvatar] = useState<string | null>(null);
@@ -153,13 +155,14 @@ export default function SpecialistHome() {
   const [certSaving, setCertSaving] = useState(false);
   const [openCerts, setOpenCerts] = useState(true);
 
-  // catálogo rubros (viene de /categories)
+  // catálogo rubros
   type CategoryOption = { slug: string; name: string; groupSlug: string; groupName: string };
   const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>([]);
-  const [categoriesLoadedOnce, setCategoriesLoadedOnce] = useState(false);
+  const categoriesLoadedOnceRef = useRef(false);
 
-  // ⭐ reseñas del especialista
+  // ⭐ reseñas
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
 
   // form fields
   const [bio, setBio] = useState('');
@@ -169,7 +172,7 @@ export default function SpecialistHome() {
   const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [specialties, setSpecialties] = useState<string[]>([]);
 
-  // ✅ pickers hora (UX nativo)
+  // ✅ pickers hora
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
 
@@ -192,18 +195,23 @@ export default function SpecialistHome() {
   const [price, setPrice] = useState<string>('0');
   const [radius, setRadius] = useState<string>('10');
 
-  // ✅ NUEVO: etiqueta para el precio
-  const [pricingLabel, setPricingLabel] = useState<string>(''); // ej: "Por visita", "Por hora", "Presupuesto"
+  // etiqueta precio
+  const [pricingLabel, setPricingLabel] = useState<string>('');
 
   // suscripción
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
 
-  // ✅ Catálogo rubros desde backend: GET /categories
+  // ubicación: auto-update una sola vez, sin bloquear
+  const locationRequestedRef = useRef(false);
+
+  // ✅ Catálogo rubros: GET /categories (background)
   const loadCategories = useCallback(async () => {
+    if (categoriesLoadedOnceRef.current) return;
+    categoriesLoadedOnceRef.current = true;
+
     try {
       const { data } = await api.get('/categories');
 
-      // data = [{ id,name,slug,categories:[{slug,name,...}] }, ...]
       const flat: CategoryOption[] = (data ?? []).flatMap((g: any) =>
         (g.categories ?? []).map((c: any) => ({
           slug: c.slug,
@@ -214,10 +222,8 @@ export default function SpecialistHome() {
       );
 
       setCategoryOptions(flat);
-      setCategoriesLoadedOnce(true);
     } catch (e) {
       if (__DEV__) console.log('[loadCategories] error', e);
-      setCategoriesLoadedOnce(true);
     }
   }, []);
 
@@ -225,7 +231,7 @@ export default function SpecialistHome() {
     return categoryOptions.find((c) => c.slug === slug)?.name ?? slug;
   }
 
-  // Ubicación: pedir permisos, obtener coords y guardarlas en el backend
+  // Ubicación: pedir permisos, obtener coords y guardarlas (no bloqueante)
   const updateLocationFromDevice = useCallback(
     async (options?: { silent?: boolean }) => {
       const silent = options?.silent ?? true;
@@ -280,6 +286,7 @@ export default function SpecialistHome() {
     [setProfile],
   );
 
+  // ✅ PERFIL bloqueante / lo demás background
   const reloadProfileAndSubscription = useCallback(
     async (opts?: { silent?: boolean }) => {
       const silent = opts?.silent ?? true;
@@ -288,7 +295,9 @@ export default function SpecialistHome() {
         if (!silent) setLoading(true);
 
         // 1) PERFIL
-        const { data } = await api.get('/specialists/me');
+        const { data } = await api.get('/specialists/me', {
+          headers: { 'Cache-Control': 'no-cache' },
+        });
         if (!data?.ok) throw new Error('bad_response');
         const p: SpecProfile = data.profile;
 
@@ -311,22 +320,7 @@ export default function SpecialistHome() {
         setPrice(String(p.visitPrice ?? 0));
         setRadius(String(p.radiusKm ?? 10));
 
-        // ✅ NUEVO: hidratar etiqueta (pricingLabel)
         setPricingLabel((p.pricingLabel ?? '').trim());
-
-        // 2) CERTS (no bloqueante)
-        try {
-          const items = await listCertifications();
-          setCerts(items);
-        } catch {}
-
-        // 3) SUSCRIPCIÓN
-        try {
-          const sub = await getMySubscription();
-          setSubscription(sub);
-        } catch (e) {
-          if (__DEV__) console.log('[Subscription] error al cargar', e);
-        }
       } catch (err: any) {
         const status = err?.response?.status;
         if (status === 401) {
@@ -347,59 +341,89 @@ export default function SpecialistHome() {
       } finally {
         if (!silent) setLoading(false);
       }
+
+      // 2) CERTS (background)
+      try {
+        const items = await listCertifications();
+        setCerts(items);
+      } catch {}
+
+      // 3) SUSCRIPCIÓN (background)
+      try {
+        const sub = await getMySubscription();
+        setSubscription(sub);
+      } catch (e) {
+        if (__DEV__) console.log('[Subscription] error al cargar', e);
+      }
     },
     [logout],
   );
 
+  // ✅ Reseñas en background post-interactions
+  const loadReviews = useCallback(async () => {
+    if (!token) return;
+    try {
+      setReviewsLoading(true);
+
+      const { data } = await api.get('/orders/mine', {
+        params: { role: 'specialist', status: 'closed' },
+        headers: { 'Cache-Control': 'no-cache' },
+      });
+
+      if (!data?.ok || !Array.isArray(data.orders)) return;
+
+      const rated = data.orders.filter((o: any) => o.rating?.score);
+
+      rated.sort(
+        (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+
+      const mapped: ReviewItem[] = rated.map((o: any) => ({
+        id: o.id,
+        createdAt: o.createdAt,
+        score: o.rating.score,
+        comment: o.rating.comment ?? null,
+        serviceName: o.service?.name ?? 'Servicio',
+        customerName: o.customer?.name ?? 'Cliente',
+      }));
+
+      setReviews(mapped);
+    } catch (e) {
+      if (__DEV__) console.log('[SpecialistHome] error cargando reseñas', e);
+    } finally {
+      setReviewsLoading(false);
+    }
+  }, [token]);
+
   useEffect(() => {
     if (!token) return;
+
     loadCategories();
-    reloadProfileAndSubscription({ silent: false }).finally(() => setLoading(false));
-  }, [token, loadCategories, reloadProfileAndSubscription]);
+    reloadProfileAndSubscription({ silent: false });
+
+    const task = InteractionManager.runAfterInteractions(() => {
+      loadReviews();
+    });
+
+    return () => {
+      const maybeCancel = (task as any)?.cancel;
+      if (typeof maybeCancel === 'function') maybeCancel();
+    };
+  }, [token, loadCategories, reloadProfileAndSubscription, loadReviews]);
 
   useFocusEffect(
     useCallback(() => {
       if (!token) return;
       reloadProfileAndSubscription({ silent: true });
-      if (!categoriesLoadedOnce) loadCategories();
-    }, [token, reloadProfileAndSubscription, loadCategories, categoriesLoadedOnce]),
+      loadCategories();
+    }, [token, reloadProfileAndSubscription, loadCategories]),
   );
 
+  // ✅ pedir ubicación sólo una vez y sin bloquear
   useEffect(() => {
     if (!token) return;
-    (async () => {
-      try {
-        const { data } = await api.get('/orders/mine', {
-          params: { role: 'specialist', status: 'closed' },
-        });
-
-        if (!data?.ok || !Array.isArray(data.orders)) return;
-
-        const rated = data.orders.filter((o: any) => o.rating?.score);
-
-        rated.sort(
-          (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        );
-
-        const mapped: ReviewItem[] = rated.map((o: any) => ({
-          id: o.id,
-          createdAt: o.createdAt,
-          score: o.rating.score,
-          comment: o.rating.comment ?? null,
-          serviceName: o.service?.name ?? 'Servicio',
-          customerName: o.customer?.name ?? 'Cliente',
-        }));
-
-        setReviews(mapped);
-      } catch (e) {
-        if (__DEV__) console.log('[SpecialistHome] error cargando reseñas', e);
-      }
-    })();
-  }, [token]);
-
-  useEffect(() => {
     if (!profile) return;
-    if (locationRequested) return;
+    if (locationRequestedRef.current) return;
 
     const hasCoords =
       profile.centerLat != null &&
@@ -408,9 +432,11 @@ export default function SpecialistHome() {
 
     if (hasCoords) return;
 
-    setLocationRequested(true);
-    updateLocationFromDevice({ silent: true });
-  }, [profile, locationRequested, updateLocationFromDevice]);
+    locationRequestedRef.current = true;
+    InteractionManager.runAfterInteractions(() => {
+      updateLocationFromDevice({ silent: true });
+    });
+  }, [token, profile, updateLocationFromDevice]);
 
   const avatarSrc = useMemo(() => {
     const u = absoluteUrl(avatar);
@@ -576,7 +602,6 @@ export default function SpecialistHome() {
     }
   }
 
-  // ✅ UPDATED: ahora guarda también pricingLabel + validaciones simples
   async function savePriceAndRadius() {
     try {
       setSaving(true);
@@ -584,13 +609,11 @@ export default function SpecialistHome() {
       const visitPrice = Math.max(0, Math.floor(Number(price) || 0));
       const radiusKm = Math.max(0, Number(radius) || 0);
 
-      // etiqueta opcional (máx 40 en backend)
       const label = pricingLabel.trim();
       const pricingLabelSafe = label.length ? label.slice(0, 40) : null;
 
       await api.patch('/specialists/me', { visitPrice, radiusKm, pricingLabel: pricingLabelSafe });
 
-      // refresco local para que se vea al instante (y aparezca en /search)
       setProfile((prev) =>
         prev
           ? {
@@ -629,12 +652,8 @@ export default function SpecialistHome() {
   function renderSubscriptionMainText(sub: SubscriptionInfo) {
     if (sub.status === 'TRIALING') {
       if (typeof sub.daysRemaining === 'number') {
-        if (sub.daysRemaining <= 0) {
-          return 'Tu prueba termina hoy. Pronto vas a poder activar tu plan mensual desde aquí.';
-        }
-        if (sub.daysRemaining === 1) {
-          return 'Te queda 1 día de prueba gratuita como especialista.';
-        }
+        if (sub.daysRemaining <= 0) return 'Tu prueba termina hoy.';
+        if (sub.daysRemaining === 1) return 'Te queda 1 día de prueba gratuita como especialista.';
         return `Te quedan ${sub.daysRemaining} días de prueba gratuita como especialista.`;
       }
       return 'Tenés una prueba gratuita activa como especialista.';
@@ -642,10 +661,8 @@ export default function SpecialistHome() {
     if (sub.status === 'ACTIVE') {
       return 'Tu suscripción está activa. Seguís apareciendo en las búsquedas y podés recibir nuevos trabajos.';
     }
-    if (sub.status === 'PAST_DUE') {
-      return 'Tu suscripción tiene un pago pendiente. Pronto vas a poder regularizarla desde la app.';
-    }
-    return 'Tu suscripción está inactiva. Cuando lancemos los pagos vas a poder reactivarla desde aquí.';
+    if (sub.status === 'PAST_DUE') return 'Tu suscripción tiene un pago pendiente.';
+    return 'Tu suscripción está inactiva.';
   }
 
   function certStatusBadge(status?: CertItem['status']) {
@@ -662,7 +679,6 @@ export default function SpecialistHome() {
     return certs.find((c) => c.category.slug === slug);
   }
 
-  // ✅ UPDATED: permite Imagen o PDF, sin romper el resto
   function handleUploadCert(categorySlug: string) {
     Alert.alert(
       'Subir matrícula',
@@ -736,7 +752,6 @@ export default function SpecialistHome() {
     );
   }
 
-  // ✅ Fuente de chips: catálogo si existe; si no, fallback hardcodeado
   const chipSource: { slug: string; name: string }[] = useMemo(() => {
     if (categoryOptions.length) {
       return categoryOptions.map((c) => ({ slug: c.slug, name: c.name }));
@@ -747,7 +762,15 @@ export default function SpecialistHome() {
   if (loading) {
     return (
       <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
-        <SafeAreaView style={{ flex: 1 }} />
+        <SafeAreaView
+          style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+          edges={['top']}
+        >
+          <ActivityIndicator color="#E9FEFF" />
+          <Text style={{ color: '#E9FEFF', marginTop: 10, fontWeight: '800' }}>
+            Cargando tu panel…
+          </Text>
+        </SafeAreaView>
       </LinearGradient>
     );
   }
@@ -764,7 +787,7 @@ export default function SpecialistHome() {
               style={styles.logo}
               resizeMode="contain"
             />
-            <Text style={styles.brandText}>solucity</Text>
+            <Text style={styles.brandText}>Solucity</Text>
           </View>
           <Pressable style={styles.bellBtn} onPress={() => navigation.navigate('Notifications')}>
             <Ionicons name="notifications-outline" size={26} color="#E9FEFF" />
@@ -793,7 +816,7 @@ export default function SpecialistHome() {
                 {profile?.name || 'Especialista'}
               </Text>
 
-              {/* ⭐ Rating arriba con promedio real y cantidad */}
+              {/* ⭐ Rating */}
               <View style={styles.starsRow}>
                 {(() => {
                   const avg =
@@ -854,7 +877,7 @@ export default function SpecialistHome() {
             </View>
           </View>
 
-          {/* Tarjeta de suscripción / trial */}
+          {/* Tarjeta suscripción */}
           {subscription ? (
             <View style={[styles.card, styles.subCard]}>
               <View style={styles.subHeaderRow}>
@@ -1026,7 +1049,6 @@ export default function SpecialistHome() {
               style={styles.input}
             />
 
-            {/* ✅ NUEVO: etiqueta que se ve en el listado (pricingLabel) */}
             <Text style={[styles.subTitle, { marginTop: 10 }]}>Etiqueta del precio</Text>
             <TextInput
               value={pricingLabel}
@@ -1104,7 +1126,7 @@ export default function SpecialistHome() {
             </Pressable>
           </View>
 
-          {/* Matrículas por rubro */}
+          {/* Matrículas */}
           <Section
             title="Matrículas por rubro"
             open={openCerts}
@@ -1155,9 +1177,19 @@ export default function SpecialistHome() {
 
           {/* Reseñas */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Reseñas</Text>
+            <View style={[styles.cardHeaderRow, { marginBottom: 0 }]}>
+              <Text style={styles.cardTitle}>Reseñas</Text>
+              <Pressable onPress={loadReviews} style={{ padding: 6, opacity: 0.9 }}>
+                <Ionicons name="refresh" size={18} color="#E9FEFF" />
+              </Pressable>
+            </View>
 
-            {reviews.length === 0 ? (
+            {reviewsLoading ? (
+              <View style={{ paddingVertical: 10 }}>
+                <ActivityIndicator color="#E9FEFF" />
+                <Text style={[styles.muted, { marginTop: 8 }]}>Cargando reseñas…</Text>
+              </View>
+            ) : reviews.length === 0 ? (
               <Text style={styles.muted}>Aún no tenés reseñas.</Text>
             ) : (
               <View style={{ marginTop: 8, gap: 10 }}>
@@ -1204,7 +1236,7 @@ export default function SpecialistHome() {
         </ScrollView>
       </SafeAreaView>
 
-      {/* Pickers: hora (nativo) */}
+      {/* Pickers: hora */}
       {showStartPicker && (
         <DateTimePicker
           value={timeStringToDate(start)}
@@ -1510,7 +1542,11 @@ const styles = StyleSheet.create({
   statNumber: { color: '#E9FEFF', fontSize: 18, fontWeight: '900' },
   statLabel: { color: '#B9E2E5', fontSize: 13 },
 
-  reviewItem: { paddingVertical: 8, borderTopWidth: 1, borderTopColor: 'rgba(233,254,255,0.1)' },
+  reviewItem: {
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(233,254,255,0.1)',
+  },
   reviewHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',

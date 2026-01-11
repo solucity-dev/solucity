@@ -1,5 +1,6 @@
 // apps/mobile/src/auth/AuthProvider.tsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
@@ -62,13 +63,37 @@ export const AuthContext = createContext<AuthContextT>({
   setUser: () => {},
 });
 
+function isUnauthorizedStatus(status?: number) {
+  return status === 401 || status === 403;
+}
+
+/**
+ * Cuando Render está dormido o hay mala red, Axios en RN suele tirar:
+ * - code: "ERR_NETWORK"
+ * - status: undefined
+ * - message: "Network Error"
+ *
+ * Eso NO significa token inválido, así que NO debemos borrar token.
+ */
+function isNetworkishAxiosError(e: unknown) {
+  if (!axios.isAxiosError(e)) return false;
+  const status = e.response?.status;
+  const code = e.code;
+  // status undefined + ERR_NETWORK / Network Error => casi seguro red/cold-start
+  if (status == null && (code === 'ERR_NETWORK' || /Network Error/i.test(String(e.message))))
+    return true;
+  // timeouts
+  if (code === 'ECONNABORTED') return true;
+  return false;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setTokenState] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [mode, setModeState] = useState<Mode>('client');
   const [loading, setLoading] = useState(true);
 
-  // ✅ Nuevo: carga específica de /auth/me (útil en login/registro)
+  // ✅ carga específica de /auth/me (útil en login/registro)
   const [meLoading, setMeLoading] = useState(false);
 
   const setMode = useCallback(async (m: Mode) => {
@@ -97,9 +122,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const r = await api.get<MeResponse>('/auth/me', {
       headers: { 'Cache-Control': 'no-cache' },
     });
+
     if (!r.data?.ok) throw new Error('auth_me_failed');
 
     const u = r.data.user;
+
     setUser({
       id: u.id,
       email: u.email,
@@ -139,8 +166,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setModeState('client');
         }
       } catch (e) {
-        console.log('[Auth][login] error -> logout()', e);
-        await logout();
+        // ✅ si fue 401/403 => token inválido => logout real
+        if (axios.isAxiosError(e) && isUnauthorizedStatus(e.response?.status)) {
+          console.log('[Auth][login] /auth/me unauthorized -> logout()', {
+            status: e.response?.status,
+          });
+          await logout();
+          throw e;
+        }
+
+        // ✅ si fue red/cold start/timeout => NO borres token; dejá que el usuario reintente
+        if (isNetworkishAxiosError(e)) {
+          console.log('[Auth][login] network/cold-start error on /auth/me -> keep token', {
+            code: (e as any)?.code,
+            message: (e as any)?.message,
+          });
+          // mantenemos token; usuario puede reintentar o esperar a que Render despierte
+          throw e;
+        }
+
+        // otros errores inesperados (500, etc.) -> NO borres token por las dudas, pero reportá
+        console.log('[Auth][login] error (non-auth) on /auth/me -> keep token', e);
         throw e;
       } finally {
         setMeLoading(false);
@@ -183,7 +229,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // ✅ Hay token -> lo seteamos y primero buscamos /auth/me
+        // ✅ Hay token -> lo seteamos y buscamos /auth/me
         setAuthToken(storedToken);
         setTokenState(storedToken);
         console.log('[Auth] token loaded from storage');
@@ -209,13 +255,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setModeState(nextMode);
         }
       } catch (e) {
-        console.log('[Auth][hydrate] error -> clearing token', e);
+        // ✅ SOLO limpiamos token si es 401/403 (token inválido)
+        if (axios.isAxiosError(e) && isUnauthorizedStatus(e.response?.status)) {
+          console.log('[Auth][hydrate] /auth/me unauthorized -> clearing token', {
+            status: e.response?.status,
+          });
 
-        await AsyncStorage.removeItem(TOKEN_KEY);
-        clearAuthToken();
-        setTokenState(null);
-        setUser(null);
-        setNavRole(null);
+          await AsyncStorage.removeItem(TOKEN_KEY);
+          clearAuthToken();
+          setTokenState(null);
+          setUser(null);
+          setNavRole(null);
+        } else if (isNetworkishAxiosError(e)) {
+          // ✅ Si es red/cold start: NO tocar token (evita “se rompió todo”)
+          console.log('[Auth][hydrate] network/cold-start error -> keeping token', {
+            code: (e as any)?.code,
+            message: (e as any)?.message,
+          });
+          // Dejamos token y user en null por ahora. La app puede mostrar loader o permitir reintentar.
+          // (Tu UI decide qué hacer cuando user == null pero token existe)
+        } else {
+          // Otros errores: tampoco borremos token automáticamente
+          console.log('[Auth][hydrate] error (non-auth) -> keeping token', e);
+        }
       } finally {
         console.log('[Auth][hydrate] done -> ready');
         if (!cancelled) setLoading(false);
@@ -235,7 +297,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => setOnUnauthorizedHandler(null);
   }, [logout]);
 
-  // ✅ loading real = hydrate o fetchMe en proceso (login/registro)
   const effectiveLoading = loading || meLoading;
 
   const value = useMemo(

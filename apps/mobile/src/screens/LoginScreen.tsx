@@ -25,11 +25,12 @@ type LoginResponse = {
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
-  const nav = useNavigation<any>(); // 👈 para poder navegar sin tipado del stack
+  const nav = useNavigation<any>();
   const { login } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false); // ✅ ojito
   const [loading, setLoading] = useState(false);
 
   const emailOk = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email.trim()), [email]);
@@ -37,6 +38,7 @@ export default function LoginScreen() {
 
   const onSubmit = async () => {
     if (!emailOk || !passOk || loading) return;
+
     setLoading(true);
     try {
       const body = { email: email.trim().toLowerCase(), password };
@@ -44,9 +46,9 @@ export default function LoginScreen() {
 
       if (res.data?.ok && res.data.token) {
         await login(res.data.token);
-        // RootNavigator detecta token y dibuja Main/MainSpecialist
         return;
       }
+
       Alert.alert('No se pudo iniciar sesión', 'Verificá tus credenciales e intentá de nuevo.');
     } catch (err) {
       if (axios.isAxiosError(err)) {
@@ -69,7 +71,6 @@ export default function LoginScreen() {
   const goBack = () => nav.goBack();
 
   const onForgotPassword = () => {
-    // Opcional: si ya escribió email, lo mandamos precargado
     const prefill = email.trim().toLowerCase();
     nav.navigate('ForgotPassword', prefill ? { email: prefill } : undefined);
   };
@@ -121,13 +122,16 @@ export default function LoginScreen() {
               autoComplete="email"
             />
 
-            <LabeledInput
+            {/* ✅ Password con ojito */}
+            <LabeledPasswordInput
               label="Contraseña"
               placeholder="Mínimo 8 caracteres"
               value={password}
               onChangeText={setPassword}
-              secureTextEntry
               autoComplete="password"
+              secureTextEntry={!showPass}
+              onToggleVisibility={() => setShowPass((v) => !v)}
+              isVisible={showPass}
             />
 
             <Pressable
@@ -142,7 +146,6 @@ export default function LoginScreen() {
               <Text style={styles.primaryText}>{loading ? 'Ingresando...' : 'Ingresar'}</Text>
             </Pressable>
 
-            {/* 👇 Link de recuperación */}
             <Pressable
               onPress={onForgotPassword}
               style={({ pressed }) => [styles.forgotWrap, pressed && { opacity: 0.85 }]}
@@ -168,6 +171,7 @@ function LabeledInput({
       {label ? (
         <Text style={{ color: 'rgba(255,255,255,0.9)', fontWeight: '700' }}>{label}</Text>
       ) : null}
+
       <TextInput
         {...rest}
         style={[
@@ -185,6 +189,72 @@ function LabeledInput({
     </View>
   );
 }
+
+/**
+ * ✅ Input de password con botón "ojito"
+ * - Sin librerías
+ * - Mantiene el look del input original
+ */
+function LabeledPasswordInput({
+  label,
+  isVisible,
+  onToggleVisibility,
+  style,
+  ...rest
+}: React.ComponentProps<typeof TextInput> & {
+  label: string;
+  isVisible: boolean;
+  onToggleVisibility: () => void;
+}) {
+  return (
+    <View style={{ gap: 6 }}>
+      {label ? (
+        <Text style={{ color: 'rgba(255,255,255,0.9)', fontWeight: '700' }}>{label}</Text>
+      ) : null}
+
+      <View style={[pwdStyles.wrap, style]}>
+        <TextInput {...rest} style={pwdStyles.input} placeholderTextColor="rgba(255,255,255,0.7)" />
+
+        <Pressable
+          onPress={onToggleVisibility}
+          hitSlop={10}
+          style={({ pressed }) => [pwdStyles.eyeBtn, pressed && { opacity: 0.75 }]}
+        >
+          <Text style={pwdStyles.eyeText}>{isVisible ? '🙈' : '👁️'}</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+const pwdStyles = StyleSheet.create({
+  wrap: {
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 14,
+    paddingRight: 6,
+  },
+  input: {
+    flex: 1,
+    color: '#fff',
+    height: '100%',
+    paddingRight: 10, // espacio para que no quede pegado al ojo
+  },
+  eyeBtn: {
+    height: 40,
+    minWidth: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eyeText: {
+    fontSize: 18,
+    lineHeight: 18,
+  },
+});
 
 const styles = StyleSheet.create({
   primaryBtn: {

@@ -1,7 +1,6 @@
 // apps/mobile/src/screens/SpecialistsListScreen.tsx
 import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
-import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import { useCallback, useMemo, useRef, useState } from 'react';
@@ -17,9 +16,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { API_URL, api } from '../lib/api';
+
+import type { HomeStackParamList } from '../types';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { HomeStackParamList } from '../types';
 
 // ===== Tipos =====
 type SpecialistsRoute = RouteProp<HomeStackParamList, 'SpecialistsList'>;
@@ -34,7 +35,7 @@ type SpecialistRow = {
   badge: 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | null;
   visitPrice?: number | null;
 
-  // ✅ NUEVO: etiqueta de forma de cobro (viene del backend: pricingLabel)
+  // etiqueta forma de cobro
   pricingLabel?: string | null;
 
   availableNow: boolean;
@@ -49,18 +50,13 @@ type SpecialistRow = {
 type SortBy = 'distance' | 'rating' | 'price';
 
 // ===== Config =====
-const API_URL =
-  (Constants.expoConfig?.extra as any)?.API_URL ??
-  (Constants.manifest2 as any)?.extra?.API_URL ??
-  (Constants.manifest as any)?.extra?.API_URL;
-
 const RADIUS_KM_DEFAULT = 8;
 
 // Cache en memoria (categoría + coords redondeadas + flags) -> resultados
 const resultsCache = new Map<string, { at: number; items: SpecialistRow[] }>();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos
 
-// ✅ Nuevo: umbral para considerar que el usuario “se movió”
+// umbral movimiento
 const MOVED_THRESHOLD_KM = 0.2; // 200m
 
 function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
@@ -77,6 +73,16 @@ function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: num
   const h = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
   const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
   return R * c;
+}
+
+function errToMsg(e: any) {
+  // axios network
+  const code = e?.code;
+  if (code === 'ERR_NETWORK') return 'No se pudo conectar con el servidor.';
+  if (code === 'ECONNABORTED') return 'La solicitud tardó demasiado. Reintentá.';
+  const status = e?.response?.status;
+  if (status) return `Error del servidor (HTTP ${status}).`;
+  return e?.message ?? 'Error desconocido';
 }
 
 export default function SpecialistsListScreen() {
@@ -101,23 +107,20 @@ export default function SpecialistsListScreen() {
   // Últimas coords conocidas
   const lastCoords = useRef<{ lat: number; lng: number } | null>(null);
 
-  // ✅ Nuevo: para saber si estamos consultando “lo mismo”
+  // para saber si estamos consultando “lo mismo”
   const lastKeyRef = useRef<string | null>(null);
 
   /**
-   * ✅ Pide permiso sólo si hace falta, y devuelve coords actuales.
-   * Si "forceFresh" es false, permite reutilizar coords previas si el usuario no se movió “lo suficiente”
-   * para evitar llamadas innecesarias al backend.
+   * Pide permiso solo si hace falta, devuelve coords.
+   * Si forceFresh=false y no se movió, reutiliza coords previas.
    */
   const getCoordsSmart = useCallback(async (forceFresh: boolean) => {
-    // 1) permisos
     const perm = await Location.getForegroundPermissionsAsync();
     if (perm.status !== 'granted') {
       const req = await Location.requestForegroundPermissionsAsync();
       if (req.status !== 'granted') throw new Error('Permiso de ubicación denegado');
     }
 
-    // 2) si no tenemos coords aún -> tomarlas
     if (!lastCoords.current) {
       const pos = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
@@ -126,8 +129,6 @@ export default function SpecialistsListScreen() {
       return { coords: lastCoords.current, movedKm: Infinity };
     }
 
-    // 3) si no forzamos refresh, igual tomamos posición “actual” para medir movimiento,
-    // pero la lógica de “evitar backend” se hace luego (con cache/key/TTL)
     const pos = await Location.getCurrentPositionAsync({
       accuracy: Location.Accuracy.Balanced,
     });
@@ -135,11 +136,9 @@ export default function SpecialistsListScreen() {
     const movedKm = haversineKm(lastCoords.current, fresh);
 
     if (!forceFresh && movedKm < MOVED_THRESHOLD_KM) {
-      // no actualizamos lastCoords, devolvemos la anterior
       return { coords: lastCoords.current, movedKm };
     }
 
-    // si se movió, actualizamos
     lastCoords.current = fresh;
     return { coords: fresh, movedKm };
   }, []);
@@ -169,9 +168,6 @@ export default function SpecialistsListScreen() {
         else setLoading(true);
         setError(null);
 
-        // ✅ coords inteligentes:
-        // - en refresh forzamos coords frescas
-        // - en foco normal intentamos reutilizar si no hubo movimiento
         const { coords, movedKm } = await getCoordsSmart(isRefresh);
 
         const lat = coords.lat;
@@ -179,62 +175,62 @@ export default function SpecialistsListScreen() {
 
         const key = buildCacheKey(lat, lng);
 
-        // ✅ 1) Si NO es refresh, NO se movió, y la key es la misma, y el cache está fresco -> NO tocar backend
         const hit = resultsCache.get(key);
         const cacheFresh = hit && Date.now() - hit.at < CACHE_TTL_MS;
 
+        // 1) si no es refresh, no se movió, misma key, cache fresco -> no backend
         if (
           !isRefresh &&
           movedKm < MOVED_THRESHOLD_KM &&
           lastKeyRef.current === key &&
           cacheFresh
         ) {
-          // ya tenemos lo mismo y está fresco
-          setItems(hit.items);
+          setItems(hit!.items);
           return;
         }
 
-        // ✅ 2) Si hay cache fresco, usarlo (incluso si se movió poco o cambió key por redondeo)
+        // 2) si hay cache fresco -> usarlo
         if (cacheFresh) {
-          setItems(hit.items);
+          setItems(hit!.items);
           lastKeyRef.current = key;
           return;
         }
 
-        // ✅ 3) Backend
-        const q = new URLSearchParams();
-        q.set('category', dbCategorySlug);
-        q.set('lat', String(lat));
-        q.set('lng', String(lng));
-        q.set('radiusKm', String(RADIUS_KM_DEFAULT));
-        if (onlyEnabled) q.set('enabled', 'true');
-        if (onlyAvailable) q.set('availableNow', 'true');
-        if (priceMax != null) q.set('priceMax', String(priceMax));
+        // 3) backend (USANDO api.ts ✅)
+        const paramsQ: Record<string, any> = {
+          category: dbCategorySlug,
+          lat,
+          lng,
+          radiusKm: RADIUS_KM_DEFAULT,
+        };
+        if (onlyEnabled) paramsQ.enabled = true;
+        if (onlyAvailable) paramsQ.availableNow = true;
+        if (priceMax != null) paramsQ.priceMax = priceMax;
 
-        const url = `${API_URL}/specialists/search?${q.toString()}`;
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (__DEV__) {
+          console.log('[SPECIALISTS][REQ]', {
+            baseURL: API_URL,
+            path: '/specialists/search',
+            params: paramsQ,
+          });
+        }
 
-        const json: SpecialistRow[] = await res.json();
+        const res = await api.get<SpecialistRow[]>('/specialists/search', { params: paramsQ });
 
-        setItems(json);
-        resultsCache.set(key, { at: Date.now(), items: json });
+        setItems(res.data ?? []);
+        resultsCache.set(key, { at: Date.now(), items: res.data ?? [] });
         lastKeyRef.current = key;
       } catch (e: any) {
-        setError(e?.message ?? 'Error desconocido');
+        if (__DEV__) console.log('[SPECIALISTS][ERR]', e?.code, e?.response?.status, e?.message);
+        setError(errToMsg(e));
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [API_URL, buildCacheKey, dbCategorySlug, getCoordsSmart, onlyAvailable, onlyEnabled, priceMax],
+    [buildCacheKey, dbCategorySlug, getCoordsSmart, onlyAvailable, onlyEnabled, priceMax],
   );
 
-  /**
-   * ✅ En foco:
-   * - NO forzamos refresh
-   * - Deja que la lógica decida si evita backend
-   */
   useFocusEffect(
     useCallback(() => {
       let alive = true;
@@ -246,7 +242,7 @@ export default function SpecialistsListScreen() {
           await fetchData(false);
         } catch (e: any) {
           if (!alive) return;
-          setError(e?.message ?? 'Error desconocido');
+          setError(errToMsg(e));
           setLoading(false);
           setRefreshing(false);
         }
@@ -295,7 +291,6 @@ export default function SpecialistsListScreen() {
     return `$${visitPrice.toLocaleString('es-AR')}`;
   };
 
-  // ✅ NUEVO: etiqueta para el pill de precio (fallback a "Visita")
   const pricePillLabel = (s: SpecialistRow) => {
     const label = (s.pricingLabel ?? '').trim();
     return label.length ? label : 'Visita';
@@ -377,6 +372,8 @@ export default function SpecialistsListScreen() {
           <MDI name="clock-outline" size={16} color={onlyAvailable ? '#06494F' : '#E9FEFF'} />
           <Text style={[styles.filterText, onlyAvailable && styles.filterTextOn]}>Disponibles</Text>
         </Pressable>
+
+        {/* NOTA: priceMax está en estado, pero no hay UI aún en tu código. */}
       </View>
     </View>
   );
@@ -389,7 +386,7 @@ export default function SpecialistsListScreen() {
         ? { uri: s.avatarUrl }
         : s.avatarUrl
           ? {
-              uri: `${API_URL?.replace(/\/+$/, '')}${s.avatarUrl.startsWith('/') ? '' : '/'}${
+              uri: `${API_URL.replace(/\/+$/, '')}${s.avatarUrl.startsWith('/') ? '' : '/'}${
                 s.avatarUrl
               }`,
             }
@@ -400,16 +397,13 @@ export default function SpecialistsListScreen() {
 
     return (
       <View style={styles.card}>
-        {/* Left: Avatar */}
         <View style={styles.cardLeft}>
           <View style={styles.avatarWrap}>
             <Image source={avatarSource} style={styles.avatar} />
           </View>
         </View>
 
-        {/* Mid: content */}
         <View style={styles.cardMid}>
-          {/* Header row: Name + online dot */}
           <View style={styles.nameRow}>
             <Text style={styles.name} numberOfLines={1}>
               {s.name || 'Especialista'}
@@ -419,7 +413,6 @@ export default function SpecialistsListScreen() {
             />
           </View>
 
-          {/* Rating + distance */}
           <View style={styles.row}>
             <Ionicons name="star" size={14} color="#ffd166" />
             <Text style={styles.muted}>
@@ -430,7 +423,6 @@ export default function SpecialistsListScreen() {
             <Text style={styles.muted}>{distanceLabel(s.distanceKm)}</Text>
           </View>
 
-          {/* Pills row (wrap) */}
           <View style={styles.pillsRow}>
             <View style={styles.pillSoft}>
               <MDI name="medal-outline" size={14} color="#E9FEFF" />
@@ -447,7 +439,6 @@ export default function SpecialistsListScreen() {
               <Text style={styles.pillSolidText}>{online ? 'Disponible' : 'No disponible'}</Text>
             </View>
 
-            {/* ✅ Precio en pill usando pricingLabel (fallback a "Visita") */}
             <View style={styles.pillSoft}>
               <MDI name="currency-usd" size={14} color="#E9FEFF" />
               <Text style={styles.pillSoftText}>
@@ -456,11 +447,15 @@ export default function SpecialistsListScreen() {
             </View>
           </View>
 
-          {/* CTA full width */}
           <Pressable
             style={({ pressed }) => [styles.ctaWide, pressed && { opacity: 0.9 }]}
             onPress={() => {
-              nav.navigate('SpecialistProfile', { id: s.specialistId });
+              const coords = lastCoords.current;
+              nav.navigate('SpecialistProfile', {
+                id: s.specialistId,
+                lat: coords?.lat,
+                lng: coords?.lng,
+              } as any);
             }}
           >
             <Text style={styles.ctaWideText}>Ver perfil</Text>
@@ -474,7 +469,6 @@ export default function SpecialistsListScreen() {
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
       <SafeAreaView style={styles.safe} edges={['top']}>
-        {/* Header */}
         <View style={styles.header}>
           <View style={styles.brandRow}>
             <Image
@@ -482,20 +476,17 @@ export default function SpecialistsListScreen() {
               style={styles.logo}
               resizeMode="contain"
             />
-            <Text style={styles.brandText}>solucity</Text>
+            <Text style={styles.brandText}>Solucity</Text>
           </View>
         </View>
 
-        {/* Título */}
         <View style={{ paddingHorizontal: 20, marginBottom: 6 }}>
           <Text style={styles.title}>{params.title}</Text>
           <Text style={styles.subtitle}>Especialistas cerca de tu ubicación</Text>
         </View>
 
-        {/* Filtros */}
         <FiltersBar />
 
-        {/* Lista */}
         {loading ? (
           <View style={styles.center}>
             <ActivityIndicator color="#E9FEFF" />
@@ -576,9 +567,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(233,254,255,0.5)',
   },
-  filterChipOn: {
-    backgroundColor: '#E9FEFF',
-  },
+  filterChipOn: { backgroundColor: '#E9FEFF' },
   filterText: { color: '#E9FEFF', fontWeight: '700' },
   filterTextOn: { color: '#06494F' },
 
@@ -593,11 +582,7 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
 
-  cardLeft: {
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingTop: 2,
-  },
+  cardLeft: { alignItems: 'center', justifyContent: 'flex-start', paddingTop: 2 },
   avatarWrap: {
     width: 72,
     height: 72,
@@ -607,19 +592,11 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: 'rgba(233,254,255,0.5)',
   },
-  avatar: {
-    width: '100%',
-    height: '100%',
-  },
+  avatar: { width: '100%', height: '100%' },
 
   cardMid: { flex: 1 },
 
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
-  },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   name: { color: '#E9FEFF', fontWeight: '900', fontSize: 18, flexShrink: 1 },
 
   statusDotInline: {
@@ -634,12 +611,7 @@ const styles = StyleSheet.create({
   muted: { color: 'rgba(233,254,255,0.9)' },
   dotSep: { color: 'rgba(233,254,255,0.6)', marginHorizontal: 2 },
 
-  pillsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 10,
-  },
+  pillsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
 
   pillSoft: {
     flexDirection: 'row',

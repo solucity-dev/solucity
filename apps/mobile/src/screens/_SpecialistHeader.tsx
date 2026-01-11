@@ -9,7 +9,7 @@ export default function SpecialistHeader() {
     <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
       <View style={styles.brandRow}>
         <Image source={require('../assets/logo.png')} style={styles.logo} resizeMode="contain" />
-        <Text style={styles.brandText}>solucity</Text>
+        <Text style={styles.brandText}>Solucity</Text>
       </View>
       <View style={[styles.bellWrap, { top: insets.top + 12 }]}>
         <Ionicons name="notifications-outline" size={26} color="#E9FEFF" />

@@ -50,7 +50,7 @@ function msgFromZod(details?: ZodDetails): string | null {
 }
 
 export default function RegisterClient() {
-  const nav = useNavigation();
+  const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
 
@@ -61,6 +61,10 @@ export default function RegisterClient() {
   const [otp, setOtp] = useState('');
   const [password, setPassword] = useState('');
   const [password2, setPassword2] = useState('');
+
+  // ✅ ojitos
+  const [showPass1, setShowPass1] = useState(false);
+  const [showPass2, setShowPass2] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
@@ -151,7 +155,6 @@ export default function RegisterClient() {
       console.log('[register/verify] RES <-', res.status, res.data);
 
       if (res.data?.ok && res.data.token) {
-        // 👉 Esto setea axios + AsyncStorage y dispara re-render del RootNavigator → Main
         await login(res.data.token);
         return;
       }
@@ -316,19 +319,26 @@ export default function RegisterClient() {
 
             {step === 3 && (
               <View style={styles.card}>
-                <LabeledInput
+                {/* ✅ Password con ojito */}
+                <LabeledPasswordInput
                   label="Contraseña"
                   placeholder="Mínimo 8 caracteres"
                   value={password}
                   onChangeText={setPassword}
-                  secureTextEntry
+                  secureTextEntry={!showPass1}
+                  isVisible={showPass1}
+                  onToggleVisibility={() => setShowPass1((v) => !v)}
                 />
-                <LabeledInput
+
+                {/* ✅ Repetir password con ojito */}
+                <LabeledPasswordInput
                   label="Repetir contraseña"
                   placeholder="Igual a la anterior"
                   value={password2}
                   onChangeText={setPassword2}
-                  secureTextEntry
+                  secureTextEntry={!showPass2}
+                  isVisible={showPass2}
+                  onToggleVisibility={() => setShowPass2((v) => !v)}
                 />
 
                 <Pressable
@@ -372,6 +382,41 @@ function LabeledInput({ label, style, ...rest }: InputProps) {
         style={[styles.input, style]}
         placeholderTextColor="rgba(255,255,255,0.7)"
       />
+    </View>
+  );
+}
+
+/**
+ * ✅ Input Password con botón "ojito"
+ * - Sin librerías
+ * - Respeta el mismo look del input original
+ */
+function LabeledPasswordInput({
+  label,
+  isVisible,
+  onToggleVisibility,
+  style,
+  ...rest
+}: React.ComponentProps<typeof TextInput> & {
+  label: string;
+  isVisible: boolean;
+  onToggleVisibility: () => void;
+}) {
+  return (
+    <View style={styles.inputWrap}>
+      {label ? <Text style={styles.inputLabel}>{label}</Text> : null}
+
+      <View style={[pwdStyles.wrap, style]}>
+        <TextInput {...rest} style={pwdStyles.input} placeholderTextColor="rgba(255,255,255,0.7)" />
+
+        <Pressable
+          onPress={onToggleVisibility}
+          hitSlop={10}
+          style={({ pressed }) => [pwdStyles.eyeBtn, pressed && { opacity: 0.75 }]}
+        >
+          <Text style={pwdStyles.eyeText}>{isVisible ? '🙈' : '👁️'}</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -421,4 +466,33 @@ const styles = StyleSheet.create({
   linkText: { color: 'rgba(255,255,255,0.95)', textDecorationLine: 'underline' },
 
   note: { color: 'rgba(255,255,255,0.75)', marginTop: 8, marginBottom: -4 },
+});
+
+const pwdStyles = StyleSheet.create({
+  wrap: {
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 14,
+    paddingRight: 6,
+  },
+  input: {
+    flex: 1,
+    color: '#fff',
+    height: '100%',
+    paddingRight: 10,
+  },
+  eyeBtn: {
+    height: 40,
+    minWidth: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eyeText: {
+    fontSize: 18,
+    lineHeight: 18,
+  },
 });

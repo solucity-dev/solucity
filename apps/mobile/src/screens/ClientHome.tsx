@@ -1,6 +1,5 @@
 import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,7 +7,9 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ROOT_CATEGORIES } from '../data/categories';
 import { useSyncCustomerLocationOnMount } from '../hooks/useSyncCustomerLocationOnMount';
 import { useNotifications } from '../notifications/NotificationsProvider';
+
 import type { CategorySlug, HomeStackParamList } from '../types';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 // ➕ IMPORTAMOS EL HOOK
 
@@ -31,7 +32,7 @@ export default function ClientHome() {
               style={styles.logo}
               resizeMode="contain"
             />
-            <Text style={styles.brandText}>solucity</Text>
+            <Text style={styles.brandText}>Solucity</Text>
           </View>
 
           <Pressable

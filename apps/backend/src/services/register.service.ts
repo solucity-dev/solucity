@@ -141,7 +141,7 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
           ? { specialist: { create: {} } }
           : { customer: { create: {} } }),
       },
-      select: { id: true, email: true, role: true },
+      select: { id: true, email: true, role: true, name: true, surname: true, phone: true },
     });
 
     return user;

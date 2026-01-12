@@ -18,9 +18,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { API_URL, api } from '../lib/api';
 
-import type { HomeStackParamList } from '../types';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { HomeStackParamList } from '../types';
 
 // ===== Tipos =====
 type SpecialistsRoute = RouteProp<HomeStackParamList, 'SpecialistsList'>;
@@ -455,6 +455,7 @@ export default function SpecialistsListScreen() {
                 id: s.specialistId,
                 lat: coords?.lat,
                 lng: coords?.lng,
+                categorySlug: dbCategorySlug, // ✅ CLAVE: rubro desde el que elegiste al especialista
               } as any);
             }}
           >

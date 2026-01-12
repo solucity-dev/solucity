@@ -1,13 +1,10 @@
-// apps/mobile/src/screens/CreateOrderScreen.tsx
 import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
-import type { RouteProp } from '@react-navigation/native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -22,6 +19,9 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { api } from '../lib/api';
+
+import type { RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../types';
 
 type RouteT = RouteProp<HomeStackParamList, 'CreateOrder'>;
@@ -42,43 +42,73 @@ type PhotoItem = {
   remoteUrl?: string | null;
 };
 
+function mkReqId(prefix = 'ORDER') {
+  const a = Math.random().toString(36).slice(2, 8);
+  const b = Date.now().toString(36).slice(-6);
+  return `${prefix}-${b}-${a}`;
+}
+
+function safeJson(obj: any) {
+  try {
+    return JSON.stringify(obj);
+  } catch {
+    return String(obj);
+  }
+}
+
 export default function CreateOrderScreen() {
   const insets = useSafeAreaInsets();
   const rawTabH = useBottomTabBarHeight();
-  // 🔴 A VECES rawTabH = 0 → el botón queda debajo de la tab bar
-  // ✅ Altura efectiva con mínimo razonable (ajustable si tu tab es más alta)
   const tabH = Math.max(rawTabH, 60);
 
   const { params } = useRoute<RouteT>();
   const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
 
-  // Me (para obtener customerId y defaultAddressId)
+  const reqIdRef = useRef<string>(mkReqId());
+
+  // ========= Me (para obtener customerId y defaultAddressId) =========
   const [me, setMe] = useState<MeResponse | null>(null);
   const [meLoading, setMeLoading] = useState(true);
   const [meError, setMeError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
+
     (async () => {
+      const t0 = Date.now();
       try {
         setMeLoading(true);
         setMeError(null);
+
         const r = await api.get<MeResponse>('/auth/me', {
           headers: { 'Cache-Control': 'no-cache' },
         });
-        if (mounted) setMe(r.data);
+
+        if (!mounted) return;
+
+        setMe(r.data);
+
+        if (__DEV__) {
+          console.log(
+            `🧑‍💼 [CreateOrder][me] ok in ${Date.now() - t0}ms -> role=${r.data?.user?.role} userId=${r.data?.user?.id}`,
+          );
+        }
       } catch (e: any) {
-        if (mounted) setMeError(e?.message ?? 'No se pudo obtener usuario');
+        if (!mounted) return;
+        setMeError(e?.message ?? 'No se pudo obtener usuario');
+        if (__DEV__)
+          console.log('🧑‍💼 [CreateOrder][me] ERR', e?.code, e?.response?.status, e?.message);
       } finally {
         if (mounted) setMeLoading(false);
       }
     })();
+
     return () => {
       mounted = false;
     };
   }, []);
 
-  // Form state
+  // ========= Form state =========
   const [address, setAddress] = useState((params as any).address ?? '');
   useEffect(() => {
     if (!(params as any).address && me?.defaultAddress?.formatted) {
@@ -116,7 +146,7 @@ export default function CreateOrderScreen() {
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
-  // Subida de imágenes
+  // ========= Upload imágenes =========
   const uploadOrderImage = async (localUri: string): Promise<string> => {
     const form = new FormData();
     form.append('file', {
@@ -193,7 +223,26 @@ export default function CreateOrderScreen() {
   };
 
   const onConfirm = async () => {
+    const reqId = reqIdRef.current || mkReqId();
+    reqIdRef.current = reqId;
+
     try {
+      if (__DEV__) {
+        console.log(`🟨 [CreateOrder][${reqId}] start`);
+        console.log(`🟨 [CreateOrder][${reqId}] role=${me?.user?.role} userId=${me?.user?.id}`);
+        console.log(
+          `🧾 [CreateOrder][${reqId}] params snapshot =>`,
+          safeJson({
+            categorySlug: (params as any).categorySlug,
+            locationIdFromParams: (params as any).locationId,
+            serviceIdFromParams: (params as any).serviceId,
+            specialistId: (params as any).specialistId,
+            specialistName: (params as any).specialistName,
+            visitPrice: (params as any).visitPrice,
+          }),
+        );
+      }
+
       const typedFormatted = address.trim();
       if (!typedFormatted) {
         Alert.alert('Falta la dirección', 'Indicá dónde realizar el trabajo.');
@@ -209,32 +258,79 @@ export default function CreateOrderScreen() {
         Alert.alert('Sesión requerida', 'No pudimos identificar al usuario (auth/me).');
         return;
       }
+
       const customerId = me?.profiles?.customerId;
       if (!customerId) {
         Alert.alert('Sesión requerida', 'No pudimos identificar el perfil de cliente (auth/me).');
         return;
       }
 
-      // serviceId
-      let serviceId: string | undefined = (params as any).serviceId;
-      if (!serviceId && (params as any).specialistId) {
-        try {
-          const spec = await api.get(`/specialists/${(params as any).specialistId}`);
-          serviceId =
-            spec.data?.defaultServiceId || spec.data?.serviceId || spec.data?.services?.[0]?.id;
-        } catch (e) {
-          console.warn('[CreateOrder] no se pudo inferir serviceId desde specialist', e);
-        }
-      }
-      if (!serviceId) {
+      // ✅ Rubro (categorySlug) desde el que se eligió al especialista
+      // Esto es CLAVE si el especialista tiene múltiples rubros.
+      const categorySlug = (params as any).categorySlug as string | undefined;
+      if (!categorySlug || !categorySlug.trim()) {
         Alert.alert(
-          'Falta elegir servicio',
-          'No pudimos determinar el servicio. Volvé al perfil y elegí uno, o enviá serviceId al navegar.',
+          'Falta el rubro',
+          'No recibimos categorySlug. Volvé atrás y entrá al especialista desde un rubro (electricidad/plomería/etc).',
         );
         return;
       }
 
-      // locationId SOLO si corresponde
+      // ========== serviceId ==========
+      let serviceId: string | undefined = (params as any).serviceId;
+
+      // Si no viene serviceId, lo inferimos consultando al especialista con categorySlug
+      if (!serviceId && (params as any).specialistId) {
+        const t0 = Date.now();
+        try {
+          const qs = `?categorySlug=${encodeURIComponent(categorySlug)}`;
+
+          const spec = await api.get(`/specialists/${(params as any).specialistId}${qs}`);
+
+          if (__DEV__) {
+            const rootKeys = Object.keys(spec.data ?? {});
+            const servicesLen = Array.isArray(spec.data?.services) ? spec.data.services.length : 0;
+
+            console.log(
+              `🟦 [CreateOrder][${reqId}] GET /specialists/:id ok in ${Date.now() - t0}ms`,
+            );
+            console.log(
+              `🧩 [CreateOrder][${reqId}] /specialists/:id shape =>`,
+              safeJson({
+                rootKeys,
+                defaultServiceId: spec.data?.defaultServiceId,
+                servicesLen,
+                firstServiceId: spec.data?.services?.[0]?.id,
+              }),
+            );
+          }
+
+          serviceId = spec.data?.defaultServiceId || spec.data?.services?.[0]?.id || undefined;
+
+          if (__DEV__) {
+            console.log(`🟦 [CreateOrder][${reqId}] extracted serviceId ->`, serviceId);
+          }
+        } catch (e: any) {
+          if (__DEV__) {
+            console.log(
+              `🟥 [CreateOrder][${reqId}] GET /specialists/:id failed`,
+              e?.code,
+              e?.response?.status,
+              e?.message,
+            );
+          }
+        }
+      }
+
+      if (!serviceId) {
+        Alert.alert(
+          'Falta elegir servicio',
+          'Este especialista no tiene servicios disponibles para este rubro. Probá con otro rubro o avisale al especialista que complete su perfil.',
+        );
+        return;
+      }
+
+      // ========== locationId SOLO si corresponde ==========
       const defaultFormatted = me?.defaultAddress?.formatted?.trim() ?? '';
       const explicitLocationId = (params as any).locationId as string | undefined;
 
@@ -263,33 +359,50 @@ export default function CreateOrderScreen() {
 
       const description = [desc.trim(), ...chips].filter(Boolean).join(' · ');
 
-      // ✅ payload SIN null en fechas
+      // ✅ payload
+      // OJO: en tu Prisma el campo es "addressText" (no "address").
+      // Si tu backend acepta "address" igual, genial; pero "addressText" es el correcto.
       const payload: any = {
         customerId,
         specialistId: (params as any).specialistId,
         serviceId,
+        categorySlug, // no lo usa Prisma directo, pero puede servir para auditoría/logs (si tu backend lo ignora ok)
         description: description || null,
         attachments,
         isUrgent: urgent || mode === 'now',
         ...(locationIdToSend ? { locationId: locationIdToSend } : {}),
-        address: typedFormatted || null,
+        addressText: typedFormatted || null,
       };
 
-      if (mode === 'now') {
-        payload.preferredAt = new Date().toISOString();
-      }
-
-      if (mode === 'schedule' && scheduledAt) {
-        payload.scheduledAt = scheduledAt.toISOString();
-      }
+      if (mode === 'now') payload.preferredAt = new Date().toISOString();
+      if (mode === 'schedule' && scheduledAt) payload.scheduledAt = scheduledAt.toISOString();
 
       if (__DEV__) {
-        console.log('[CreateOrder] payload =>', JSON.stringify(payload, null, 2));
+        // No logueamos attachments enteros para evitar ruido.
+        console.log(
+          `📦 [CreateOrder][${reqId}] payload =>`,
+          safeJson({
+            customerId,
+            specialistId: payload.specialistId,
+            serviceId: payload.serviceId,
+            locationId: payload.locationId,
+            addressText: payload.addressText,
+            isUrgent: payload.isUrgent,
+            preferredAt: payload.preferredAt,
+            scheduledAt: payload.scheduledAt,
+            attachmentsCount: attachments.length,
+            categorySlug,
+          }),
+        );
       }
 
       const r = await api.post('/orders', payload, {
         headers: { 'x-user-id': me?.user.id ?? '' },
       });
+
+      if (__DEV__) {
+        console.log(`✅ [CreateOrder][${reqId}] POST /orders ok ->`, safeJson(r.data));
+      }
 
       Alert.alert(
         '¡Pedido enviado!',
@@ -301,8 +414,8 @@ export default function CreateOrderScreen() {
       const status = e?.response?.status;
       const data = e?.response?.data;
 
-      console.log('[CreateOrder] error status =', status);
-      console.log('[CreateOrder] error data =', data);
+      console.log('🟥 [CreateOrder] error status =', status);
+      console.log('🟥 [CreateOrder] error data =', safeJson(data));
 
       const msg =
         data?.error?.message ||

@@ -1075,16 +1075,64 @@ router.get('/:id', async (req, res) => {
       select: { id: true },
     });
 
-    const categoryIds = spec.specialties.map((s) => s.categoryId);
-    const servicesRows = categoryIds.length
-      ? await prisma.service.findMany({
-          where: { categoryId: { in: categoryIds } },
-          select: { id: true, name: true },
-        })
-      : [];
+    // ✅ Si viene categorySlug, devolvemos services SOLO de ese rubro
+    const categorySlug = typeof req.query.categorySlug === 'string' ? req.query.categorySlug : '';
+
+    // categorías (IDs) que el especialista realmente tiene
+    const specialtyBySlug = new Map(spec.specialties.map((s) => [s.category.slug, s.categoryId]));
+
+    // Si no pasan categorySlug, devolvemos servicios de todas las specialties (como antes)
+    const categoryIds = categorySlug
+      ? specialtyBySlug.get(categorySlug)
+        ? [specialtyBySlug.get(categorySlug)!]
+        : []
+      : spec.specialties.map((s) => s.categoryId);
+
+    // Si pidieron un slug que el especialista NO tiene, devolvemos vacío + default null
+    // (el mobile va a mostrar alerta)
+    let servicesRows =
+      categoryIds.length > 0
+        ? await prisma.service.findMany({
+            where: { categoryId: { in: categoryIds } },
+            select: { id: true, name: true },
+            orderBy: { createdAt: 'asc' },
+          })
+        : [];
+
+    // ✅ Auto-crear un Service default si NO existe ninguno para esa categoría puntual
+    // (Solo cuando viene categorySlug y el especialista tiene esa specialty)
+    if (categorySlug && categoryIds.length === 1 && servicesRows.length === 0) {
+      const categoryId = categoryIds[0];
+
+      // Nombre fijo para no crear múltiples; está protegido por @@unique([categoryId, name])
+      const defaultName = 'Servicio general';
+
+      await prisma.service.upsert({
+        where: {
+          categoryId_name: { categoryId, name: defaultName },
+        },
+        create: {
+          categoryId,
+          name: defaultName,
+          description: null,
+          basePoints: 0,
+          slaHours: 0,
+          basePrice: null,
+        },
+        update: {},
+        select: { id: true },
+      });
+
+      // Releer
+      servicesRows = await prisma.service.findMany({
+        where: { categoryId },
+        select: { id: true, name: true },
+        orderBy: { createdAt: 'asc' },
+      });
+    }
 
     const services = servicesRows;
-    const defaultServiceId: string | null = null;
+    const defaultServiceId: string | null = servicesRows[0]?.id ?? null;
 
     const { done, canceled } = await getSpecialistStatsById(id);
 

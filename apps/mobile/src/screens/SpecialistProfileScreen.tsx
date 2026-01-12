@@ -18,9 +18,9 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { API_URL, api } from '../lib/api';
 
-import type { HomeStackParamList } from '../types';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { HomeStackParamList } from '../types';
 
 type Route = RouteProp<HomeStackParamList, 'SpecialistProfile'>;
 
@@ -115,7 +115,16 @@ export default function SpecialistProfileScreen() {
         }
 
         // ✅ FIX: usar api (axios) para que vaya con Authorization + interceptores
-        const res = await api.get(`/specialists/${params.id}`, { params: { lat, lng } });
+        const categorySlug = (params as any)?.categorySlug as string | undefined;
+
+        const res = await api.get(`/specialists/${params.id}`, {
+          params: {
+            lat,
+            lng,
+            ...(categorySlug ? { categorySlug } : {}),
+          },
+        });
+
         const data = res.data as any;
 
         const normalized: SpecialistDetails = {
@@ -398,7 +407,14 @@ export default function SpecialistProfileScreen() {
                   pressed && { opacity: 0.95, transform: [{ scale: 0.99 }] },
                 ]}
                 onPress={() => {
-                  nav.navigate('CreateOrder', { specialistId: spec.id });
+                  const categorySlug = (params as any)?.categorySlug as string | undefined;
+
+                  nav.navigate('CreateOrder', {
+                    specialistId: spec.id,
+                    specialistName: spec.name,
+                    visitPrice: spec.visitPrice ?? null,
+                    categorySlug, // ✅ CLAVE
+                  } as any);
                 }}
               >
                 <Text style={styles.mainCtaText}>Solicitar contratación</Text>

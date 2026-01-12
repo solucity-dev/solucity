@@ -298,8 +298,9 @@ router.get('/search', async (req, res) => {
     const onlyEnabled = enabledParam === 'true';
 
     const verifiedParam = typeof req.query.verified === 'string' ? req.query.verified : undefined;
-    const verifiedFilter: boolean | undefined =
-      verifiedParam === 'true' ? true : verifiedParam === 'false' ? false : undefined;
+
+    // ✅ default: true (solo verificados), salvo que manden verified=false explícitamente
+    const verifiedFilter: boolean = verifiedParam !== 'false';
 
     const availableNowParam =
       typeof req.query.availableNow === 'string' ? req.query.availableNow : undefined;
@@ -1076,7 +1077,32 @@ router.get('/:id', async (req, res) => {
     });
 
     // ✅ Si viene categorySlug, devolvemos services SOLO de ese rubro
-    const categorySlug = typeof req.query.categorySlug === 'string' ? req.query.categorySlug : '';
+    let categorySlug = typeof req.query.categorySlug === 'string' ? req.query.categorySlug : '';
+    categorySlug = categorySlug.trim().toLowerCase();
+
+    const CATEGORY_ALIASES: Record<string, string> = {
+      // Informática y electrónica
+      'aire-acond': 'climatizacion',
+      'st-electronica': 'servicio-tecnico-electronica',
+      'st-electrodom': 'servicio-tecnico-electrodomesticos',
+      'st-informatica': 'servicio-tecnico-informatica',
+
+      // Seguridad
+      'camaras-alarmas': 'camaras-y-alarmas',
+      'personal-seg': 'personal-de-seguridad',
+
+      // Servicios
+      'acompanante-ter': 'acompanante-terapeutico',
+      'clases-part': 'clases-particulares',
+      'paseador-perros': 'paseador-de-perros',
+    };
+
+    const rawCategorySlug = categorySlug;
+    categorySlug = CATEGORY_ALIASES[categorySlug] ?? categorySlug;
+
+    if (rawCategorySlug && rawCategorySlug !== categorySlug) {
+      console.log('[GET /specialists/:id][alias]', { rawCategorySlug, mappedTo: categorySlug });
+    }
 
     // categorías (IDs) que el especialista realmente tiene
     const specialtyBySlug = new Map(spec.specialties.map((s) => [s.category.slug, s.categoryId]));

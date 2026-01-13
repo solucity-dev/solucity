@@ -1,5 +1,4 @@
 // apps/backend/src/routes/orders.routes.ts
-import type { Prisma } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
 
@@ -19,6 +18,8 @@ import { deleteChatForOrder } from '../services/chatCleanup';
 import { geocodeAddress } from '../services/geocode';
 import { sendExpoPush } from '../services/pushExpo';
 import { haversineKm } from '../utils/distance';
+
+import type { Prisma } from '@prisma/client';
 
 // Schemas existentes
 
@@ -279,7 +280,7 @@ orders.post('/', auth, async (req, res) => {
     }
 
     // ✅ addressText: tomamos dirección manual directamente del body
-    const rawAddressInput = (req.body as any)?.address;
+    const rawAddressInput = (req.body as any)?.address ?? (req.body as any)?.addressText;
 
     const addressText =
       typeof rawAddressInput === 'string'

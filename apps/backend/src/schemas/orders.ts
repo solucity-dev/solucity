@@ -7,12 +7,21 @@ import { z } from 'zod';
 const id = z.string().cuid2().or(z.string().cuid());
 
 export const createOrderSchema = z.object({
-  customerId: id,
+  customerId: id.optional(),
   specialistId: id.optional(),
   serviceId: id,
   locationId: id.optional(),
   description: z.string().min(1).max(2000).optional(),
-  attachments: z.array(z.object({ url: z.string().url(), name: z.string().optional() })).optional(),
+  attachments: z
+    .array(
+      z.object({
+        url: z.string().url(),
+        type: z.string().optional(),
+        name: z.string().optional(),
+      }),
+    )
+    .optional(),
+
   preferredAt: z.string().datetime().optional(),
   scheduledAt: z.string().datetime().optional(),
   isUrgent: z.boolean().default(false),

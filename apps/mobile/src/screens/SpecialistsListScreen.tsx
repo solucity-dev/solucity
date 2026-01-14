@@ -18,9 +18,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { API_URL, api } from '../lib/api';
 
+import type { HomeStackParamList } from '../types';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { HomeStackParamList } from '../types';
 
 // ===== Tipos =====
 type SpecialistsRoute = RouteProp<HomeStackParamList, 'SpecialistsList'>;
@@ -32,7 +32,10 @@ type SpecialistRow = {
   radiusKm: number | null;
   ratingAvg: number | null;
   ratingCount: number | null;
+
+  // ⚠️ dejamos el tipo por compatibilidad, pero lo ocultamos en UI por ahora
   badge: 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | null;
+
   visitPrice?: number | null;
 
   // etiqueta forma de cobro
@@ -98,7 +101,7 @@ export default function SpecialistsListScreen() {
 
   // Filtros que impactan en backend
   const [onlyEnabled, setOnlyEnabled] = useState(false);
-  const [onlyAvailable, setOnlyAvailable] = useState(false);
+  // ✅ ya NO usamos onlyAvailable: siempre filtramos disponibles
   const [priceMax, setPriceMax] = useState<number | undefined>(undefined);
 
   // Orden local
@@ -154,11 +157,11 @@ export default function SpecialistsListScreen() {
         lngKey,
         RADIUS_KM_DEFAULT,
         onlyEnabled ? 'E1' : 'E0',
-        onlyAvailable ? 'A1' : 'A0',
+        'A1', // ✅ SIEMPRE disponibles
         priceMax ?? 'Px',
       ].join('|');
     },
-    [dbCategorySlug, onlyAvailable, onlyEnabled, priceMax],
+    [dbCategorySlug, onlyEnabled, priceMax],
   );
 
   const fetchData = useCallback(
@@ -203,8 +206,12 @@ export default function SpecialistsListScreen() {
           lng,
           radiusKm: RADIUS_KM_DEFAULT,
         };
+
         if (onlyEnabled) paramsQ.enabled = true;
-        if (onlyAvailable) paramsQ.availableNow = true;
+
+        // ✅ SIEMPRE filtrar por disponibilidad actual
+        paramsQ.availableNow = true;
+
         if (priceMax != null) paramsQ.priceMax = priceMax;
 
         if (__DEV__) {
@@ -228,7 +235,7 @@ export default function SpecialistsListScreen() {
         setRefreshing(false);
       }
     },
-    [buildCacheKey, dbCategorySlug, getCoordsSmart, onlyAvailable, onlyEnabled, priceMax],
+    [buildCacheKey, dbCategorySlug, getCoordsSmart, onlyEnabled, priceMax],
   );
 
   useFocusEffect(
@@ -255,7 +262,9 @@ export default function SpecialistsListScreen() {
   );
 
   const list = useMemo(() => {
-    const arr = items.slice();
+    // ✅ blindaje extra: aunque el backend falle, nunca mostramos no disponibles
+    const arr = items.filter((x) => x.availableNow).slice();
+
     switch (sortBy) {
       case 'distance':
         arr.sort((a, b) => a.distanceKm - b.distanceKm);
@@ -277,13 +286,6 @@ export default function SpecialistsListScreen() {
     if (km < 1) return `${Math.round(km * 1000)} m`;
     if (km < 10) return `${km.toFixed(1)} km`;
     return `${Math.round(km)} km`;
-  };
-
-  const badgeLabel: Record<NonNullable<SpecialistRow['badge']>, string> = {
-    BRONZE: 'Bronce',
-    SILVER: 'Plata',
-    GOLD: 'Oro',
-    PLATINUM: 'Platino',
   };
 
   const priceText = (visitPrice?: number | null) => {
@@ -361,17 +363,11 @@ export default function SpecialistsListScreen() {
           <Text style={[styles.filterText, onlyEnabled && styles.filterTextOn]}>Habilitados</Text>
         </Pressable>
 
-        <Pressable
-          style={({ pressed }) => [
-            styles.filterChip,
-            onlyAvailable && styles.filterChipOn,
-            pressed && { opacity: 0.9 },
-          ]}
-          onPress={() => setOnlyAvailable((v) => !v)}
-        >
-          <MDI name="clock-outline" size={16} color={onlyAvailable ? '#06494F' : '#E9FEFF'} />
-          <Text style={[styles.filterText, onlyAvailable && styles.filterTextOn]}>Disponibles</Text>
-        </Pressable>
+        {/* ✅ “Disponibles” oculto: ahora siempre filtramos disponibles */}
+        <View style={[styles.filterChip, styles.filterChipOn, { opacity: 0.8 }]}>
+          <MDI name="clock-outline" size={16} color="#06494F" />
+          <Text style={[styles.filterText, styles.filterTextOn]}>Disponibles</Text>
+        </View>
 
         {/* NOTA: priceMax está en estado, pero no hay UI aún en tu código. */}
       </View>
@@ -393,7 +389,6 @@ export default function SpecialistsListScreen() {
           : require('../assets/avatar-placeholder.png');
 
     const isEnabled = s.enabled ?? s.verified;
-    const badgeText = s.badge != null ? badgeLabel[s.badge] : 'Bronce';
 
     return (
       <View style={styles.card}>
@@ -424,10 +419,13 @@ export default function SpecialistsListScreen() {
           </View>
 
           <View style={styles.pillsRow}>
+            {/* ✅ Insignia ocultada por ahora (badge/bronze/silver/gold) */}
+            {/*
             <View style={styles.pillSoft}>
               <MDI name="medal-outline" size={14} color="#E9FEFF" />
               <Text style={styles.pillSoftText}>{badgeText}</Text>
             </View>
+            */}
 
             <View style={[styles.pillSolid, isEnabled ? styles.pillGood : styles.pillBad]}>
               <MDI name="badge-account-horizontal-outline" size={14} color="#E9FEFF" />

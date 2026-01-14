@@ -13,6 +13,7 @@
     "format": "prettier . --write",
     "generate": "prisma generate",
     "postinstall": "prisma generate",
+    "db:clean": "tsx prisma/cleanDb.ts",
     "db:seed": "prisma db seed",
     "studio": "prisma studio",
     "jobs:ssi": "tsx src/jobs/backfill-ssi.ts",

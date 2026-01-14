@@ -780,7 +780,7 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
 
     let nextAvail = currentAvail;
     if (data.availability) nextAvail = { ...currentAvail, ...data.availability };
-    if (typeof data.available === 'boolean') nextAvail = { ...nextAvail, enabled: data.available };
+    // NO guardamos enabled dentro de availability (evita inconsistencias)
 
     const setAvailableNow = typeof data.available === 'boolean' ? data.available : undefined;
 

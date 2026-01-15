@@ -1,9 +1,10 @@
 // apps/backend/src/services/notifyKyc.ts
-import type { VerificationStatus } from '@prisma/client';
 
-import { prisma } from '../lib/prisma';
 import { createNotification } from './notificationService';
 import { sendExpoPush } from './pushExpo';
+import { prisma } from '../lib/prisma';
+
+import type { VerificationStatus } from '@prisma/client';
 
 export async function notifyKycStatus(params: {
   userId: string;

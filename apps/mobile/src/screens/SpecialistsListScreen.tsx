@@ -6,6 +6,7 @@ import * as Location from 'expo-location';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   FlatList,
   Image,
   Pressable,
@@ -17,6 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { API_URL, api } from '../lib/api';
+import { resolveUploadUrl } from '../lib/resolveUploadUrl';
 
 import type { HomeStackParamList } from '../types';
 import type { RouteProp } from '@react-navigation/native';
@@ -238,6 +240,23 @@ export default function SpecialistsListScreen() {
     [buildCacheKey, dbCategorySlug, getCoordsSmart, onlyEnabled, priceMax],
   );
 
+  // ✅ Refetch cuando la app vuelve al frente (background -> active)
+  useFocusEffect(
+    useCallback(() => {
+      const sub = AppState.addEventListener('change', (state) => {
+        if (state === 'active') {
+          // availability puede cambiar -> no queremos cache viejo
+          resultsCache.clear();
+          lastKeyRef.current = null;
+          fetchData(true);
+        }
+      });
+
+      return () => sub.remove();
+    }, [fetchData]),
+  );
+
+  // ✅ Refetch cuando volvés a esta pantalla (por ejemplo desde el perfil)
   useFocusEffect(
     useCallback(() => {
       let alive = true;
@@ -246,7 +265,12 @@ export default function SpecialistsListScreen() {
         try {
           await getCoordsSmart(false);
           if (!alive) return;
-          await fetchData(false);
+
+          // availability y flags pueden haber cambiado
+          resultsCache.clear();
+          lastKeyRef.current = null;
+
+          await fetchData(true);
         } catch (e: any) {
           if (!alive) return;
           setError(errToMsg(e));
@@ -293,9 +317,11 @@ export default function SpecialistsListScreen() {
     return `$${visitPrice.toLocaleString('es-AR')}`;
   };
 
+  // ✅ Regla: si NO hay precio -> no mostramos pill
+  // ✅ Si hay precio y no hay label -> "Tarifa" (en vez de "Visita")
   const pricePillLabel = (s: SpecialistRow) => {
     const label = (s.pricingLabel ?? '').trim();
-    return label.length ? label : 'Visita';
+    return label.length ? label : 'Tarifa';
   };
 
   const FiltersBar = () => (
@@ -377,24 +403,36 @@ export default function SpecialistsListScreen() {
   const SpecialistCard = ({ s }: { s: SpecialistRow }) => {
     const online = s.availableNow;
 
-    const avatarSource =
-      s.avatarUrl && s.avatarUrl.startsWith('http')
-        ? { uri: s.avatarUrl }
-        : s.avatarUrl
-          ? {
-              uri: `${API_URL.replace(/\/+$/, '')}${s.avatarUrl.startsWith('/') ? '' : '/'}${
-                s.avatarUrl
-              }`,
-            }
-          : require('../assets/avatar-placeholder.png');
+    const avatarUrl = resolveUploadUrl(s.avatarUrl);
+    const avatarSource = avatarUrl
+      ? { uri: avatarUrl }
+      : require('../assets/avatar-placeholder.png');
+
+    if (__DEV__) {
+      console.log('[AVATAR][LIST]', {
+        API_URL,
+        name: s.name,
+        avatarUrl: s.avatarUrl,
+        resolved: avatarUrl ?? null,
+      });
+    }
 
     const isEnabled = s.enabled ?? s.verified;
+    const showPricePill = s.visitPrice != null;
 
     return (
       <View style={styles.card}>
         <View style={styles.cardLeft}>
           <View style={styles.avatarWrap}>
-            <Image source={avatarSource} style={styles.avatar} />
+            <Image
+              source={avatarSource}
+              style={styles.avatar}
+              onLoadStart={() => __DEV__ && console.log('[AVATAR][LIST][LOAD_START]', avatarUrl)}
+              onLoadEnd={() => __DEV__ && console.log('[AVATAR][LIST][LOAD_END]', avatarUrl)}
+              onError={(e) =>
+                __DEV__ && console.log('[AVATAR][LIST][ERROR]', avatarUrl, e?.nativeEvent)
+              }
+            />
           </View>
         </View>
 
@@ -419,14 +457,6 @@ export default function SpecialistsListScreen() {
           </View>
 
           <View style={styles.pillsRow}>
-            {/* ✅ Insignia ocultada por ahora (badge/bronze/silver/gold) */}
-            {/*
-            <View style={styles.pillSoft}>
-              <MDI name="medal-outline" size={14} color="#E9FEFF" />
-              <Text style={styles.pillSoftText}>{badgeText}</Text>
-            </View>
-            */}
-
             <View style={[styles.pillSolid, isEnabled ? styles.pillGood : styles.pillBad]}>
               <MDI name="badge-account-horizontal-outline" size={14} color="#E9FEFF" />
               <Text style={styles.pillSolidText}>{isEnabled ? 'Habilitado' : 'No habilitado'}</Text>
@@ -437,12 +467,14 @@ export default function SpecialistsListScreen() {
               <Text style={styles.pillSolidText}>{online ? 'Disponible' : 'No disponible'}</Text>
             </View>
 
-            <View style={styles.pillSoft}>
-              <MDI name="currency-usd" size={14} color="#E9FEFF" />
-              <Text style={styles.pillSoftText}>
-                {pricePillLabel(s)}: {priceText(s.visitPrice)}
-              </Text>
-            </View>
+            {showPricePill ? (
+              <View style={styles.pillSoft}>
+                <MDI name="currency-usd" size={14} color="#E9FEFF" />
+                <Text style={styles.pillSoftText}>
+                  {pricePillLabel(s)}: {priceText(s.visitPrice)}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           <Pressable
@@ -453,7 +485,7 @@ export default function SpecialistsListScreen() {
                 id: s.specialistId,
                 lat: coords?.lat,
                 lng: coords?.lng,
-                categorySlug: dbCategorySlug, // ✅ CLAVE: rubro desde el que elegiste al especialista
+                categorySlug: dbCategorySlug,
               } as any);
             }}
           >

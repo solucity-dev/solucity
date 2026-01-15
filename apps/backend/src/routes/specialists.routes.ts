@@ -142,8 +142,11 @@ function isWithinAvailability(
   const startMins = sh * 60 + sm;
   const endMins = eh * 60 + em;
 
+  // ✅ 24hs: si start === end, se considera abierto todo el día
+  if (startMins === endMins) return true;
+
   // soporta cruce de medianoche
-  if (endMins >= startMins) {
+  if (endMins > startMins) {
     return currentMins >= startMins && currentMins <= endMins;
   }
   return currentMins >= startMins || currentMins <= endMins;
@@ -245,6 +248,12 @@ async function getSpecialistStatsById(specialistId: string) {
  *       [&priceMin=] [&priceMax=] [&sort=distance|rating|price]
  */
 router.get('/search', async (req, res) => {
+  // ✅ evita caches (proxy, cdn, etc)
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+
   console.log('[GET /specialists/search]', {
     category: req.query.category,
     lat: req.query.lat,
@@ -310,6 +319,7 @@ router.get('/search', async (req, res) => {
     const priceMin = req.query.priceMin ? Number(req.query.priceMin) : undefined;
 
     const sort = (req.query.sort as string) ?? 'distance';
+    const debug = req.query.debug === 'true';
 
     const deg = radiusKm / 111;
     const latMin = lat - deg;
@@ -400,8 +410,31 @@ router.get('/search', async (req, res) => {
       const scheduleOk = isWithinAvailability(prof?.availability);
       const visibleNow = kycOk && toggleAvailable && scheduleOk;
 
+      const debugInfo = debug
+        ? {
+            _debug: {
+              kycOk,
+              toggleAvailable,
+              scheduleOk,
+              availability: prof?.availability ?? null,
+              serverNowISO: new Date().toISOString(),
+              serverNowLocal: new Intl.DateTimeFormat('es-AR', {
+                timeZone: 'America/Argentina/Cordoba',
+                weekday: 'short',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+              }).format(new Date()),
+              tz: 'America/Argentina/Cordoba',
+            },
+          }
+        : {};
+
       return {
         ...x,
+        ...debugInfo,
+
         name,
         enabled: enabledBySpecialistId.get(x.specialistId) === true,
         kycStatus: prof?.kycStatus ?? 'UNVERIFIED',

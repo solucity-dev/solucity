@@ -79,6 +79,29 @@ function absoluteUrl(u?: string | null): string | undefined {
   return u;
 }
 
+function fileLabelFromUrl(u?: string | null) {
+  if (!u) return null;
+  const clean = String(u).split('?')[0]; // saca querystring
+  const parts = clean.split('/');
+  const last = parts[parts.length - 1] || '';
+  return last && last.length <= 40 ? decodeURIComponent(last) : null;
+}
+
+function maskedCertRowText(c?: CertItem | null) {
+  if (!c?.fileUrl) return 'Sin archivo subido';
+
+  const pieces: string[] = [];
+  if (c.number) pieces.push(`# ${c.number}`);
+  if (c.issuer) pieces.push(String(c.issuer));
+
+  // si tenemos algún dato “humano”, lo mostramos
+  if (pieces.length) return pieces.join(' · ');
+
+  // si no hay issuer/number, mostramos un label genérico
+  const name = fileLabelFromUrl(c.fileUrl);
+  return name ? `Archivo subido: ${name}` : 'Archivo subido';
+}
+
 // ✅ Fallback: si /categories falla, no te quedás sin rubros
 const SPECIALTY_OPTIONS = [
   'albanileria',
@@ -1141,15 +1164,9 @@ export default function SpecialistHome() {
                     <View key={slug} style={styles.certItem}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.label}>{catNameBySlug(slug)}</Text>
-                        {c?.fileUrl ? (
-                          <Text style={styles.muted} numberOfLines={1}>
-                            {c.number ? `# ${c.number} · ` : ''}
-                            {c.issuer ? `${c.issuer} · ` : ''}
-                            {c.fileUrl}
-                          </Text>
-                        ) : (
-                          <Text style={styles.muted}>Sin archivo subido</Text>
-                        )}
+                        <Text style={styles.muted} numberOfLines={1}>
+                          {maskedCertRowText(c)}
+                        </Text>
                       </View>
 
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>

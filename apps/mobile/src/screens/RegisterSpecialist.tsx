@@ -1,6 +1,5 @@
 // apps/mobile/src/screens/RegisterSpecialist.tsx
 import { useNavigation } from '@react-navigation/native';
-import * as DocumentPicker from 'expo-document-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,6 +10,7 @@ import {
   Easing,
   Image,
   Keyboard,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -22,17 +22,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../auth/AuthProvider';
 import { api } from '../lib/api';
+import { registerForPush } from '../notifications/registerForPush';
 
 type Step = 1 | 2 | 3;
 type KycUploadRes = { ok: true; url: string };
 type Category = { id: string; name: string; slug: string };
 type CategoryGroup = { id: string; name: string; slug: string; categories: Category[] };
-
-type PickedFile = {
-  uri: string;
-  name?: string | null;
-  mimeType?: string | null;
-};
 
 export default function RegisterSpecialist() {
   const insets = useSafeAreaInsets();
@@ -215,6 +210,7 @@ export default function RegisterSpecialist() {
       const res = await fn({
         quality: 1,
         allowsMultipleSelection: false,
+        // ✅ evita warning deprecado
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         cameraType: opts?.cameraType,
       });
@@ -224,33 +220,6 @@ export default function RegisterSpecialist() {
       console.log('[pickFrom]', e);
       Alert.alert('Error', 'No se pudo abrir la cámara o la galería.');
     }
-  };
-
-  // ✅ picker para PDF/imagen desde archivos (solo para matrícula/título)
-  const pickDocument = async (setter: (file: PickedFile) => void) => {
-    try {
-      const res = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'image/jpeg', 'image/png'],
-        copyToCacheDirectory: true,
-        multiple: false,
-      });
-
-      if (!res.canceled && res.assets?.[0]?.uri) {
-        const a = res.assets[0];
-        setter({ uri: a.uri, name: a.name, mimeType: a.mimeType });
-      }
-    } catch (e) {
-      console.log('[document picker]', e);
-      Alert.alert('Error', 'No se pudo abrir el selector de documentos.');
-    }
-  };
-
-  // ✅ FIX: devuelve boolean SIEMPRE (nunca boolean | undefined)
-  const isPdf = (file: PickedFile | null): boolean => {
-    if (!file) return false;
-    const byMime = file.mimeType === 'application/pdf';
-    const byName = !!file.name && file.name.toLowerCase().endsWith('.pdf');
-    return byMime || byName;
   };
 
   // Compresión previa (ayuda en Android) - SOLO imágenes
@@ -302,6 +271,7 @@ export default function RegisterSpecialist() {
       setKycUrls({ dniFrontUrl: f, dniBackUrl: b, selfieUrl: s });
 
       // opcional pro: si existe este endpoint, deja el KYC en PENDING ya mismo.
+      // (si no existe, ignoramos silenciosamente)
       try {
         await api.post(
           '/specialists/kyc/submit',
@@ -323,10 +293,9 @@ export default function RegisterSpecialist() {
     }
   };
 
-  // ===== PASO 3: rubros + matrícula opcional ===============================
+  // ===== PASO 3: rubros (sin matrícula/título en registro) ==================
   const [groups, setGroups] = useState<CategoryGroup[]>([]);
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
-  const [licenseFile, setLicenseFile] = useState<PickedFile | null>(null);
   const [finalizing, setFinalizing] = useState(false);
 
   // ✅ hint suave paso 3
@@ -338,10 +307,7 @@ export default function RegisterSpecialist() {
 
   // ✅ checks paso 3
   const step3Checks = useMemo(
-    () => [
-      { ok: selectedSlugs.length > 0, label: 'Rubros' },
-      { ok: true, label: 'Matrícula (opcional)' }, // siempre ok
-    ],
+    () => [{ ok: selectedSlugs.length > 0, label: 'Rubros' }],
     [selectedSlugs.length],
   );
 
@@ -368,35 +334,24 @@ export default function RegisterSpecialist() {
     );
   };
 
-  // ✅ Matrícula/Título: soporta imagen o PDF (misma ruta upload KYC)
-  const uploadLicense = async (file: PickedFile): Promise<string> => {
-    if (!pendingToken) throw new Error('missing_temp_token');
+  /**
+   * ✅ MÁS SEGURO:
+   * - registramos el push token "a demanda" después del login
+   * - esto evita depender del timing del NotificationsProvider
+   */
+  const ensurePushTokenRegistered = async () => {
+    try {
+      const pushToken = await registerForPush();
+      if (!pushToken) return;
 
-    const pdf = isPdf(file);
-    const src = pdf ? file.uri : await compress(file.uri);
-
-    const fd = new FormData();
-
-    if (pdf) {
-      fd.append('file', {
-        uri: src,
-        name: file.name ?? 'matricula.pdf',
-        type: 'application/pdf',
-      } as any);
-    } else {
-      fd.append('file', {
-        uri: src,
-        name: file.name ?? 'matricula.jpg',
-        type: 'image/jpeg',
-      } as any);
+      await api.post(
+        '/notifications/push-token',
+        { token: pushToken, platform: Platform.OS },
+        { headers: { 'Cache-Control': 'no-cache' } },
+      );
+    } catch {
+      // no frenamos el flujo por esto
     }
-
-    const r = await api.post<KycUploadRes>('/specialists/kyc/upload', fd, {
-      headers: { 'Content-Type': 'multipart/form-data', ...tempAuthHeaders() },
-      timeout: 60000,
-    });
-
-    return r.data.url;
   };
 
   const finalize = async () => {
@@ -415,15 +370,6 @@ export default function RegisterSpecialist() {
 
       setFinalizing(true);
 
-      // matrícula opcional (subimos pero no bloqueamos el registro si falla)
-      if (licenseFile) {
-        try {
-          await uploadLicense(licenseFile);
-        } catch (e) {
-          console.log('[license upload]', e);
-        }
-      }
-
       const r2 = await api.post(
         '/specialists/register',
         { specialties: selectedSlugs, bio: '', kyc: kycUrls },
@@ -431,14 +377,19 @@ export default function RegisterSpecialist() {
       );
 
       const newToken = r2.data?.token as string | undefined;
-      if (!newToken) {
-        await login(pendingToken);
-        await setMode('specialist');
-        return;
-      }
+      const tokenToUse = newToken ?? pendingToken;
 
-      await login(newToken);
+      // ✅ 1) login real + modo especialista
+      await login(tokenToUse);
       await setMode('specialist');
+
+      // ✅ 2) aseguramos push token YA
+      await ensurePushTokenRegistered();
+
+      // ✅ 3) re-disparo submit (para que dispare push "PENDING" sí o sí)
+      try {
+        await api.post('/specialists/kyc/submit', kycUrls);
+      } catch {}
     } catch (e: any) {
       console.log('[specialists/register]', e?.response?.data || e.message);
       Alert.alert('Error', e?.response?.data?.error ?? 'No se pudo finalizar el registro.');
@@ -684,20 +635,13 @@ export default function RegisterSpecialist() {
               })}
             </View>
 
-            <PickBoxLicense
-              uri={licenseFile?.uri ?? null}
-              isPdf={isPdf(licenseFile)}
-              onPickCamera={() =>
-                pickFrom('camera', (u) => setLicenseFile((prev) => ({ ...(prev ?? {}), uri: u })), {
-                  cameraType: ImagePicker.CameraType.back,
-                })
-              }
-              onPickGallery={() =>
-                pickFrom('gallery', (u) => setLicenseFile((prev) => ({ ...(prev ?? {}), uri: u })))
-              }
-              onPickDocument={() => pickDocument(setLicenseFile)}
-              onClear={() => setLicenseFile(null)}
-            />
+            {/* ✅ Aviso simple: documentación se sube después desde Home */}
+            <View style={s.infoBox}>
+              <Text style={s.infoText}>
+                La documentación (matrícula/título) se carga después, desde tu Inicio como
+                especialista, en cada rubro.
+              </Text>
+            </View>
 
             {step3Hint ? <Text style={s.hint}>{step3Hint}</Text> : null}
 
@@ -847,89 +791,6 @@ function PickBoxKyc({
   );
 }
 
-/** PickBox para Matrícula/Título: imagen o PDF (UI premium) */
-function PickBoxLicense({
-  uri,
-  isPdf,
-  onPickCamera,
-  onPickGallery,
-  onPickDocument,
-  onClear,
-}: {
-  uri: string | null;
-  isPdf: boolean;
-  onPickCamera: () => void;
-  onPickGallery: () => void;
-  onPickDocument: () => void;
-  onClear?: () => void;
-}) {
-  return (
-    <View style={s.licenseCard}>
-      <View style={s.licenseHeader}>
-        <View>
-          <Text style={s.licenseTitle}>Matrícula / Título</Text>
-          <Text style={s.licenseSub}>Opcional. Podés subir foto o PDF.</Text>
-        </View>
-
-        <View style={[s.badge, uri ? s.badgeOk : s.badgePending]}>
-          <Text style={[s.badgeT, uri ? s.badgeTOk : null]}>{uri ? '✓' : 'Opcional'}</Text>
-        </View>
-      </View>
-
-      <View style={s.licensePreviewWrap}>
-        {!uri ? (
-          <View style={s.licenseEmpty}>
-            <Text style={s.licenseEmptyIcon}>📎</Text>
-            <Text style={s.licenseEmptyText}>Sin archivo seleccionado</Text>
-          </View>
-        ) : isPdf ? (
-          <View style={s.pdfRow}>
-            <Text style={s.pdfIcon}>📄</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={s.pdfTitle}>PDF seleccionado</Text>
-              <Text style={s.pdfHint}>Podés cambiarlo con los botones</Text>
-            </View>
-            {!!onClear && (
-              <Pressable onPress={onClear} style={s.trashBtn}>
-                <Text style={s.trashText}>✕</Text>
-              </Pressable>
-            )}
-          </View>
-        ) : (
-          <View style={{ width: '100%' }}>
-            <Image source={{ uri }} style={s.licensePreviewImg} />
-            <View style={s.previewActions}>
-              <Text style={s.previewLabel}>Imagen seleccionada</Text>
-              {!!onClear && (
-                <Pressable onPress={onClear} style={s.trashBtn}>
-                  <Text style={s.trashText}>✕</Text>
-                </Pressable>
-              )}
-            </View>
-          </View>
-        )}
-      </View>
-
-      <View style={s.licenseBtnRow}>
-        <Pressable onPress={onPickGallery} style={[s.licenseBtn, s.licenseBtnSoft]}>
-          <Text style={s.licenseBtnIcon}>🖼️</Text>
-          <Text style={s.licenseBtnText}>Galería</Text>
-        </Pressable>
-
-        <Pressable onPress={onPickCamera} style={[s.licenseBtn, s.licenseBtnSoft]}>
-          <Text style={s.licenseBtnIcon}>📷</Text>
-          <Text style={s.licenseBtnText}>Cámara</Text>
-        </Pressable>
-
-        <Pressable onPress={onPickDocument} style={[s.licenseBtn, s.licenseBtnStrong]}>
-          <Text style={s.licenseBtnIcon}>📄</Text>
-          <Text style={[s.licenseBtnText, { color: '#0B6B76' }]}>PDF</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
 const pwd = StyleSheet.create({
   wrap: {
     height: 46,
@@ -1066,9 +927,6 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   badgeT: { color: 'rgba(233,254,255,0.92)', fontWeight: '900' },
-  badgeOk: { backgroundColor: 'rgba(255,255,255,0.96)' },
-  badgeTOk: { color: '#0B6B76' },
-  badgePending: { backgroundColor: 'rgba(255,255,255,0.12)' },
 
   // pick cards (kyc)
   pickCard: {
@@ -1101,63 +959,19 @@ const s = StyleSheet.create({
   smallBtnDanger: { maxWidth: 46, backgroundColor: 'rgba(255,255,255,0.12)' },
   smallBtnT: { color: '#e9feff', fontWeight: '900' },
 
-  // ===== Matrícula/Título premium =====
-  licenseCard: {
+  // ✅ info box (paso 3)
+  infoBox: {
     marginTop: 12,
     backgroundColor: 'rgba(255,255,255,0.10)',
-    borderRadius: 16,
-    padding: 14,
-    gap: 10,
-  },
-  licenseHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  licenseTitle: { color: '#fff', fontWeight: '900', fontSize: 15 },
-  licenseSub: { color: 'rgba(233,254,255,0.85)', fontSize: 12, marginTop: 2 },
-
-  licensePreviewWrap: {
-    backgroundColor: 'rgba(255,255,255,0.10)',
     borderRadius: 14,
-    padding: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
   },
-  licenseEmpty: { alignItems: 'center', justifyContent: 'center', paddingVertical: 14, gap: 6 },
-  licenseEmptyIcon: { fontSize: 22 },
-  licenseEmptyText: { color: 'rgba(233,254,255,0.85)', fontWeight: '700' },
-
-  licensePreviewImg: { width: '100%', height: 160, borderRadius: 12 },
-  previewActions: {
-    marginTop: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  infoText: {
+    color: 'rgba(233,254,255,0.92)',
+    fontWeight: '800',
+    lineHeight: 18,
   },
-  previewLabel: { color: 'rgba(233,254,255,0.92)', fontWeight: '800' },
-
-  pdfRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
-  pdfIcon: { fontSize: 20 },
-  pdfTitle: { color: '#fff', fontWeight: '900' },
-  pdfHint: { color: 'rgba(233,254,255,0.80)', fontSize: 12, marginTop: 2 },
-
-  trashBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  trashText: { color: '#fff', fontWeight: '900' },
-
-  licenseBtnRow: { flexDirection: 'row', gap: 10 },
-  licenseBtn: {
-    flex: 1,
-    height: 46,
-    borderRadius: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  licenseBtnSoft: { backgroundColor: 'rgba(255,255,255,0.12)' },
-  licenseBtnStrong: { backgroundColor: 'rgba(255,255,255,0.96)' },
-  licenseBtnIcon: { fontSize: 16 },
-  licenseBtnText: { color: '#e9feff', fontWeight: '900' },
 });

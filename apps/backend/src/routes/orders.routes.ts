@@ -39,6 +39,32 @@ function getActorUserId(req: any): string | null {
   return (req.user?.id as string | undefined) ?? headerUserId(req);
 }
 
+// ✅ Normaliza categorySlug (compat / alias)
+function normalizeCategorySlug(raw: any): string | null {
+  if (typeof raw !== 'string') return null;
+  const s = raw.trim().toLowerCase();
+  if (!s) return null;
+
+  const CATEGORY_ALIASES: Record<string, string> = {
+    // Informática y electrónica
+    'aire-acond': 'climatizacion',
+    'st-electronica': 'servicio-tecnico-electronica',
+    'st-electrodom': 'servicio-tecnico-electrodomesticos',
+    'st-informatica': 'servicio-tecnico-informatica',
+
+    // Seguridad
+    'camaras-alarmas': 'camaras-y-alarmas',
+    'personal-seg': 'personal-de-seguridad',
+
+    // Servicios
+    'acompanante-ter': 'acompanante-terapeutico',
+    'clases-part': 'clases-particulares',
+    'paseador-perros': 'paseador-de-perros',
+  };
+
+  return CATEGORY_ALIASES[s] ?? s;
+}
+
 // Estados abiertos/cerrados
 const OPEN_STATUSES: OrderStatus[] = [
   'PENDING',
@@ -333,7 +359,9 @@ orders.post('/', auth, async (req, res) => {
       }
     }
 
-    // 2) serviceId (si no viene, inferir desde rubro principal del especialista)
+    // 2) serviceId + categorySlug (VALIDADO)
+    const bodyCategorySlug = normalizeCategorySlug((req.body as any)?.categorySlug);
+
     let serviceId: string | null =
       parsed.mode === 'full'
         ? (parsed.data.serviceId ?? null)
@@ -342,46 +370,111 @@ orders.post('/', auth, async (req, res) => {
     const specialistId: string | null =
       parsed.mode === 'full' ? (parsed.data.specialistId ?? null) : parsed.data.specialistId;
 
-    if (!serviceId) {
-      if (!specialistId) {
-        return res.status(400).json({ ok: false, error: 'missing_specialist_to_resolve_service' });
-      }
-      const spec = await prisma.specialistProfile.findUnique({
-        where: { id: specialistId },
-        select: { specialties: { select: { categoryId: true }, take: 1 } },
-      });
-      if (!spec) return res.status(404).json({ ok: false, error: 'specialist_not_found' });
-      const primaryCategoryId = spec.specialties[0]?.categoryId;
-      if (!primaryCategoryId) {
-        return res.status(409).json({ ok: false, error: 'specialist_without_category' });
-      }
-
-      const service = await prisma.service.upsert({
-        where: {
-          categoryId_name: { categoryId: primaryCategoryId, name: 'Visita técnica' },
-        },
-        update: {},
-        create: {
-          categoryId: primaryCategoryId,
-          name: 'Visita técnica',
-          description: 'Diagnóstico y presupuesto en sitio',
-          basePoints: 10,
-          slaHours: 24,
-          basePrice: null,
-        },
-        select: { id: true },
-      });
-      serviceId = service.id;
+    if (!specialistId) {
+      return res.status(400).json({ ok: false, error: 'specialist_required' });
     }
 
-    console.log('[POST /orders] mode =', parsed.mode);
-    console.log('[POST /orders] incoming serviceId(body) =', (req.body as any)?.serviceId);
-    console.log(
-      '[POST /orders] parsed serviceId =',
-      parsed.mode === 'full' ? parsed.data.serviceId : null,
-    );
-    console.log('[POST /orders] final serviceId (used) =', serviceId);
-    console.log('[POST /orders] incoming categorySlug(body) =', (req.body as any)?.categorySlug);
+    // Resolver categoryId desde categorySlug (si viene)
+    let requestedCategoryId: string | null = null;
+    if (bodyCategorySlug) {
+      const cat = await prisma.serviceCategory.findUnique({
+        where: { slug: bodyCategorySlug },
+        select: { id: true },
+      });
+      if (!cat) {
+        return res
+          .status(400)
+          .json({ ok: false, error: 'invalid_category_slug', slug: bodyCategorySlug });
+      }
+      requestedCategoryId = cat.id;
+
+      // ✅ validar que el especialista tenga esa specialty
+      const hasSpecialty = await prisma.specialistSpecialty.findFirst({
+        where: { specialistId, categoryId: requestedCategoryId },
+        select: { id: true },
+      });
+      if (!hasSpecialty) {
+        return res
+          .status(409)
+          .json({ ok: false, error: 'specialist_not_in_category', slug: bodyCategorySlug });
+      }
+    }
+
+    // ✅ Si viene serviceId, VALIDAR que pertenezca al categorySlug (si vino)
+    if (serviceId) {
+      const svc = await prisma.service.findUnique({
+        where: { id: serviceId },
+        select: { id: true, categoryId: true },
+      });
+
+      if (!svc) {
+        return res.status(400).json({ ok: false, error: 'invalid_serviceId' });
+      }
+
+      if (requestedCategoryId && svc.categoryId !== requestedCategoryId) {
+        // 🔥 evita órdenes cruzadas de rubro
+        return res.status(409).json({
+          ok: false,
+          error: 'serviceId_category_mismatch',
+          expectedCategoryId: requestedCategoryId,
+          gotCategoryId: svc.categoryId,
+          categorySlug: bodyCategorySlug,
+        });
+      }
+    }
+
+    // ✅ Si NO viene serviceId, creamos/obtenemos el default PERO EN LA CATEGORÍA CORRECTA
+    if (!serviceId) {
+      // si hay categorySlug -> usar esa categoría
+      if (requestedCategoryId) {
+        const service = await prisma.service.upsert({
+          where: {
+            categoryId_name: { categoryId: requestedCategoryId, name: 'Visita técnica' },
+          },
+          update: {},
+          create: {
+            categoryId: requestedCategoryId,
+            name: 'Visita técnica',
+            description: 'Diagnóstico y presupuesto en sitio',
+            basePoints: 10,
+            slaHours: 24,
+            basePrice: null,
+          },
+          select: { id: true },
+        });
+        serviceId = service.id;
+      } else {
+        // SIN categorySlug -> fallback controlado (pero NO usar specialties[0] sin ordenar)
+        // SIN categorySlug -> fallback controlado: tomamos 1 categoría del especialista desde la tabla puente
+        const firstSpecCat = await prisma.specialistSpecialty.findFirst({
+          where: { specialistId },
+          select: { categoryId: true },
+          // ✅ no usamos orderBy porque en tu modelo no existe createdAt
+        });
+
+        const primaryCategoryId = firstSpecCat?.categoryId ?? null;
+        if (!primaryCategoryId) {
+          return res.status(409).json({ ok: false, error: 'specialist_without_category' });
+        }
+
+        const service = await prisma.service.upsert({
+          where: {
+            categoryId_name: { categoryId: primaryCategoryId, name: 'Visita técnica' },
+          },
+          update: {},
+          create: {
+            categoryId: primaryCategoryId,
+            name: 'Visita técnica',
+            description: 'Diagnóstico y presupuesto en sitio',
+            basePoints: 10,
+            slaHours: 24,
+            basePrice: null,
+          },
+          select: { id: true },
+        });
+        serviceId = service.id;
+      }
+    }
 
     // 3) tiempos/reglas
     const isUrgent = parsed.data.isUrgent ?? false;
@@ -412,6 +505,22 @@ orders.post('/', auth, async (req, res) => {
         };
       })
       .filter(Boolean);
+
+    // (opcional) log definitivo, no rompe nada
+    if (process.env.NODE_ENV !== 'production') {
+      const svcDebug = await prisma.service.findUnique({
+        where: { id: serviceId! },
+        select: { id: true, category: { select: { slug: true, name: true } } },
+      });
+
+      console.log('[POST /orders][FINAL]', {
+        categorySlugBody: bodyCategorySlug,
+        specialistId,
+        serviceId,
+        serviceCategorySlug: svcDebug?.category?.slug,
+        serviceCategoryName: svcDebug?.category?.name,
+      });
+    }
 
     // 4) crear
     const order = await prisma.serviceOrder.create({

@@ -15,7 +15,8 @@ import { notifyKycStatus } from '../services/notifyKyc';
 const router = Router();
 
 /** ========= Storage local (MVP) ========= **/
-const uploadsRoot = path.resolve(__dirname, '..', '..', 'uploads');
+const uploadsRoot = path.resolve(__dirname, '..', '..', '..', 'uploads');
+
 const uploadDir = uploadsRoot;
 
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });

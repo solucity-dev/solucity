@@ -1,8 +1,9 @@
 // apps/backend/src/routes/orderAttachments.routes.ts
-import { Router } from 'express';
 import fs from 'fs';
-import multer from 'multer';
 import path from 'path';
+
+import { Router } from 'express';
+import multer from 'multer';
 import sharp from 'sharp';
 
 export const orderAttachments = Router();
@@ -13,7 +14,8 @@ export const orderAttachments = Router();
  * - Queremos guardar en apps/backend/uploads/orders
  * - Eso coincide con el static que montaste en server.ts
  */
-const uploadsRoot = path.resolve(__dirname, '..', '..', 'uploads'); // apps/backend/uploads
+const uploadsRoot = path.resolve(__dirname, '..', '..', '..', 'uploads'); // apps/backend/uploads
+
 const uploadsDir = path.join(uploadsRoot, 'orders');
 fs.mkdirSync(uploadsDir, { recursive: true });
 

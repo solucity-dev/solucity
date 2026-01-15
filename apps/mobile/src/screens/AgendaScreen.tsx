@@ -10,16 +10,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../auth/AuthProvider';
 import { useOrdersList } from '../hooks/useOrders';
+
 import type { AgendaSection } from '../types';
 
 dayjs.locale('es');
 dayjs.extend(relativeTime);
 
-type TabKey = 'pending' | 'confirmed' | 'finished' | 'cancelled';
+type TabKey = 'pending' | 'confirmed' | 'review' | 'finished' | 'cancelled';
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'pending', label: 'Pendientes' },
   { key: 'confirmed', label: 'Confirmados' },
+  { key: 'review', label: 'Revisión' },
   { key: 'finished', label: 'Finalizados' },
   { key: 'cancelled', label: 'Cancelados' },
 ];
@@ -33,11 +35,13 @@ function mapSectionToTab(section?: string): TabKey {
     case 'ASSIGNED':
     case 'IN_PROGRESS':
     case 'PAUSED':
-    case 'CONFIRMED_BY_CLIENT':
-    case 'IN_CLIENT_REVIEW':
       return 'confirmed';
 
+    case 'IN_CLIENT_REVIEW':
     case 'FINISHED_BY_SPECIALIST':
+      return 'review';
+
+    case 'CONFIRMED_BY_CLIENT':
     case 'CLOSED':
       return 'finished';
 
@@ -54,8 +58,16 @@ function mapSectionToTab(section?: string): TabKey {
 // ✅ Lista dura de estados permitidos por tab (blindaje contra mezclas/cache)
 const TAB_ALLOWED_STATUSES: Record<TabKey, string[]> = {
   pending: ['PENDING'],
-  confirmed: ['ASSIGNED', 'IN_PROGRESS', 'PAUSED', 'CONFIRMED_BY_CLIENT', 'IN_CLIENT_REVIEW'],
-  finished: ['FINISHED_BY_SPECIALIST', 'CLOSED'],
+
+  // ✅ Confirmados = en curso
+  confirmed: ['ASSIGNED', 'IN_PROGRESS', 'PAUSED'],
+
+  // ✅ Revisión = falta confirmación del cliente
+  review: ['IN_CLIENT_REVIEW', 'FINISHED_BY_SPECIALIST'],
+
+  // ✅ Finalizados = cliente confirmó o ya cerró
+  finished: ['CONFIRMED_BY_CLIENT', 'CLOSED'],
+
   cancelled: ['CANCELLED_BY_CUSTOMER', 'CANCELLED_BY_SPECIALIST', 'CANCELLED_AUTO'],
 };
 
@@ -75,6 +87,7 @@ export default function AgendaScreen() {
     incomingSection ? mapSectionToTab(incomingSection) : 'pending',
   );
 
+  // ✅ closed solo para Finalizados y Cancelados
   const isClosed = tab === 'finished' || tab === 'cancelled';
 
   const { data, isLoading, isFetching, refetch } = useOrdersList(
@@ -101,6 +114,7 @@ export default function AgendaScreen() {
       const mapped = mapSectionToTab(incomingSection);
       if (mapped !== tab) setTab(mapped);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incomingSection]);
 
   // ✅ refetch al cambiar de tab (mata cache rara)
@@ -121,7 +135,6 @@ export default function AgendaScreen() {
   const getRubroText = (item: any) => {
     // 1) si el hook ya lo trae directo
     const direct = item.categoryName || item.rubro || item.serviceCategoryName;
-
     if (typeof direct === 'string' && direct.trim()) return direct.trim();
 
     // 2) si viene dentro de service
@@ -133,7 +146,7 @@ export default function AgendaScreen() {
 
     if (typeof fromService === 'string' && fromService.trim()) return fromService.trim();
 
-    // 3) último fallback (no ideal, pero evita vacío)
+    // 3) último fallback
     return item.service?.name ?? 'Sin rubro';
   };
 
@@ -141,10 +154,10 @@ export default function AgendaScreen() {
     // 1) agendado
     if (item.scheduledAt) return `Agendado: ${dayjs(item.scheduledAt).format('DD MMM, HH:mm')}`;
 
-    // 2) urgente (si no hay scheduled)
+    // 2) urgente
     if (item.isUrgent) return 'Urgente';
 
-    // 3) preferencia (si existe)
+    // 3) preferencia
     if (item.preferredAt) return `Preferencia: ${dayjs(item.preferredAt).format('DD MMM, HH:mm')}`;
 
     return 'Sin fecha definida';

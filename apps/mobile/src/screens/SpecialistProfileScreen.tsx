@@ -442,6 +442,7 @@ export default function SpecialistProfileScreen() {
                     specialistId: spec.id,
                     specialistName: spec.name,
                     visitPrice: spec.visitPrice ?? null,
+                    pricingLabel: spec.pricingLabel ?? null,
                     categorySlug,
                   } as any);
                 }}

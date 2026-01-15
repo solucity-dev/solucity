@@ -77,7 +77,7 @@ app.options('*', cors({ origin: ALLOWED_ORIGINS.length ? ALLOWED_ORIGINS : true 
 
 /** ================== Static uploads (DEV/PROD) ================== **/
 // ✅ uploads reales del backend: apps/backend/uploads
-const uploadsPath = path.resolve(process.cwd(), 'apps', 'backend', 'uploads');
+const uploadsPath = path.resolve(__dirname, '..', '..', 'uploads'); // apps/backend/uploads
 app.use('/uploads', express.static(uploadsPath));
 console.log('[static] uploadsPath =', uploadsPath);
 

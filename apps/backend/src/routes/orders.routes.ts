@@ -228,11 +228,17 @@ export async function runAutoCancelExpiredPendingOrders() {
   await autoCancelExpiredPendingOrders();
 }
 
+// ✅ ID helper local (cuid2 o cuid clásico)
+const id = z.string().cuid2().or(z.string().cuid());
+
 /* ─────────────────── Payload “simple” opcional ─────────────────── */
 // ✅ ahora address acepta string o {formatted}
 const createOrderSimple = z.object({
   specialistId: z.string().min(1),
-  serviceId: z.string().optional(), // ✅ NUEVO
+
+  // ✅ CLAVE: si el mobile manda serviceId, lo respetamos
+  serviceId: id.optional(),
+
   description: z.string().optional(),
   attachments: z.array(z.any()).optional(),
   scheduledAt: z.string().datetime().optional().nullable(),
@@ -331,7 +337,7 @@ orders.post('/', auth, async (req, res) => {
     let serviceId: string | null =
       parsed.mode === 'full'
         ? (parsed.data.serviceId ?? null)
-        : ((parsed.data as any).serviceId ?? null); // ✅ toma serviceId también en simple
+        : ((parsed.data as any).serviceId ?? null);
 
     const specialistId: string | null =
       parsed.mode === 'full' ? (parsed.data.specialistId ?? null) : parsed.data.specialistId;
@@ -367,6 +373,15 @@ orders.post('/', auth, async (req, res) => {
       });
       serviceId = service.id;
     }
+
+    console.log('[POST /orders] mode =', parsed.mode);
+    console.log('[POST /orders] incoming serviceId(body) =', (req.body as any)?.serviceId);
+    console.log(
+      '[POST /orders] parsed serviceId =',
+      parsed.mode === 'full' ? parsed.data.serviceId : null,
+    );
+    console.log('[POST /orders] final serviceId (used) =', serviceId);
+    console.log('[POST /orders] incoming categorySlug(body) =', (req.body as any)?.categorySlug);
 
     // 3) tiempos/reglas
     const isUrgent = parsed.data.isUrgent ?? false;

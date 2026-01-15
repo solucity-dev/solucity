@@ -1,8 +1,9 @@
 // apps/backend/src/routes/specialistAvatar.routes.ts
-import { Router } from 'express';
 import fs from 'fs';
-import multer from 'multer';
 import path from 'path';
+
+import { Router } from 'express';
+import multer from 'multer';
 
 import { prisma } from '../lib/prisma';
 import { auth } from '../middlewares/auth';
@@ -10,7 +11,9 @@ import { auth } from '../middlewares/auth';
 const router = Router();
 
 // Carpeta de uploads/avatars
-const uploadDir = path.join(process.cwd(), 'uploads', 'avatars');
+const uploadsRoot = path.resolve(__dirname, '..', '..', 'uploads');
+const uploadDir = path.join(uploadsRoot, 'avatars');
+
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }

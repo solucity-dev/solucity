@@ -1,8 +1,9 @@
 // apps/backend/src/routes/customerAvatar.routes.ts
-import { Router } from 'express';
 import fs from 'fs';
-import multer from 'multer';
 import path from 'path';
+
+import { Router } from 'express';
+import multer from 'multer';
 
 import { prisma } from '../lib/prisma';
 import { auth } from '../middlewares/auth';
@@ -10,7 +11,9 @@ import { auth } from '../middlewares/auth';
 const router = Router();
 
 // Carpeta donde guardamos los avatares
-const uploadDir = path.join(process.cwd(), 'uploads', 'avatars');
+const uploadsRoot = path.resolve(__dirname, '..', '..', 'uploads');
+const uploadDir = path.join(uploadsRoot, 'avatars');
+
 fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({

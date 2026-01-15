@@ -232,6 +232,7 @@ export async function runAutoCancelExpiredPendingOrders() {
 // ✅ ahora address acepta string o {formatted}
 const createOrderSimple = z.object({
   specialistId: z.string().min(1),
+  serviceId: z.string().optional(), // ✅ NUEVO
   description: z.string().optional(),
   attachments: z.array(z.any()).optional(),
   scheduledAt: z.string().datetime().optional().nullable(),
@@ -327,7 +328,11 @@ orders.post('/', auth, async (req, res) => {
     }
 
     // 2) serviceId (si no viene, inferir desde rubro principal del especialista)
-    let serviceId: string | null = parsed.mode === 'full' ? (parsed.data.serviceId ?? null) : null;
+    let serviceId: string | null =
+      parsed.mode === 'full'
+        ? (parsed.data.serviceId ?? null)
+        : ((parsed.data as any).serviceId ?? null); // ✅ toma serviceId también en simple
+
     const specialistId: string | null =
       parsed.mode === 'full' ? (parsed.data.specialistId ?? null) : parsed.data.specialistId;
 

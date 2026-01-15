@@ -1,21 +1,14 @@
 // apps/backend/src/schemas/orders.ts
-// ✅ actualizado para:
-// - permitir urls relativas (/uploads/...) en attachments (create/finish)
-// - permitir comment null en rate
-// - note ya permitía null en finish/confirm
-
 import { z } from 'zod';
 
 // Acepta tanto Cuid2 (cmg...) como Cuid clásico.
 const id = z.string().cuid2().or(z.string().cuid());
 
-// ✅ helper: url puede ser absoluta (http/https) o relativa (/uploads/...)
-const attachmentUrl = z
+// ✅ URL ABSOLUTA o PATH relativo servido por tu backend (/uploads/...)
+const fileUrl = z
   .string()
   .min(1)
-  .refine((v) => v.startsWith('http://') || v.startsWith('https://') || v.startsWith('/uploads/'), {
-    message: 'url must be http(s) or /uploads/...',
-  });
+  .refine((v) => v.startsWith('/uploads/') || /^https?:\/\/.+/i.test(v), 'invalid_url');
 
 export const createOrderSchema = z.object({
   customerId: id.optional(),
@@ -23,11 +16,10 @@ export const createOrderSchema = z.object({
   serviceId: id,
   locationId: id.optional(),
   description: z.string().min(1).max(2000).optional(),
-
   attachments: z
     .array(
       z.object({
-        url: attachmentUrl, // ✅ ya no rompe con "/uploads/..."
+        url: fileUrl, // ✅ antes era z.string().url()
         type: z.string().optional(),
         name: z.string().optional(),
       }),
@@ -52,18 +44,15 @@ export const finishOrderSchema = z.object({
   attachments: z
     .array(
       z.object({
-        url: attachmentUrl, // ✅ consistente
+        url: fileUrl, // ✅ antes era z.string().url()
         name: z.string().optional(),
       }),
     )
     .optional(),
-
-  // ✅ permite string | null | undefined
   note: z.string().max(500).nullable().optional(),
 });
 
 export const confirmOrderSchema = z.object({
-  // ✅ permite string | null | undefined
   note: z.string().max(500).nullable().optional(),
 });
 
@@ -81,7 +70,8 @@ export const rejectOrderSchema = z.object({
 
 export const rateOrderSchema = z.object({
   score: z.number().int().min(1).max(5),
-  comment: z.string().max(1000).nullable().optional(), // ✅ FIX: permite null
+  // ✅ permite vacío / undefined / null desde el mobile
+  comment: z.string().max(1000).nullable().optional(),
 });
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;

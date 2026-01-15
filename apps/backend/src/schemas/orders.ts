@@ -1,10 +1,21 @@
-// apps/backend/src/schemas/orders.ts  (o donde lo tengas)
-// ✅ actualizado para que note permita null en finish y confirm
+// apps/backend/src/schemas/orders.ts
+// ✅ actualizado para:
+// - permitir urls relativas (/uploads/...) en attachments (create/finish)
+// - permitir comment null en rate
+// - note ya permitía null en finish/confirm
 
 import { z } from 'zod';
 
 // Acepta tanto Cuid2 (cmg...) como Cuid clásico.
 const id = z.string().cuid2().or(z.string().cuid());
+
+// ✅ helper: url puede ser absoluta (http/https) o relativa (/uploads/...)
+const attachmentUrl = z
+  .string()
+  .min(1)
+  .refine((v) => v.startsWith('http://') || v.startsWith('https://') || v.startsWith('/uploads/'), {
+    message: 'url must be http(s) or /uploads/...',
+  });
 
 export const createOrderSchema = z.object({
   customerId: id.optional(),
@@ -12,10 +23,11 @@ export const createOrderSchema = z.object({
   serviceId: id,
   locationId: id.optional(),
   description: z.string().min(1).max(2000).optional(),
+
   attachments: z
     .array(
       z.object({
-        url: z.string().url(),
+        url: attachmentUrl, // ✅ ya no rompe con "/uploads/..."
         type: z.string().optional(),
         name: z.string().optional(),
       }),
@@ -37,13 +49,21 @@ export const rescheduleOrderSchema = z.object({
 });
 
 export const finishOrderSchema = z.object({
-  attachments: z.array(z.object({ url: z.string().url(), name: z.string().optional() })).optional(),
-  // ✅ ahora permite string | null | undefined
+  attachments: z
+    .array(
+      z.object({
+        url: attachmentUrl, // ✅ consistente
+        name: z.string().optional(),
+      }),
+    )
+    .optional(),
+
+  // ✅ permite string | null | undefined
   note: z.string().max(500).nullable().optional(),
 });
 
 export const confirmOrderSchema = z.object({
-  // ✅ ahora permite string | null | undefined
+  // ✅ permite string | null | undefined
   note: z.string().max(500).nullable().optional(),
 });
 
@@ -61,7 +81,7 @@ export const rejectOrderSchema = z.object({
 
 export const rateOrderSchema = z.object({
   score: z.number().int().min(1).max(5),
-  comment: z.string().max(1000).optional(),
+  comment: z.string().max(1000).nullable().optional(), // ✅ FIX: permite null
 });
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;

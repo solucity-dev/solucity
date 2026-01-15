@@ -1,4 +1,5 @@
 // apps/backend/src/server.ts
+import fs from 'fs';
 import path from 'path';
 
 import cors from 'cors';
@@ -28,8 +29,6 @@ import seedRoutes from './routes/seed.routes';
 import specialistAvatarRoutes from './routes/specialistAvatar.routes';
 import { specialistsRoutes } from './routes/specialists.routes';
 import { subscriptionsRouter } from './routes/subscriptions';
-
-// 🔹 NUEVO: adjuntos de órdenes
 
 const app = express();
 
@@ -76,10 +75,24 @@ app.use(
 app.options('*', cors({ origin: ALLOWED_ORIGINS.length ? ALLOWED_ORIGINS : true }));
 
 /** ================== Static uploads (DEV/PROD) ================== **/
-// ✅ uploads reales del backend: apps/backend/uploads
-const uploadsPath = path.resolve(__dirname, '..', '..', 'uploads'); // apps/backend/uploads
-app.use('/uploads', express.static(uploadsPath));
-console.log('[static] uploadsPath =', uploadsPath);
+/**
+ * ✅ Hotfix definitivo:
+ * - NO usar __dirname (en prod apunta a dist/ y te rompe rutas)
+ * - Servir /uploads desde process.cwd()/uploads (carpeta real)
+ * - Y agregar fallback a process.cwd()/dist/uploads por compatibilidad
+ */
+const uploadsA = path.join(process.cwd(), 'uploads'); // apps/backend/uploads
+const uploadsB = path.join(process.cwd(), 'dist', 'uploads'); // apps/backend/dist/uploads (fallback)
+
+if (!fs.existsSync(uploadsA)) fs.mkdirSync(uploadsA, { recursive: true });
+if (!fs.existsSync(uploadsB)) fs.mkdirSync(uploadsB, { recursive: true });
+
+// primero A, luego B (si no existe en A, puede caer en B)
+app.use('/uploads', express.static(uploadsA));
+app.use('/uploads', express.static(uploadsB));
+
+console.log('[static] /uploads serving A =', uploadsA, 'exists =', fs.existsSync(uploadsA));
+console.log('[static] /uploads serving B =', uploadsB, 'exists =', fs.existsSync(uploadsB));
 
 /** ================== Utilitarias ================== **/
 app.get('/health', (_req: Request, res: Response) => {
@@ -121,7 +134,7 @@ app.use('/admin', seedRoutes);
 app.use('/admin', adminRoutes);
 app.use('/auth', passwordRoutes);
 
-// 🔹 NUEVO: subida de adjuntos de órdenes
+// subida de adjuntos de órdenes
 app.use(orderAttachments);
 
 /** ================== 404 + errores ================== **/
@@ -131,7 +144,7 @@ app.use(errorHandler);
 /** ================== Auto-cancel job ================== **/
 setInterval(() => {
   runAutoCancelExpiredPendingOrders().catch((e) => console.error('[autoCancel job] error', e));
-}, 60_000); // cada 60s
+}, 60_000);
 
 /** ================== Boot ================== **/
 app.listen(PORT, '0.0.0.0', () => {

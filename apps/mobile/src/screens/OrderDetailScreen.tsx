@@ -22,6 +22,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useAuth } from '../auth/AuthProvider';
 import { api } from '../lib/api';
+import { resolveUploadUrl } from '../lib/resolveUploadUrl';
 
 type OrderEvent = { id: string; type: string; createdAt: string; payload?: any };
 
@@ -249,6 +250,13 @@ export default function OrderDetailScreen() {
       devLog('[OrderDetail][load] meta.deadline =', r.data?.meta?.deadline);
 
       setData(r.data.order);
+      devLog('[OrderDetail][shape]', {
+        status: r.data?.order?.status,
+        customer: r.data?.order?.customer,
+        specialist: r.data?.order?.specialist,
+        service: r.data?.order?.service,
+      });
+
       setMeta(r.data.meta);
       return r.data;
     } catch (e: any) {
@@ -381,6 +389,11 @@ export default function OrderDetailScreen() {
   const headerAvatarUrl = isClient
     ? (data?.specialist?.avatarUrl ?? null)
     : (data?.customer?.avatarUrl ?? null);
+  const headerAvatarResolved = useMemo(
+    () => resolveUploadUrl(headerAvatarUrl ?? null),
+    [headerAvatarUrl],
+  );
+
   const headerInitial = (headerName?.trim?.()[0] ?? 'U').toUpperCase();
 
   const API_BASE_URL = api.defaults.baseURL || process.env.EXPO_PUBLIC_API_URL || '';
@@ -436,17 +449,26 @@ export default function OrderDetailScreen() {
 
   const attachmentImages: string[] = useMemo(() => {
     if (!data || !Array.isArray(data.attachments)) return [];
+
     return data.attachments
       .map((att: any) => {
         if (!att) return null;
-        if (typeof att === 'string') return toAbsoluteUrl(att);
-        if (typeof att.uri === 'string') return toAbsoluteUrl(att.uri);
-        if (typeof att.url === 'string') return toAbsoluteUrl(att.url);
-        if (typeof att.fileUrl === 'string') return toAbsoluteUrl(att.fileUrl);
-        return null;
+
+        const raw =
+          typeof att === 'string'
+            ? att
+            : typeof att.uri === 'string'
+              ? att.uri
+              : typeof att.url === 'string'
+                ? att.url
+                : typeof att.fileUrl === 'string'
+                  ? att.fileUrl
+                  : null;
+
+        return raw ? resolveUploadUrl(raw) : null;
       })
       .filter((u): u is string => typeof u === 'string');
-  }, [data, toAbsoluteUrl]);
+  }, [data]);
 
   const addressText = (() => {
     const a: any = data?.address;
@@ -730,19 +752,23 @@ export default function OrderDetailScreen() {
             </View>
 
             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10 }}>
-              {headerAvatarUrl ? (
+              {headerAvatarResolved ? (
                 <ExpoImage
-                  source={{ uri: toAbsoluteUrl(headerAvatarUrl) ?? '' }}
+                  source={{ uri: headerAvatarResolved }}
                   style={styles.avatarImage}
                   contentFit="cover"
                   transition={150}
                   cachePolicy="memory-disk"
+                  onError={(e) =>
+                    devLog('[OrderDetail][AVATAR][ERROR]', headerAvatarResolved, e?.error)
+                  }
                 />
               ) : (
                 <View style={styles.avatarCircle}>
                   <Text style={styles.avatarInitial}>{headerInitial}</Text>
                 </View>
               )}
+
               <View style={{ marginLeft: 10 }}>
                 <Text style={styles.clientName}>{headerName}</Text>
               </View>

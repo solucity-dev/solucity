@@ -389,6 +389,7 @@ export default function OrderDetailScreen() {
   const headerAvatarUrl = isClient
     ? (data?.specialist?.avatarUrl ?? null)
     : (data?.customer?.avatarUrl ?? null);
+
   const headerAvatarResolved = useMemo(
     () => resolveUploadUrl(headerAvatarUrl ?? null),
     [headerAvatarUrl],

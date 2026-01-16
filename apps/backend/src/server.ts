@@ -1,4 +1,5 @@
 // apps/backend/src/server.ts
+
 import fs from 'fs';
 import path from 'path';
 
@@ -78,6 +79,7 @@ app.options('*', cors({ origin: ALLOWED_ORIGINS.length ? ALLOWED_ORIGINS : true 
 /** ================== Static uploads (DEV/PROD) ================== **/
 app.use('/uploads', express.static(uploadsRoot));
 console.log('[static] uploadsRoot =', uploadsRoot);
+
 // ✅ Fallback para rutas legacy /uploads/avatars/*
 // (si el archivo no está en uploads/avatars, lo busca en otras rutas)
 app.get('/uploads/avatars/:file', (req, res) => {

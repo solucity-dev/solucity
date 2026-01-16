@@ -3,7 +3,7 @@ import path from 'path';
 
 const isProd = process.env.NODE_ENV === 'production';
 
-// 👉 En Render Disk: /var/data/uploads
+// 👉 En Render Disk: /var/data/uploads (via UPLOADS_DIR)
 // 👉 En local: apps/backend/uploads
 export const uploadsRoot =
   isProd && process.env.UPLOADS_DIR
@@ -14,7 +14,6 @@ export function ensureDir(p: string) {
   if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
 }
 
-// Log útil (solo para verificar una vez)
 if (process.env.NODE_ENV !== 'test') {
   console.log('[uploads] uploadsRoot =', uploadsRoot);
 }

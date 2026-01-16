@@ -101,21 +101,29 @@ function getErrorMessage(e: any) {
  * Importante: coincide con la nueva lógica de AgendaScreen
  */
 function mapStatusToAgendaSection(status?: string | null, meta?: Resp['meta']) {
+  // si venció por deadline, lo tratamos como autocancel
   if (meta?.deadline === 'expired') return 'CANCELLED_AUTO';
 
-  const s = String(status ?? 'PENDING').toUpperCase();
+  const s = String(status ?? 'PENDING')
+    .trim()
+    .toUpperCase();
 
+  // Pendientes
   if (s === 'PENDING') return 'PENDING';
+
+  // Confirmados/en curso
   if (['ASSIGNED', 'IN_PROGRESS', 'PAUSED'].includes(s)) return 'ASSIGNED';
 
-  // 🔥 Revisión: el especialista marcó finalizado y espera al cliente
+  // Revisión
   if (['IN_CLIENT_REVIEW', 'FINISHED_BY_SPECIALIST'].includes(s)) return 'IN_CLIENT_REVIEW';
 
-  // ✅ Finalizados
+  // Finalizados
   if (['CONFIRMED_BY_CLIENT', 'CLOSED'].includes(s)) return 'CONFIRMED_BY_CLIENT';
 
-  if (s.startsWith('CANCELLED') || s === 'CLOSED') return s;
+  // ✅ Cancelados: devolvemos el status real (NO "CLOSED")
+  if (['CANCELLED_BY_CUSTOMER', 'CANCELLED_BY_SPECIALIST', 'CANCELLED_AUTO'].includes(s)) return s;
 
+  // fallback
   return 'PENDING';
 }
 
@@ -145,11 +153,35 @@ export default function OrderDetailScreen() {
   // ✅ loading para acciones (botones)
   const [actionLoading, setActionLoading] = useState(false);
 
+  // 🔍 Preview adjuntos
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
+
+  const openPreview = (uri: string) => {
+    setPreviewUri(uri);
+    setPreviewOpen(true);
+  };
+
+  const closePreview = () => {
+    setPreviewOpen(false);
+    setPreviewUri(null);
+  };
+
   // ✅ evita race conditions
   const loadSeqRef = useRef(0);
 
+  // ✅ evita doble load al entrar (useEffect + focus)
+  const didInitialLoadRef = useRef(false);
+
   // ✅ evita refresh duplicado por focus
   const lastFocusReloadRef = useRef<number>(0);
+
+  // ✅ evita procesar el mismo refreshAt dos veces
+  const lastRefreshAtHandledRef = useRef<number>(0);
+
+  // ✅ cache de permiso + coordenadas para no pedir GPS siempre
+  const locPermRef = useRef<'unknown' | 'granted' | 'denied'>('unknown');
+  const locCacheRef = useRef<{ ts: number; lat: number; lng: number } | null>(null);
 
   useEffect(() => {
     try {
@@ -206,6 +238,8 @@ export default function OrderDetailScreen() {
   );
 
   const load = async (id: string) => {
+    const tAll = Date.now();
+    devLog('[OrderDetail][perf] LOAD_START', { id });
     devLog('[OrderDetail][load] start id =', id);
 
     const seq = ++loadSeqRef.current;
@@ -217,25 +251,76 @@ export default function OrderDetailScreen() {
 
       let url = `/orders/${id}`;
 
+      // ⏱️ Medición ubicación: declararla afuera para que exista en catch/finally
+      let tLoc = 0;
+
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-          const pos = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
-          url = `/orders/${id}?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`;
+        tLoc = Date.now();
+
+        // ✅ permiso: pedir UNA vez (cache)
+        if (locPermRef.current === 'unknown') {
+          const { status } = await Location.requestForegroundPermissionsAsync();
+          locPermRef.current = status === 'granted' ? 'granted' : 'denied';
+        }
+
+        if (locPermRef.current === 'granted') {
+          const now = Date.now();
+          const cached = locCacheRef.current;
+
+          // ✅ usar cache 60s
+          if (cached && now - cached.ts < 60_000) {
+            url = `/orders/${id}?lat=${encodeURIComponent(cached.lat)}&lng=${encodeURIComponent(
+              cached.lng,
+            )}`;
+            devLog('[OrderDetail][loc] using cached coords');
+          } else {
+            // ✅ intentar last known (más rápido que GPS)
+            const last = await Location.getLastKnownPositionAsync({});
+            if (last?.coords?.latitude && last?.coords?.longitude) {
+              locCacheRef.current = {
+                ts: now,
+                lat: last.coords.latitude,
+                lng: last.coords.longitude,
+              };
+              url = `/orders/${id}?lat=${encodeURIComponent(last.coords.latitude)}&lng=${encodeURIComponent(
+                last.coords.longitude,
+              )}`;
+              devLog('[OrderDetail][loc] using lastKnown coords');
+            } else {
+              // ✅ fallback GPS real
+              const pos = await Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.Balanced,
+              });
+              locCacheRef.current = {
+                ts: now,
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+              };
+              url = `/orders/${id}?lat=${encodeURIComponent(pos.coords.latitude)}&lng=${encodeURIComponent(
+                pos.coords.longitude,
+              )}`;
+              devLog('[OrderDetail][loc] using fresh GPS coords');
+            }
+          }
         } else {
           devLog('[OrderDetail] ubicación no permitida, se llama sin lat/lng');
         }
       } catch (locErr) {
         devLog('[OrderDetail] error obteniendo ubicación', locErr);
+      } finally {
+        if (tLoc) devLog('[OrderDetail][perf] location ms =', Date.now() - tLoc);
       }
 
       devLog('[OrderDetail][load] GET =>', url);
 
-      const r = await api.get<Resp>(url, { headers: { 'Cache-Control': 'no-cache' } });
+      const tApi = Date.now(); // ⏱️ inicio medición API
+
+      const r = await api.get<Resp>(url, {
+        headers: { 'Cache-Control': 'no-cache' },
+      });
+
+      devLog('[OrderDetail][perf] GET /orders ms =', Date.now() - tApi);
+      devLog('[OrderDetail][perf] LOAD_END', { id, totalMs: Date.now() - tAll });
 
       if (seq !== loadSeqRef.current) {
         devLog('[OrderDetail][load] ignored result (stale seq)', {
@@ -270,7 +355,6 @@ export default function OrderDetailScreen() {
     }
   };
 
-  // ✅ load inicial cuando cambia el id
   useEffect(() => {
     if (!orderId) {
       setError('Orden sin id (parámetros faltantes desde la navegación)');
@@ -278,32 +362,64 @@ export default function OrderDetailScreen() {
       return;
     }
 
-    setData(null);
-    setMeta(undefined);
-    setError(null);
-    setLoading(true);
+    // ✅ si venís con refreshAt (notificación), NO dispares el load acá.
+    const ra = route.params?.refreshAt ? Number(route.params.refreshAt) : 0;
+    if (ra) {
+      devLog('[OrderDetail][effect] skipped initial (refreshAt present)', { ra });
+      didInitialLoadRef.current = false; // dejamos que el focusEffect haga el load
+      return;
+    }
+
+    // reset total al cambiar de orden
+    didInitialLoadRef.current = false;
+    lastRefreshAtHandledRef.current = 0;
 
     devLog('[OrderDetail][effect] initial load for orderId =', orderId);
+    didInitialLoadRef.current = true;
     load(orderId);
-  }, [orderId]);
+  }, [orderId, route.params?.refreshAt]);
 
-  // ✅ refrescar SIEMPRE al entrar (notificación reusa la misma screen)
+  // ✅ refrescar al entrar (notif / focus) sin duplicar
   useFocusEffect(
     useCallback(() => {
       if (!orderId) return;
 
       const now = Date.now();
-      if (now - lastFocusReloadRef.current < 600) return;
+
+      // 1️⃣ refreshAt → prioridad absoluta
+      const ra = route.params?.refreshAt ? Number(route.params.refreshAt) : 0;
+      if (ra && ra !== lastRefreshAtHandledRef.current) {
+        lastRefreshAtHandledRef.current = ra;
+
+        devLog('[OrderDetail][focus] refreshAt detected -> forcing load', { ra });
+
+        // ✅ IMPORTANTE: bloquear el refresh normal inmediato
+        lastFocusReloadRef.current = Date.now();
+
+        load(orderId);
+
+        // 🔥 consumir refreshAt
+        nav.setParams({ refreshAt: undefined });
+
+        return;
+      }
+
+      // 2️⃣ evitar reload inmediato al entrar
+      if (!didInitialLoadRef.current) {
+        devLog('[OrderDetail][focus] skipped (waiting initial load)');
+        return;
+      }
+
+      // 3️⃣ throttle normal
+      if (now - lastFocusReloadRef.current < 1200) {
+        devLog('[OrderDetail][focus] skipped (throttled)');
+        return;
+      }
+
       lastFocusReloadRef.current = now;
-
-      setLoading(true);
-      setError(null);
-      setData(null);
-      setMeta(undefined);
-
       devLog('[OrderDetail][focus] refresh load for orderId =', orderId);
       load(orderId);
-    }, [orderId]),
+    }, [orderId, route.params?.refreshAt, nav]),
   );
 
   const fmtDateTime = (iso?: string | null) =>
@@ -820,15 +936,20 @@ export default function OrderDetailScreen() {
                   style={{ marginTop: 8 }}
                 >
                   {attachmentImages.map((uri, idx) => (
-                    <ExpoImage
+                    <Pressable
                       key={`${uri}-${idx}`}
-                      source={{ uri }}
-                      style={styles.attachmentImage}
-                      contentFit="cover"
-                      transition={150}
-                      cachePolicy="memory-disk"
-                      onError={(e) => devLog('[OrderDetail][ATTACH][ERROR]', uri, e?.error)}
-                    />
+                      onPress={() => openPreview(uri)}
+                      style={{ marginRight: 10 }}
+                    >
+                      <ExpoImage
+                        source={{ uri }}
+                        style={styles.attachmentImage}
+                        contentFit="cover"
+                        transition={150}
+                        cachePolicy="memory-disk"
+                        onError={(e) => devLog('[OrderDetail][ATTACH][ERROR]', uri, e?.error)}
+                      />
+                    </Pressable>
                   ))}
                 </ScrollView>
               </>
@@ -1019,6 +1140,32 @@ export default function OrderDetailScreen() {
             )}
           </View>
         </ScrollView>
+
+        {/* 🔍 Modal preview adjunto */}
+        <Modal visible={previewOpen} transparent animationType="fade" onRequestClose={closePreview}>
+          <View style={styles.previewBackdrop}>
+            {/* Tap afuera cierra */}
+            <Pressable style={StyleSheet.absoluteFill} onPress={closePreview} />
+
+            {/* Barra superior con X */}
+            <View style={styles.previewTopBar}>
+              <Pressable onPress={closePreview} style={{ padding: 8 }}>
+                <Ionicons name="close" size={26} color="#E9FEFF" />
+              </Pressable>
+            </View>
+
+            {/* Imagen grande */}
+            {previewUri ? (
+              <ExpoImage
+                source={{ uri: previewUri }}
+                style={styles.previewImage}
+                contentFit="contain"
+                transition={150}
+                cachePolicy="memory-disk"
+              />
+            ) : null}
+          </View>
+        </Modal>
 
         {/* ⭐ Modal de rating */}
         <Modal
@@ -1268,4 +1415,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#E9FEFF',
   },
   modalBtnPrimaryText: { color: '#06494F', fontWeight: '800' },
+
+  // 🔍 Preview adjuntos (fullscreen)
+  previewBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewTopBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingTop: 10,
+    paddingHorizontal: 10,
+    alignItems: 'flex-end',
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
+  },
 });

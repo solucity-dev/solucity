@@ -1,3 +1,4 @@
+// apps/mobile/src/screens/CreateOrderScreen.tsx
 import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -20,9 +21,9 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { api } from '../lib/api';
 
+import type { HomeStackParamList } from '../types';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { HomeStackParamList } from '../types';
 
 type RouteT = RouteProp<HomeStackParamList, 'CreateOrder'>;
 
@@ -64,6 +65,19 @@ export default function CreateOrderScreen() {
   const { params } = useRoute<RouteT>();
   const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
 
+  // ✅ Normalizamos params (evita warnings de deps con (params as any).xxx)
+  const p = params as any;
+  const paramAddress = (p?.address ?? '') as string;
+
+  const visitPriceParam = p?.visitPrice as number | null | undefined;
+  const pricingLabelParam = (p?.pricingLabel ?? '') as string;
+
+  const categorySlugParam = p?.categorySlug as string | undefined;
+  const locationIdParam = p?.locationId as string | undefined;
+  const serviceIdParam = p?.serviceId as string | undefined;
+  const specialistIdParam = p?.specialistId as string | undefined;
+  const specialistNameParam = p?.specialistName as string | undefined;
+
   const reqIdRef = useRef<string>(mkReqId());
 
   // ========= Me (para obtener customerId y defaultAddressId) =========
@@ -85,7 +99,6 @@ export default function CreateOrderScreen() {
         });
 
         if (!mounted) return;
-
         setMe(r.data);
 
         if (__DEV__) {
@@ -109,15 +122,15 @@ export default function CreateOrderScreen() {
   }, []);
 
   // ========= Form state =========
-  const [address, setAddress] = useState((params as any).address ?? '');
+  const [address, setAddress] = useState(paramAddress);
+
   useEffect(() => {
-    if (!(params as any).address && me?.defaultAddress?.formatted) {
+    if (!paramAddress && me?.defaultAddress?.formatted) {
       setAddress(me.defaultAddress.formatted);
     }
-  }, [me?.defaultAddress?.formatted, (params as any).address]);
+  }, [me?.defaultAddress?.formatted, paramAddress]);
 
   const [desc, setDesc] = useState('');
-  const [chips, setChips] = useState<string[]>([]);
   const [urgent, setUrgent] = useState(false);
   const [mode, setMode] = useState<'now' | 'schedule'>('now');
 
@@ -128,16 +141,19 @@ export default function CreateOrderScreen() {
 
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [ctaHeight, setCtaHeight] = useState(0);
+
+  // ✅ Tarifa / pricingLabel (fallback "Tarifa")
+  const pricingLabel = useMemo(() => {
+    const clean = pricingLabelParam.trim();
+    return clean.length ? clean : 'Tarifa';
+  }, [pricingLabelParam]);
 
   const visitInfo = useMemo(() => {
-    const p = (params as any).visitPrice;
-    return p != null
-      ? `Visita técnica: $${p.toLocaleString('es-AR')}`
-      : 'Visita técnica: a consultar';
-  }, [(params as any).visitPrice]);
-
-  const toggleChip = (label: string) =>
-    setChips((cur) => (cur.includes(label) ? cur.filter((c) => c !== label) : [...cur, label]));
+    return visitPriceParam != null
+      ? `${pricingLabel}: $${visitPriceParam.toLocaleString('es-AR')}`
+      : `${pricingLabel}: a consultar`;
+  }, [pricingLabel, visitPriceParam]);
 
   function formatDate(d: Date) {
     return d.toLocaleDateString();
@@ -171,6 +187,7 @@ export default function CreateOrderScreen() {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
+        // ✅ compatible con tu versión (evita TS2339)
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
         quality: 0.8,
@@ -201,6 +218,7 @@ export default function CreateOrderScreen() {
       }
 
       const result = await ImagePicker.launchCameraAsync({
+        // ✅ compatible con tu versión (evita TS2339)
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.8,
       });
@@ -233,12 +251,13 @@ export default function CreateOrderScreen() {
         console.log(
           `🧾 [CreateOrder][${reqId}] params snapshot =>`,
           safeJson({
-            categorySlug: (params as any).categorySlug,
-            locationIdFromParams: (params as any).locationId,
-            serviceIdFromParams: (params as any).serviceId,
-            specialistId: (params as any).specialistId,
-            specialistName: (params as any).specialistName,
-            visitPrice: (params as any).visitPrice,
+            categorySlug: categorySlugParam,
+            locationIdFromParams: locationIdParam,
+            serviceIdFromParams: serviceIdParam,
+            specialistId: specialistIdParam,
+            specialistName: specialistNameParam,
+            visitPrice: visitPriceParam,
+            pricingLabel: pricingLabelParam,
           }),
         );
       }
@@ -266,31 +285,28 @@ export default function CreateOrderScreen() {
       }
 
       // ✅ Rubro (categorySlug) desde el que se eligió al especialista
-      // Esto es CLAVE si el especialista tiene múltiples rubros.
-      const categorySlug = (params as any).categorySlug as string | undefined;
+      const categorySlug = categorySlugParam;
       if (!categorySlug || !categorySlug.trim()) {
         Alert.alert(
           'Falta el rubro',
-          'No recibimos categorySlug. Volvé atrás y entrá al especialista desde un rubro (electricidad/plomería/etc).',
+          'No recibimos categorySlug. Volvé atrás y entrá desde un rubro.',
         );
         return;
       }
 
       // ========== serviceId ==========
-      let serviceId: string | undefined = (params as any).serviceId;
+      let serviceId: string | undefined = serviceIdParam;
 
       // Si no viene serviceId, lo inferimos consultando al especialista con categorySlug
-      if (!serviceId && (params as any).specialistId) {
+      if (!serviceId && specialistIdParam) {
         const t0 = Date.now();
         try {
           const qs = `?categorySlug=${encodeURIComponent(categorySlug)}`;
-
-          const spec = await api.get(`/specialists/${(params as any).specialistId}${qs}`);
+          const spec = await api.get(`/specialists/${specialistIdParam}${qs}`);
 
           if (__DEV__) {
             const rootKeys = Object.keys(spec.data ?? {});
             const servicesLen = Array.isArray(spec.data?.services) ? spec.data.services.length : 0;
-
             console.log(
               `🟦 [CreateOrder][${reqId}] GET /specialists/:id ok in ${Date.now() - t0}ms`,
             );
@@ -307,9 +323,7 @@ export default function CreateOrderScreen() {
 
           serviceId = spec.data?.defaultServiceId || spec.data?.services?.[0]?.id || undefined;
 
-          if (__DEV__) {
-            console.log(`🟦 [CreateOrder][${reqId}] extracted serviceId ->`, serviceId);
-          }
+          if (__DEV__) console.log(`🟦 [CreateOrder][${reqId}] extracted serviceId ->`, serviceId);
         } catch (e: any) {
           if (__DEV__) {
             console.log(
@@ -325,14 +339,14 @@ export default function CreateOrderScreen() {
       if (!serviceId) {
         Alert.alert(
           'Falta elegir servicio',
-          'Este especialista no tiene servicios disponibles para este rubro. Probá con otro rubro o avisale al especialista que complete su perfil.',
+          'Este especialista no tiene servicios disponibles para este rubro.',
         );
         return;
       }
 
       // ========== locationId SOLO si corresponde ==========
       const defaultFormatted = me?.defaultAddress?.formatted?.trim() ?? '';
-      const explicitLocationId = (params as any).locationId as string | undefined;
+      const explicitLocationId = locationIdParam;
 
       const hasManualAddress = typedFormatted.length > 0 && typedFormatted !== defaultFormatted;
 
@@ -346,27 +360,25 @@ export default function CreateOrderScreen() {
 
       // subir fotos
       const photosWithRemote = await Promise.all(
-        photos.map(async (p) => {
-          if (p.remoteUrl) return p;
-          const url = await uploadOrderImage(p.localUri);
-          return { ...p, remoteUrl: url };
+        photos.map(async (pp) => {
+          if (pp.remoteUrl) return pp;
+          const url = await uploadOrderImage(pp.localUri);
+          return { ...pp, remoteUrl: url };
         }),
       );
 
       const attachments = photosWithRemote
-        .filter((p) => !!p.remoteUrl)
-        .map((p) => ({ type: 'image', url: p.remoteUrl }));
+        .filter((pp) => !!pp.remoteUrl)
+        .map((pp) => ({ type: 'image', url: pp.remoteUrl }));
 
-      const description = [desc.trim(), ...chips].filter(Boolean).join(' · ');
+      // ✅ descripción SOLO texto libre
+      const description = desc.trim();
 
-      // ✅ payload
-      // OJO: en tu Prisma el campo es "addressText" (no "address").
-      // Si tu backend acepta "address" igual, genial; pero "addressText" es el correcto.
       const payload: any = {
         customerId,
-        specialistId: (params as any).specialistId,
+        specialistId: specialistIdParam,
         serviceId,
-        categorySlug, // no lo usa Prisma directo, pero puede servir para auditoría/logs (si tu backend lo ignora ok)
+        categorySlug, // audit/log
         description: description || null,
         attachments,
         isUrgent: urgent || mode === 'now',
@@ -378,7 +390,6 @@ export default function CreateOrderScreen() {
       if (mode === 'schedule' && scheduledAt) payload.scheduledAt = scheduledAt.toISOString();
 
       if (__DEV__) {
-        // No logueamos attachments enteros para evitar ruido.
         console.log(
           `📦 [CreateOrder][${reqId}] payload =>`,
           safeJson({
@@ -400,13 +411,11 @@ export default function CreateOrderScreen() {
         headers: { 'x-user-id': me?.user.id ?? '' },
       });
 
-      if (__DEV__) {
-        console.log(`✅ [CreateOrder][${reqId}] POST /orders ok ->`, safeJson(r.data));
-      }
+      if (__DEV__) console.log(`✅ [CreateOrder][${reqId}] POST /orders ok ->`, safeJson(r.data));
 
       Alert.alert(
         '¡Pedido enviado!',
-        `Tu solicitud fue creada para ${(params as any).specialistName ?? 'el especialista'}.`,
+        `Tu solicitud fue creada para ${specialistNameParam ?? 'el especialista'}.`,
       );
 
       nav.goBack();
@@ -430,6 +439,8 @@ export default function CreateOrderScreen() {
     }
   };
 
+  const canInteract = !(submitting || meLoading);
+
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
       <SafeAreaView style={styles.safe} edges={['top']}>
@@ -449,7 +460,7 @@ export default function CreateOrderScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
             paddingHorizontal: 16,
-            paddingBottom: tabH + (insets.bottom || 0) + 140,
+            paddingBottom: ctaHeight + 24,
           }}
         >
           <Text style={styles.title}>Confirmar pedido</Text>
@@ -482,24 +493,8 @@ export default function CreateOrderScreen() {
             </Pressable>
           </View>
 
-          {/* Descripción */}
+          {/* ✅ Descripción (solo texto libre) */}
           <Text style={[styles.label, { marginTop: 12 }]}>Descripción del problema</Text>
-
-          <View style={styles.chipsRow}>
-            {['Corte de luz', 'Cortocircuito', 'Presupuesto', 'Sin encendido'].map((c) => {
-              const on = chips.includes(c);
-              return (
-                <Pressable
-                  key={c}
-                  onPress={() => toggleChip(c)}
-                  style={[styles.chip, on && styles.chipOn]}
-                >
-                  <Text style={[styles.chipText, on && styles.chipTextOn]}>{c}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
           <TextInput
             multiline
             numberOfLines={4}
@@ -517,8 +512,8 @@ export default function CreateOrderScreen() {
           </Pressable>
           {photos.length > 0 && (
             <View style={styles.photosGrid}>
-              {photos.map((p) => (
-                <Image key={p.localUri} source={{ uri: p.localUri }} style={styles.photo} />
+              {photos.map((pp) => (
+                <Image key={pp.localUri} source={{ uri: pp.localUri }} style={styles.photo} />
               ))}
             </View>
           )}
@@ -593,7 +588,7 @@ export default function CreateOrderScreen() {
             </Text>
           </Pressable>
 
-          {/* Info visita técnica */}
+          {/* ✅ Info tarifa */}
           <View style={styles.infoBox}>
             <Text style={styles.infoTitle}>{visitInfo}</Text>
             <Text style={styles.infoSub}>Los costos de materiales se acordarán</Text>
@@ -633,6 +628,11 @@ export default function CreateOrderScreen() {
 
         {/* CTA fija */}
         <View
+          onLayout={(e) => {
+            const h = e.nativeEvent.layout.height;
+            // altura real del CTA + espacio por tabbar + safe area
+            setCtaHeight(h + tabH + (insets.bottom || 0) + 12);
+          }}
           style={[
             styles.ctaBar,
             {
@@ -642,18 +642,34 @@ export default function CreateOrderScreen() {
           ]}
         >
           <Pressable
-            style={[styles.confirmBtn, (submitting || meLoading) && { opacity: 0.7 }]}
-            onPress={onConfirm}
+            style={[styles.confirmBtn, (submitting || meLoading) && styles.btnDisabled]}
+            onPress={() => {
+              if (submitting || meLoading) return;
+              onConfirm();
+            }}
             disabled={submitting || meLoading}
           >
             {submitting ? (
-              <ActivityIndicator color="#fff" />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <ActivityIndicator color="#fff" />
+                <Text style={styles.confirmText}>Enviando…</Text>
+              </View>
             ) : (
               <Text style={styles.confirmText}>Confirmar pedido</Text>
             )}
           </Pressable>
 
-          <Pressable style={styles.cancelBtn} onPress={() => nav.goBack()} disabled={submitting}>
+          {/* ✅ Cancel button mejorado (se ve como botón) */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.cancelBtn,
+              !canInteract && { opacity: 0.6 },
+              pressed && canInteract && { opacity: 0.95, transform: [{ scale: 0.99 }] },
+            ]}
+            onPress={() => nav.goBack()}
+            disabled={submitting}
+          >
+            <Ionicons name="close" size={18} color="#E9FEFF" />
             <Text style={styles.cancelText}>Cancelar</Text>
           </Pressable>
         </View>
@@ -700,18 +716,6 @@ const styles = StyleSheet.create({
   input: { flex: 1, color: '#06494F', paddingVertical: 2 },
   linkBtn: { paddingLeft: 8, paddingVertical: 4 },
   linkText: { color: '#0a7c86', fontWeight: '800' },
-
-  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    borderWidth: 1,
-    borderColor: 'rgba(233,254,255,0.65)',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  chipOn: { backgroundColor: '#E9FEFF' },
-  chipText: { color: '#E9FEFF', fontWeight: '700' },
-  chipTextOn: { color: '#06494F' },
 
   textarea: {
     marginTop: 8,
@@ -820,7 +824,22 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
   },
+  btnDisabled: {
+    opacity: 0.75,
+  },
   confirmText: { color: '#fff', fontWeight: '900', fontSize: 16 },
-  cancelBtn: { alignItems: 'center', paddingVertical: 6 },
-  cancelText: { color: '#0dd1db', fontWeight: '800' },
+
+  // ✅ botón cancel visible + consistente con el theme
+  cancelBtn: {
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(233,254,255,0.55)',
+    backgroundColor: 'rgba(0, 35, 40, 0.18)',
+  },
+  cancelText: { color: '#E9FEFF', fontWeight: '900' },
 });

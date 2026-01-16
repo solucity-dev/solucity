@@ -1,4 +1,4 @@
-export type OrdersTab = 'pending' | 'confirmed' | 'finished' | 'cancelled';
+export type OrdersTab = 'pending' | 'confirmed' | 'review' | 'finished' | 'cancelled';
 
 export type Role = 'customer' | 'specialist';
 

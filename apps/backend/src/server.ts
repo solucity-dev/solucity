@@ -1,5 +1,4 @@
 // apps/backend/src/server.ts
-import path from 'path';
 
 import cors from 'cors';
 import 'dotenv/config';
@@ -9,6 +8,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 
 import { prisma } from './lib/prisma';
+import { uploadsRoot } from './lib/uploads';
 import { errorHandler, notFound } from './middlewares/error';
 import adminRoutes from './routes/admin.routes';
 import { categories } from './routes/categories';
@@ -28,8 +28,6 @@ import seedRoutes from './routes/seed.routes';
 import specialistAvatarRoutes from './routes/specialistAvatar.routes';
 import { specialistsRoutes } from './routes/specialists.routes';
 import { subscriptionsRouter } from './routes/subscriptions';
-
-// 🔹 NUEVO: adjuntos de órdenes
 
 const app = express();
 
@@ -76,13 +74,8 @@ app.use(
 app.options('*', cors({ origin: ALLOWED_ORIGINS.length ? ALLOWED_ORIGINS : true }));
 
 /** ================== Static uploads (DEV/PROD) ================== **/
-const uploadsPath = path.resolve(process.cwd(), 'uploads');
-// '..' = apps/backend
-// 'uploads' = apps/backend/uploads  ✅ donde debería estar guardando multer
-
-app.use('/uploads', express.static(uploadsPath));
-
-console.log('[static] uploadsPath =', uploadsPath);
+app.use('/uploads', express.static(uploadsRoot));
+console.log('[static] uploadsRoot =', uploadsRoot);
 
 /** ================== Utilitarias ================== **/
 app.get('/health', (_req: Request, res: Response) => {
@@ -124,7 +117,7 @@ app.use('/admin', seedRoutes);
 app.use('/admin', adminRoutes);
 app.use('/auth', passwordRoutes);
 
-// 🔹 NUEVO: subida de adjuntos de órdenes
+// subida de adjuntos de órdenes
 app.use(orderAttachments);
 
 /** ================== 404 + errores ================== **/
@@ -134,7 +127,7 @@ app.use(errorHandler);
 /** ================== Auto-cancel job ================== **/
 setInterval(() => {
   runAutoCancelExpiredPendingOrders().catch((e) => console.error('[autoCancel job] error', e));
-}, 60_000); // cada 60s
+}, 60_000);
 
 /** ================== Boot ================== **/
 app.listen(PORT, '0.0.0.0', () => {

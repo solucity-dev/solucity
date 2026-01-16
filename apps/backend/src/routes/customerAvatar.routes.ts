@@ -1,22 +1,20 @@
-// apps/backend/src/routes/customerAvatar.routes.ts
-import { Router } from 'express';
-import fs from 'fs';
-import multer from 'multer';
 import path from 'path';
 
+import { Router } from 'express';
+import multer from 'multer';
+
 import { prisma } from '../lib/prisma';
+import { ensureDir, uploadsRoot } from '../lib/uploads';
 import { auth } from '../middlewares/auth';
 
 const router = Router();
 
-// Carpeta donde guardamos los avatares
-const uploadDir = path.join(process.cwd(), 'uploads', 'avatars');
-fs.mkdirSync(uploadDir, { recursive: true });
+// ✅ uploads/avatars dentro del root unificado
+const uploadDir = path.join(uploadsRoot, 'avatars');
+ensureDir(uploadDir);
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadDir);
-  },
+  destination: (_req, _file, cb) => cb(null, uploadDir),
   filename: (_req, file, cb) => {
     const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
     const ext = path.extname(file.originalname) || '.jpg';
@@ -26,34 +24,26 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 5 * 1024 * 1024 },
 });
 
 router.post('/', auth, upload.single('avatar'), async (req: any, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ ok: false, error: 'missing_file' });
-    }
+    if (!req.file) return res.status(400).json({ ok: false, error: 'missing_file' });
 
     const userId = req.user?.id as string | undefined;
-    if (!userId) {
-      return res.status(401).json({ ok: false, error: 'unauthorized' });
-    }
+    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' });
 
-    // Buscamos el perfil del cliente por userId
-    const customer = await (prisma as any).customerProfile.findUnique({
+    const customer = await prisma.customerProfile.findUnique({
       where: { userId },
       select: { id: true },
     });
 
-    if (!customer) {
-      return res.status(404).json({ ok: false, error: 'customer_profile_not_found' });
-    }
+    if (!customer) return res.status(404).json({ ok: false, error: 'customer_profile_not_found' });
 
-    // Guardamos URL RELATIVA igual que specialist (el frontend la convierte con api.baseURL)
     const avatarUrl = `/uploads/avatars/${req.file.filename}`;
 
-    const updated = await (prisma as any).customerProfile.update({
+    const updated = await prisma.customerProfile.update({
       where: { id: customer.id },
       data: { avatarUrl },
       select: { id: true, avatarUrl: true },

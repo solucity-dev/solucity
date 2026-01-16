@@ -1,10 +1,14 @@
-// apps/backend/src/schemas/orders.ts  (o donde lo tengas)
-// ✅ actualizado para que note permita null en finish y confirm
-
+// apps/backend/src/schemas/orders.ts
 import { z } from 'zod';
 
 // Acepta tanto Cuid2 (cmg...) como Cuid clásico.
 const id = z.string().cuid2().or(z.string().cuid());
+
+// ✅ URL ABSOLUTA o PATH relativo servido por tu backend (/uploads/...)
+const fileUrl = z
+  .string()
+  .min(1)
+  .refine((v) => v.startsWith('/uploads/') || /^https?:\/\/.+/i.test(v), 'invalid_url');
 
 export const createOrderSchema = z.object({
   customerId: id.optional(),
@@ -15,7 +19,7 @@ export const createOrderSchema = z.object({
   attachments: z
     .array(
       z.object({
-        url: z.string().url(),
+        url: fileUrl, // ✅ antes era z.string().url()
         type: z.string().optional(),
         name: z.string().optional(),
       }),
@@ -37,13 +41,18 @@ export const rescheduleOrderSchema = z.object({
 });
 
 export const finishOrderSchema = z.object({
-  attachments: z.array(z.object({ url: z.string().url(), name: z.string().optional() })).optional(),
-  // ✅ ahora permite string | null | undefined
+  attachments: z
+    .array(
+      z.object({
+        url: fileUrl, // ✅ antes era z.string().url()
+        name: z.string().optional(),
+      }),
+    )
+    .optional(),
   note: z.string().max(500).nullable().optional(),
 });
 
 export const confirmOrderSchema = z.object({
-  // ✅ ahora permite string | null | undefined
   note: z.string().max(500).nullable().optional(),
 });
 
@@ -61,7 +70,8 @@ export const rejectOrderSchema = z.object({
 
 export const rateOrderSchema = z.object({
   score: z.number().int().min(1).max(5),
-  comment: z.string().max(1000).optional(),
+  // ✅ permite vacío / undefined / null desde el mobile
+  comment: z.string().max(1000).nullable().optional(),
 });
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;

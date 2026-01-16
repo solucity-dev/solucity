@@ -17,10 +17,11 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { API_URL, api } from '../lib/api';
+import { resolveUploadUrl } from '../lib/resolveUploadUrl';
 
+import type { HomeStackParamList } from '../types';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { HomeStackParamList } from '../types';
 
 type Route = RouteProp<HomeStackParamList, 'SpecialistProfile'>;
 
@@ -54,13 +55,6 @@ type SpecialistDetails = {
   reviews: Review[];
 };
 
-function absoluteUrl(u?: string | null): string | undefined {
-  if (!u) return undefined;
-  if (/^https?:\/\//i.test(u)) return u;
-  const base = API_URL?.replace(/\/+$/, '') || '';
-  return `${base}${u.startsWith('/') ? '' : '/'}${u}`;
-}
-
 const DAY_LABELS = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
 
 const BADGE_LABEL: Record<NonNullable<SpecialistDetails['badge']>, string> = {
@@ -91,8 +85,7 @@ export default function SpecialistProfileScreen() {
         setLoading(true);
         setError(null);
 
-        // ✅ BONUS: si vienen lat/lng desde la lista, los usamos y NO pedimos GPS.
-        // (Si tu tipo HomeStackParamList no los tiene aún, igual funciona por runtime.)
+        // ✅ si vienen lat/lng desde la lista, los usamos y NO pedimos GPS.
         const maybeLat = (params as any)?.lat as number | undefined;
         const maybeLng = (params as any)?.lng as number | undefined;
 
@@ -114,9 +107,10 @@ export default function SpecialistProfileScreen() {
           lng = pos.coords.longitude;
         }
 
-        // ✅ FIX: usar api (axios) para que vaya con Authorization + interceptores
+        // ✅ rubro desde el que venimos (opcional)
         const categorySlug = (params as any)?.categorySlug as string | undefined;
 
+        // ✅ usar api (axios) para que vaya con Authorization + interceptores
         const res = await api.get(`/specialists/${params.id}`, {
           params: {
             lat,
@@ -167,11 +161,27 @@ export default function SpecialistProfileScreen() {
     };
   }, [params]);
 
+  // ✅ unificamos: usar resolveUploadUrl como en la lista
+  const resolvedAvatarUrl = useMemo(
+    () => resolveUploadUrl(spec?.avatarUrl ?? null),
+    [spec?.avatarUrl],
+  );
+
   const avatarSource = useMemo(() => {
-    const url = absoluteUrl(spec?.avatarUrl ?? null);
-    if (url) return { uri: url };
+    if (resolvedAvatarUrl) return { uri: resolvedAvatarUrl };
     return require('../assets/avatar-placeholder.png');
-  }, [spec?.avatarUrl]);
+  }, [resolvedAvatarUrl]);
+
+  // ✅ LOG general (evita TS2448 porque corre después de crear avatarSource)
+  useEffect(() => {
+    if (!__DEV__) return;
+    console.log('[AVATAR][PROFILE]', {
+      name: spec?.name,
+      avatarUrl: spec?.avatarUrl,
+      resolved: resolvedAvatarUrl ?? null,
+      API_URL,
+    });
+  }, [resolvedAvatarUrl, spec?.avatarUrl, spec?.name]);
 
   const distanceLabel = (km?: number | null) => {
     if (km == null || !Number.isFinite(km)) return '—';
@@ -188,6 +198,9 @@ export default function SpecialistProfileScreen() {
   const statsCanceled = spec?.stats?.canceled ?? 0;
 
   const specialties = spec?.specialties ?? [];
+
+  const showPrice = spec?.visitPrice != null;
+  const pricingLabel = (spec?.pricingLabel ?? '').trim() || 'Tarifa';
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
@@ -231,7 +244,22 @@ export default function SpecialistProfileScreen() {
               {/* Header del perfil */}
               <View style={styles.topCard}>
                 <View style={styles.avatarWrap}>
-                  <Image source={avatarSource} style={styles.avatar} />
+                  <Image
+                    source={avatarSource}
+                    style={styles.avatar}
+                    onLoadStart={() => {
+                      if (__DEV__ && resolvedAvatarUrl)
+                        console.log('[AVATAR][PROFILE][LOAD_START]', resolvedAvatarUrl);
+                    }}
+                    onLoadEnd={() => {
+                      if (__DEV__ && resolvedAvatarUrl)
+                        console.log('[AVATAR][PROFILE][LOAD_END]', resolvedAvatarUrl);
+                    }}
+                    onError={(ev) => {
+                      if (__DEV__ && resolvedAvatarUrl)
+                        console.log('[AVATAR][PROFILE][ERROR]', resolvedAvatarUrl, ev?.nativeEvent);
+                    }}
+                  />
                 </View>
 
                 <View style={{ flex: 1, marginLeft: 14 }}>
@@ -260,14 +288,15 @@ export default function SpecialistProfileScreen() {
                 </View>
               </View>
 
-              {/* Precio */}
-              <View style={styles.priceCard}>
-                <MDI name="camera-metering-spot" size={18} color="#0A5B63" />
-                <Text style={styles.priceText}>
-                  {spec.pricingLabel?.trim() || 'Visita'}
-                  {spec.visitPrice != null ? `: $${spec.visitPrice.toLocaleString('es-AR')}` : ''}
-                </Text>
-              </View>
+              {/* ✅ Precio: solo si hay precio */}
+              {showPrice ? (
+                <View style={styles.priceCard}>
+                  <MDI name="currency-usd" size={18} color="#0A5B63" />
+                  <Text style={styles.priceText}>
+                    {pricingLabel}: ${spec.visitPrice!.toLocaleString('es-AR')}
+                  </Text>
+                </View>
+              ) : null}
 
               {/* Sobre mí */}
               <View style={styles.sectionCard}>
@@ -413,7 +442,8 @@ export default function SpecialistProfileScreen() {
                     specialistId: spec.id,
                     specialistName: spec.name,
                     visitPrice: spec.visitPrice ?? null,
-                    categorySlug, // ✅ CLAVE
+                    pricingLabel: spec.pricingLabel ?? null,
+                    categorySlug,
                   } as any);
                 }}
               >
@@ -445,9 +475,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
 
-  body: {
-    flex: 1,
-  },
+  body: { flex: 1 },
 
   center: {
     flex: 1,
@@ -474,6 +502,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#083840',
   },
   avatar: { width: '100%', height: '100%' },
+
   name: {
     color: '#E9FEFF',
     fontSize: 20,
@@ -535,15 +564,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dayChipOn: {
-    backgroundColor: 'rgba(233,254,255,0.9)',
-  },
-  dayChipOff: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  dayChipText: {
-    fontWeight: '800',
-  },
+  dayChipOn: { backgroundColor: 'rgba(233,254,255,0.9)' },
+  dayChipOff: { backgroundColor: 'rgba(255,255,255,0.08)' },
+  dayChipText: { fontWeight: '800' },
 
   tagsRow: {
     flexDirection: 'row',

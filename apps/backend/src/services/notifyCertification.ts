@@ -1,6 +1,7 @@
-import { prisma } from '../lib/prisma';
+//apps/backend/src/services/notifyCertification.ts
 import { createNotification } from './notificationService';
 import { sendExpoPush } from './pushExpo';
+import { prisma } from '../lib/prisma';
 
 import type { CertStatus } from '@prisma/client';
 

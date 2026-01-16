@@ -1,15 +1,19 @@
 // apps/mobile/src/notifications/NotificationsProvider.tsx
 import * as Notifications from 'expo-notifications';
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { Platform } from 'react-native';
 
 import { registerForPush } from './registerForPush';
 import { useAuth } from '../auth/AuthProvider';
 import { api } from '../lib/api';
-
-// ✅ Registro push (permisos + channel + token)
-
-// ✅ navegación global (ref)
 import { navigateToChatThread, navigateToOrderDetail } from '../navigation/navigationRef';
 
 type NotificationsContextValue = {
@@ -80,7 +84,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   // ✅ evita navegar 2 veces por la misma notificación (cold start + listener)
   const lastHandledNotificationIdRef = useRef<string | null>(null);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     if (!token) {
       setUnread(0);
       try {
@@ -128,88 +132,92 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       inFlightRef.current = false;
       setRefreshing(false);
     }
-  };
+  }, [token]);
 
   /**
    * ✅ Marca como leída en backend (si podemos)
    */
-  const markTappedNotificationAsRead = async (args: {
-    notificationDbId: string | null;
-    orderId: string | null;
-    type: string | null;
-  }) => {
-    if (!ready || !token) return;
+  const markTappedNotificationAsRead = useCallback(
+    async (args: {
+      notificationDbId: string | null;
+      orderId: string | null;
+      type: string | null;
+    }) => {
+      if (!ready || !token) return;
 
-    const { notificationDbId, orderId, type } = args;
+      const { notificationDbId, orderId, type } = args;
 
-    // 1) Si el payload trae id real -> directo
-    if (notificationDbId) {
+      // 1) Si el payload trae id real -> directo
+      if (notificationDbId) {
+        try {
+          await api.patch(`/notifications/${notificationDbId}/read`, null, {
+            headers: { 'Cache-Control': 'no-cache' },
+          });
+          if (__DEV__)
+            console.log('[NotificationsProvider] marked read by DB id', notificationDbId);
+          await refresh();
+          return;
+        } catch (e: any) {
+          if (__DEV__) {
+            console.log(
+              '[NotificationsProvider] mark read by DB id failed',
+              e?.response?.status,
+              e?.message,
+            );
+          }
+        }
+      }
+
+      // 2) Fallback: buscar por orderId (+ type)
+      if (!orderId) return;
+
       try {
-        await api.patch(`/notifications/${notificationDbId}/read`, null, {
+        const { data } = await api.get('/notifications', {
+          params: { limit: 50 },
           headers: { 'Cache-Control': 'no-cache' },
         });
-        if (__DEV__) console.log('[NotificationsProvider] marked read by DB id', notificationDbId);
+        const items: any[] = Array.isArray(data?.items) ? data.items : [];
+
+        const match = items.find((n) => {
+          if (n?.readAt) return false;
+          const nd = n?.data ?? {};
+          const nOrderId = nd?.orderId ?? nd?.order_id ?? nd?.order?.id ?? null;
+          if (!nOrderId || String(nOrderId) !== String(orderId)) return false;
+
+          if (type && n?.type) return String(n.type) === String(type);
+          return true;
+        });
+
+        if (!match?.id) {
+          if (__DEV__)
+            console.log(
+              '[NotificationsProvider] fallback: no unread notif matched for orderId',
+              orderId,
+            );
+          await refresh();
+          return;
+        }
+
+        await api.patch(`/notifications/${match.id}/read`, null, {
+          headers: { 'Cache-Control': 'no-cache' },
+        });
+
+        if (__DEV__)
+          console.log('[NotificationsProvider] fallback: marked read by search match', match.id);
+
         await refresh();
-        return;
       } catch (e: any) {
         if (__DEV__) {
           console.log(
-            '[NotificationsProvider] mark read by DB id failed',
+            '[NotificationsProvider] fallback mark read failed',
             e?.response?.status,
             e?.message,
           );
         }
       }
-    }
-
-    // 2) Fallback: buscar por orderId (+ type)
-    if (!orderId) return;
-
-    try {
-      const { data } = await api.get('/notifications', {
-        params: { limit: 50 },
-        headers: { 'Cache-Control': 'no-cache' },
-      });
-      const items: any[] = Array.isArray(data?.items) ? data.items : [];
-
-      const match = items.find((n) => {
-        if (n?.readAt) return false;
-        const nd = n?.data ?? {};
-        const nOrderId = nd?.orderId ?? nd?.order_id ?? nd?.order?.id ?? null;
-        if (!nOrderId || String(nOrderId) !== String(orderId)) return false;
-
-        if (type && n?.type) return String(n.type) === String(type);
-        return true;
-      });
-
-      if (!match?.id) {
-        if (__DEV__)
-          console.log(
-            '[NotificationsProvider] fallback: no unread notif matched for orderId',
-            orderId,
-          );
-        await refresh();
-        return;
-      }
-
-      await api.patch(`/notifications/${match.id}/read`, null, {
-        headers: { 'Cache-Control': 'no-cache' },
-      });
-
-      if (__DEV__)
-        console.log('[NotificationsProvider] fallback: marked read by search match', match.id);
-
-      await refresh();
-    } catch (e: any) {
-      if (__DEV__) {
-        console.log(
-          '[NotificationsProvider] fallback mark read failed',
-          e?.response?.status,
-          e?.message,
-        );
-      }
-    }
-  };
+    },
+    [ready, token, refresh],
+  );
 
   // ✅ Registro push
   useEffect(() => {
@@ -230,6 +238,9 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         if (__DEV__) {
           console.log('[push] expoPushToken =', pushToken);
         }
+
+        // ✅ NO mandamos null al backend
+        if (!pushToken) return;
 
         await api.post(
           '/notifications/push-token',
@@ -265,8 +276,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       active = false;
       clearInterval(id);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, refresh]);
 
   /**
    * ✅ Tap en notificación (banner del sistema / tray)
@@ -337,7 +347,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     return () => {
       sub.remove();
     };
-  }, [ready, user?.role, token]);
+  }, [ready, user?.role, token, markTappedNotificationAsRead]);
 
   return (
     <NotificationsContext.Provider value={{ unread, refreshing, refresh, expoPushToken }}>

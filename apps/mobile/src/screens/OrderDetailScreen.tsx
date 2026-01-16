@@ -96,28 +96,36 @@ function getErrorMessage(e: any) {
 }
 
 /**
- * ✅ Mapeo estado REAL -> sección Agenda
- * (hoy no lo usamos, pero lo dejamos como referencia)
+ * ✅ Mapeo estado REAL -> sección Agenda (NUEVO: review/finished)
+ * Importante: coincide con la nueva lógica de AgendaScreen
  */
-const resolveAgendaSection = (status?: string | null, meta?: Resp['meta']) => {
-  if (meta?.deadline === 'expired') return 'CANCELLED';
-  if (!status) return 'PENDING';
-  if (status === 'PENDING') return 'PENDING';
-  if (['ASSIGNED', 'IN_PROGRESS', 'PAUSED'].includes(status)) return 'CONFIRMED';
-  if (['FINISHED_BY_SPECIALIST', 'IN_CLIENT_REVIEW', 'CONFIRMED_BY_CLIENT'].includes(status))
-    return 'FINISHED';
-  if (status.startsWith('CANCELLED') || status === 'CLOSED') return 'CANCELLED';
+function mapStatusToAgendaSection(status?: string | null, meta?: Resp['meta']) {
+  if (meta?.deadline === 'expired') return 'CANCELLED_AUTO';
+
+  const s = String(status ?? 'PENDING').toUpperCase();
+
+  if (s === 'PENDING') return 'PENDING';
+  if (['ASSIGNED', 'IN_PROGRESS', 'PAUSED'].includes(s)) return 'ASSIGNED';
+
+  // 🔥 Revisión: el especialista marcó finalizado y espera al cliente
+  if (['IN_CLIENT_REVIEW', 'FINISHED_BY_SPECIALIST'].includes(s)) return 'IN_CLIENT_REVIEW';
+
+  // ✅ Finalizados
+  if (['CONFIRMED_BY_CLIENT', 'CLOSED'].includes(s)) return 'CONFIRMED_BY_CLIENT';
+
+  if (s.startsWith('CANCELLED') || s === 'CLOSED') return s;
+
   return 'PENDING';
-};
+}
 
 export default function OrderDetailScreen() {
   const insets = useSafeAreaInsets();
   const nav = useNavigation<any>();
   const route = useRoute<any>();
-  const { mode, user } = useAuth() as any;
+  const { user } = useAuth() as any;
 
   const tabBarHeightRaw = useBottomTabBarHeight();
-  const tabBarHeight = Math.max(tabBarHeightRaw, 60); // fallback seguro
+  const tabBarHeight = Math.max(tabBarHeightRaw, 60);
 
   const orderId: string | null =
     route.params?.id ?? route.params?.orderId ?? route.params?.item?.id ?? null;
@@ -127,19 +135,21 @@ export default function OrderDetailScreen() {
   const [data, setData] = useState<OrderDetail | null>(null);
   const [meta, setMeta] = useState<Resp['meta'] | undefined>(undefined);
 
-  // ⭐ Estado modal de rating
+  // ⭐ Rating modal
   const [ratingModalVisible, setRatingModalVisible] = useState(false);
   const [ratingScore, setRatingScore] = useState<number>(5);
   const [ratingComment, setRatingComment] = useState('');
   const [submittingRating, setSubmittingRating] = useState(false);
 
-  // ✅ evita race conditions (notificación → navegar rápido / múltiples loads)
+  // ✅ loading para acciones (botones)
+  const [actionLoading, setActionLoading] = useState(false);
+
+  // ✅ evita race conditions
   const loadSeqRef = useRef(0);
 
-  // ✅ evita refresh duplicado por focus (react navigation a veces dispara 2 veces)
+  // ✅ evita refresh duplicado por focus
   const lastFocusReloadRef = useRef<number>(0);
 
-  // ✅ log seguro del params + id resuelto
   useEffect(() => {
     try {
       devLog('[OrderDetail] route.params =', JSON.stringify(route.params ?? {}, null, 2));
@@ -150,34 +160,41 @@ export default function OrderDetailScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
 
+  /**
+   * ✅ Volver SIEMPRE a AgendaMain y apuntar al tab correcto
+   * Importante: AgendaScreen espera initialSection con status backend.
+   */
   const handleBackToAgenda = useCallback(
     (forceStatus?: string | null, forceMeta?: Resp['meta']) => {
-      let status = forceStatus ?? data?.status ?? 'PENDING';
-      if (forceMeta?.deadline === 'expired') status = 'CANCELLED_AUTO';
+      const targetStatus = mapStatusToAgendaSection(forceStatus ?? data?.status, forceMeta ?? meta);
 
+      // 1) si existe AgendaMain en el stack actual
       try {
-        nav.navigate('AgendaMain', { initialSection: status, refresh: true });
+        nav.navigate('AgendaMain', { initialSection: targetStatus, refresh: true });
         return true;
       } catch {}
 
+      // 2) si puedo volver atrás
       if (nav.canGoBack?.()) {
         nav.goBack();
         return true;
       }
 
+      // 3) navegar via parent navigator
       const parent = nav.getParent?.();
       if (parent?.navigate) {
         parent.navigate('Agenda', {
           screen: 'AgendaMain',
-          params: { initialSection: status, refresh: true },
+          params: { initialSection: targetStatus, refresh: true },
         });
         return true;
       }
 
-      nav.navigate('Agenda', { initialSection: status, refresh: true });
+      // 4) fallback
+      nav.navigate('Agenda', { initialSection: targetStatus, refresh: true });
       return true;
     },
-    [nav, data?.status],
+    [nav, data?.status, meta],
   );
 
   useFocusEffect(
@@ -219,7 +236,6 @@ export default function OrderDetailScreen() {
 
       const r = await api.get<Resp>(url, { headers: { 'Cache-Control': 'no-cache' } });
 
-      // ✅ si ya hay otro load posterior, ignoramos este resultado
       if (seq !== loadSeqRef.current) {
         devLog('[OrderDetail][load] ignored result (stale seq)', {
           seq,
@@ -228,16 +244,9 @@ export default function OrderDetailScreen() {
         return null;
       }
 
-      // ✅ logs resumidos (evita spam / errores)
       devLog('[OrderDetail][load] response.ok =', r.data?.ok);
       devLog('[OrderDetail][load] order.status =', r.data?.order?.status);
       devLog('[OrderDetail][load] meta.deadline =', r.data?.meta?.deadline);
-
-      // ✅ logs completos (si querés ver todo)
-      devLog('[OrderDetail] order from API =', JSON.stringify(r.data.order, null, 2));
-      devLog('[OrderDetail] meta from API =', JSON.stringify(r.data.meta, null, 2));
-
-      devLog('[OrderDetail] address raw =', JSON.stringify(r.data.order?.address ?? null, null, 2));
 
       setData(r.data.order);
       setMeta(r.data.meta);
@@ -261,7 +270,6 @@ export default function OrderDetailScreen() {
       return;
     }
 
-    // ✅ reset inmediato para que NO se vea el status anterior (ASSIGNED) al entrar desde notificación
     setData(null);
     setMeta(undefined);
     setError(null);
@@ -271,17 +279,15 @@ export default function OrderDetailScreen() {
     load(orderId);
   }, [orderId]);
 
-  // ✅ FIX CLAVE: refrescar SIEMPRE al entrar a la pantalla (notificación suele reusar la misma screen)
+  // ✅ refrescar SIEMPRE al entrar (notificación reusa la misma screen)
   useFocusEffect(
     useCallback(() => {
       if (!orderId) return;
 
       const now = Date.now();
-      if (now - lastFocusReloadRef.current < 600) return; // anti doble-focus
+      if (now - lastFocusReloadRef.current < 600) return;
       lastFocusReloadRef.current = now;
 
-      // 🔥 para tu caso (notificaciones) es lo más seguro:
-      // evitamos ver “Pedido en curso” viejo 1 segundo
       setLoading(true);
       setError(null);
       setData(null);
@@ -321,22 +327,32 @@ export default function OrderDetailScreen() {
     return map[t] ?? type;
   };
 
-  // ✅ rol REAL (no depende de mode)
+  // ✅ rol REAL
   const isSpecialist = user?.role === 'SPECIALIST';
   const isClient = !isSpecialist;
 
   const isExpired = meta?.deadline === 'expired';
-  const isPending = data?.status === 'PENDING';
-  const isAssignedOrInProgress = data?.status === 'ASSIGNED' || data?.status === 'IN_PROGRESS';
-  const inClientReview = data?.status === 'IN_CLIENT_REVIEW';
-  const canRate = data?.status === 'CONFIRMED_BY_CLIENT' && !data?.rating;
+  const status = String(data?.status ?? 'PENDING').toUpperCase();
 
-  const isAutoCancelled = data?.status === 'CANCELLED_AUTO';
-  const isCancelledByCustomer = data?.status === 'CANCELLED_BY_CUSTOMER';
-  const isCancelledBySpecialist = data?.status === 'CANCELLED_BY_SPECIALIST';
+  const isPending = status === 'PENDING';
+  const isAssignedOrInProgress =
+    status === 'ASSIGNED' || status === 'IN_PROGRESS' || status === 'PAUSED';
+
+  // ✅ ahora revisión es su propio estado/tarjeta/tab
+  const inClientReview = status === 'IN_CLIENT_REVIEW' || status === 'FINISHED_BY_SPECIALIST';
+
+  // ✅ finalizados (en agenda "finished")
+  const isFinished = status === 'CONFIRMED_BY_CLIENT' || status === 'CLOSED';
+
+  // ✅ rating (si confirmó y aún no calificó)
+  const canRate = status === 'CONFIRMED_BY_CLIENT' && !data?.rating;
+
+  const isAutoCancelled = status === 'CANCELLED_AUTO';
+  const isCancelledByCustomer = status === 'CANCELLED_BY_CUSTOMER';
+  const isCancelledBySpecialist = status === 'CANCELLED_BY_SPECIALIST';
 
   const isCancelled =
-    isExpired || !!isAutoCancelled || !!isCancelledByCustomer || !!isCancelledBySpecialist;
+    isExpired || isAutoCancelled || isCancelledByCustomer || isCancelledBySpecialist;
 
   const statusTitle = isExpired
     ? 'Pedido vencido'
@@ -352,13 +368,12 @@ export default function OrderDetailScreen() {
               ? 'Pedido en curso'
               : inClientReview
                 ? 'En revisión del cliente'
-                : data?.status === 'CONFIRMED_BY_CLIENT'
+                : status === 'CONFIRMED_BY_CLIENT'
                   ? 'Trabajo confirmado'
-                  : data?.status === 'CLOSED'
+                  : status === 'CLOSED'
                     ? 'Pedido cerrado'
                     : 'Detalle del pedido';
 
-  // 🔹 Persona que mostramos en el header
   const headerName = isClient
     ? (data?.specialist?.name ?? 'Especialista a asignar')
     : (data?.customer?.name ?? 'Cliente');
@@ -366,17 +381,25 @@ export default function OrderDetailScreen() {
   const headerAvatarUrl = isClient
     ? (data?.specialist?.avatarUrl ?? null)
     : (data?.customer?.avatarUrl ?? null);
-
   const headerInitial = (headerName?.trim?.()[0] ?? 'U').toUpperCase();
 
-  const FILES_BASE_URL = api.defaults.baseURL || process.env.EXPO_PUBLIC_API_URL || '';
-  const toAbsoluteUrl = (u?: string | null) => {
-    if (!u) return null;
-    if (u.startsWith('http://') || u.startsWith('https://') || u.startsWith('file://')) return u;
-    const base = FILES_BASE_URL.replace(/\/$/, '');
-    const path = u.startsWith('/') ? u : `/${u}`;
-    return `${base}${path}?t=${Date.now()}`;
-  };
+  const API_BASE_URL = api.defaults.baseURL || process.env.EXPO_PUBLIC_API_URL || '';
+  const FILES_BASE_URL = useMemo(() => {
+    const base = String(API_BASE_URL || '').replace(/\/$/, '');
+    return base.replace(/\/api$/i, '');
+  }, [API_BASE_URL]);
+
+  const toAbsoluteUrl = useCallback(
+    (u?: string | null) => {
+      if (!u) return null;
+      if (u.startsWith('http://') || u.startsWith('https://') || u.startsWith('file://')) return u;
+
+      const base = FILES_BASE_URL.replace(/\/$/, '');
+      const p = u.startsWith('/') ? u : `/${u}`;
+      return `${base}${p}`;
+    },
+    [FILES_BASE_URL],
+  );
 
   const horarioLabel = (() => {
     if (!data) return '—';
@@ -403,6 +426,7 @@ export default function OrderDetailScreen() {
     const totalMinutes = Math.max(0, Math.round(meta.timeLeftMs / 60000));
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
+
     const parts: string[] = [];
     if (hours) parts.push(`${hours} h`);
     if (minutes || !hours) parts.push(`${minutes} min`);
@@ -422,19 +446,15 @@ export default function OrderDetailScreen() {
         return null;
       })
       .filter((u): u is string => typeof u === 'string');
-  }, [data]);
+  }, [data, toAbsoluteUrl]);
 
   const addressText = (() => {
     const a: any = data?.address;
     if (!a) return '—';
 
-    // 1) string plano
     if (typeof a === 'string') return a.trim() || '—';
-
-    // 2) tu formato esperado actual
     if (typeof a.formatted === 'string' && a.formatted.trim()) return a.formatted.trim();
 
-    // 3) otros formatos comunes (por si el backend cambia en ASSIGNED)
     const candidates = [
       a.address,
       a.full,
@@ -447,14 +467,12 @@ export default function OrderDetailScreen() {
 
     if (candidates.length) return candidates[0].trim();
 
-    // 4) si viene en partes (street/number/city)
     const parts = [a.street, a.number, a.city, a.state, a.zip]
       .filter((x) => typeof x === 'string' && x.trim())
       .map((s: string) => s.trim());
 
     if (parts.length) return parts.join(' ');
 
-    // 5) fallback para debug en DEV
     try {
       return __DEV__ ? JSON.stringify(a) : '—';
     } catch {
@@ -462,7 +480,7 @@ export default function OrderDetailScreen() {
     }
   })();
 
-  // ✅ Chat disponible por estado (no por chatThreadId; si falta, reintentamos en el tap)
+  // ✅ Chat disponible por estado
   const canShowChat = !isPending && !isCancelled;
 
   const confirmCancel = (onConfirm: () => void) => {
@@ -476,109 +494,98 @@ export default function OrderDetailScreen() {
     );
   };
 
-  // ───────────────────── acciones ─────────────────────
-  const doAccept = async () => {
-    if (!data) return;
+  // ───────────────────── Acciones (con loading seguro) ─────────────────────
+  const runAction = async (fn: () => Promise<void>) => {
+    if (actionLoading) return;
     try {
+      setActionLoading(true);
+      await fn();
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const doAccept = async () =>
+    runAction(async () => {
+      if (!data) return;
       await api.post(`/orders/${data.id}/accept`, {});
       Alert.alert('Listo', 'Pedido aceptado');
       const fresh = orderId ? await load(orderId) : null;
       handleBackToAgenda(fresh?.order?.status ?? 'ASSIGNED', fresh?.meta);
-    } catch (e: any) {
-      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo aceptar');
-    }
-  };
+    });
 
-  const doCancelBySpecialist = async () => {
-    if (!data) return;
-    try {
+  const doRejectAsSpecialist = async () =>
+    runAction(async () => {
+      if (!data) return;
       await api.post(`/orders/${data.id}/cancel-by-specialist`, {
         reason: 'Rechazado por el especialista',
       });
       Alert.alert('Listo', 'Solicitud rechazada');
       const fresh = orderId ? await load(orderId) : null;
       handleBackToAgenda(fresh?.order?.status ?? 'CANCELLED_BY_SPECIALIST', fresh?.meta);
-    } catch (e: any) {
-      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo rechazar');
-    }
-  };
+    });
 
-  const doCancelAsCustomer = async () => {
-    if (!data) return;
-    try {
-      await api.post(`/orders/${data.id}/cancel`, {
-        reason: 'Cancelado por el cliente desde OrderDetail',
-      });
+  const doCancelAsCustomer = async () =>
+    runAction(async () => {
+      if (!data) return;
+      await api.post(`/orders/${data.id}/cancel`, { reason: 'Cancelado por el cliente' });
       Alert.alert('Listo', 'Solicitud cancelada');
       const fresh = orderId ? await load(orderId) : null;
       handleBackToAgenda(fresh?.order?.status ?? 'CANCELLED_BY_CUSTOMER', fresh?.meta);
-    } catch (e: any) {
-      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo cancelar la solicitud');
-    }
-  };
+    });
 
-  const doCancelAsSpecialist = async () => {
-    if (!data) return;
-    try {
+  const doCancelAsSpecialist = async () =>
+    runAction(async () => {
+      if (!data) return;
       await api.post(`/orders/${data.id}/cancel-by-specialist`, {
-        reason: 'Cancelado por el especialista desde OrderDetail',
+        reason: 'Cancelado por el especialista',
       });
       Alert.alert('Listo', 'Solicitud cancelada');
       const fresh = orderId ? await load(orderId) : null;
       handleBackToAgenda(fresh?.order?.status ?? 'CANCELLED_BY_SPECIALIST', fresh?.meta);
-    } catch (e: any) {
-      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo cancelar');
-    }
-  };
+    });
 
-  const doFinish = async () => {
-    if (!data) return;
-    try {
+  const doFinish = async () =>
+    runAction(async () => {
+      if (!data) return;
       await api.post(`/orders/${data.id}/finish`, { attachments: [], note: null });
       Alert.alert('Listo', 'Trabajo marcado como finalizado');
       const fresh = orderId ? await load(orderId) : null;
+      // 🔥 se va a "Revisión"
       handleBackToAgenda(fresh?.order?.status ?? 'IN_CLIENT_REVIEW', fresh?.meta);
-    } catch (e: any) {
-      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo finalizar');
-    }
-  };
+    });
 
-  const doRejectFinishAsCustomer = async () => {
-    if (!data) return;
-    try {
-      await api.post(`/orders/${data.id}/reject`, {
-        reason: 'El cliente rechazó la finalización',
-      });
-      Alert.alert('Listo', 'Se rechazó la finalización. El trabajo volvió a estar en curso.');
-
-      const fresh = orderId ? await load(orderId) : null;
-      handleBackToAgenda(fresh?.order?.status ?? 'IN_PROGRESS', fresh?.meta);
-    } catch (e: any) {
-      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo rechazar la finalización');
-    }
-  };
-
-  const openRatingModal = () => {
-    setRatingScore(5);
-    setRatingComment('');
-    setRatingModalVisible(true);
-  };
-
-  const doConfirm = async () => {
-    if (!data) return;
-    try {
+  const doConfirm = async () =>
+    runAction(async () => {
+      if (!data) return;
       await api.post(`/orders/${data.id}/confirm`, {});
       Alert.alert('Listo', 'Trabajo confirmado');
       const fresh = orderId ? await load(orderId) : null;
-      if (!fresh?.order?.rating) openRatingModal();
-      else handleBackToAgenda(fresh?.order?.status ?? 'CONFIRMED_BY_CLIENT', fresh?.meta);
-    } catch (e: any) {
-      Alert.alert('Error', getErrorMessage(e) ?? 'No se pudo confirmar');
-    }
-  };
+
+      // si falta rating, abrimos modal y NO navegamos todavía
+      if (fresh?.order && !fresh.order.rating) {
+        setRatingScore(5);
+        setRatingComment('');
+        setRatingModalVisible(true);
+        return;
+      }
+
+      handleBackToAgenda(fresh?.order?.status ?? 'CONFIRMED_BY_CLIENT', fresh?.meta);
+    });
+
+  const doRejectFinishAsCustomer = async () =>
+    runAction(async () => {
+      if (!data) return;
+      await api.post(`/orders/${data.id}/reject`, { reason: 'El cliente rechazó la finalización' });
+      Alert.alert('Listo', 'Se rechazó la finalización. El trabajo volvió a estar en curso.');
+      const fresh = orderId ? await load(orderId) : null;
+      handleBackToAgenda(fresh?.order?.status ?? 'IN_PROGRESS', fresh?.meta);
+    });
 
   const submitRating = async () => {
     if (!data) return;
+    if (submittingRating) return;
+
     try {
       setSubmittingRating(true);
       await api.post(`/orders/${data.id}/rate`, {
@@ -608,7 +615,7 @@ export default function OrderDetailScreen() {
     if (!threadId) {
       Alert.alert(
         'Chat no disponible',
-        'Todavía no se creó el chat para esta orden. Probá de nuevo en unos segundos.',
+        'Todavía no se creó el chat para esta orden. Probá de nuevo.',
       );
       return;
     }
@@ -628,12 +635,18 @@ export default function OrderDetailScreen() {
     nav.navigate('ChatThread', params);
   };
 
-  // ───────────────────── UI states ─────────────────────
+  // ───────────────────── Estados UI (BOTONES) ─────────────────────
   const showPendingSpecialistActions = isPending && !isCancelled && isSpecialist;
   const showPendingCustomerActions = isPending && !isCancelled && isClient;
-  const showSpecialistProgressActions = isAssignedOrInProgress && !isCancelled && isSpecialist;
-  const showClientReviewActions = inClientReview && !isCancelled && isClient;
+
+  // ✅ Confirmados: ambos pueden cancelar + chat, especialista puede finalizar
   const showConfirmedActions = isAssignedOrInProgress && !isCancelled;
+
+  // ✅ Revisión: cliente confirma o rechaza, ambos pueden chat/cancelar (cancelar opcional)
+  const showClientReviewActions = inClientReview && !isCancelled && isClient;
+
+  // ✅ CTA extra: si confirmó y no calificó (puede quedar en finished)
+  const showRateActions = canRate && !isCancelled;
 
   if (loading) {
     return (
@@ -677,6 +690,9 @@ export default function OrderDetailScreen() {
 
   const rubroLabel = data.service?.categoryName ?? data.service?.name ?? 'Sin datos';
 
+  const primaryDisabled = actionLoading || submittingRating;
+  const secondaryDisabled = actionLoading || submittingRating;
+
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }}>
@@ -716,10 +732,11 @@ export default function OrderDetailScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10 }}>
               {headerAvatarUrl ? (
                 <ExpoImage
-                  source={toAbsoluteUrl(headerAvatarUrl) ?? ''}
+                  source={{ uri: toAbsoluteUrl(headerAvatarUrl) ?? '' }}
                   style={styles.avatarImage}
                   contentFit="cover"
                   transition={150}
+                  cachePolicy="memory-disk"
                 />
               ) : (
                 <View style={styles.avatarCircle}>
@@ -782,10 +799,12 @@ export default function OrderDetailScreen() {
                   {attachmentImages.map((uri, idx) => (
                     <ExpoImage
                       key={`${uri}-${idx}`}
-                      source={uri}
+                      source={{ uri }}
                       style={styles.attachmentImage}
                       contentFit="cover"
                       transition={150}
+                      cachePolicy="memory-disk"
+                      onError={(e) => devLog('[OrderDetail][ATTACH][ERROR]', uri, e?.error)}
                     />
                   ))}
                 </ScrollView>
@@ -797,6 +816,14 @@ export default function OrderDetailScreen() {
                 <View style={{ height: 12 }} />
                 <Text style={styles.sectionTitle}>Estado</Text>
                 <Text style={styles.textBody}>La solicitud está vencida o cancelada.</Text>
+              </>
+            )}
+
+            {isFinished && !isCancelled && (
+              <>
+                <View style={{ height: 12 }} />
+                <Text style={styles.sectionTitle}>Estado</Text>
+                <Text style={styles.textBody}>Este trabajo ya se encuentra finalizado.</Text>
               </>
             )}
           </View>
@@ -817,7 +844,7 @@ export default function OrderDetailScreen() {
                 </View>
               ))
             )}
-            {/* ✅ RESEÑA (aparece SOLO si existe data.rating) */}
+
             {data.rating && (
               <View style={{ marginTop: 10 }}>
                 <Text style={styles.sectionTitle}>Reseña</Text>
@@ -833,80 +860,144 @@ export default function OrderDetailScreen() {
             )}
           </View>
 
+          {/* ───────────── BOTONES (ordenados por flujo) ───────────── */}
           <View style={{ gap: 10 }}>
+            {/* PENDIENTE - ESPECIALISTA */}
             {showPendingSpecialistActions && (
               <>
-                <Pressable style={styles.ctaPrimary} onPress={doAccept}>
-                  <Text style={styles.ctaPrimaryText}>Aceptar pedido</Text>
-                </Pressable>
                 <Pressable
-                  style={styles.ctaDanger}
-                  onPress={() => confirmCancel(doCancelBySpecialist)}
+                  style={[styles.ctaPrimary, primaryDisabled && styles.ctaDisabled]}
+                  onPress={doAccept}
+                  disabled={primaryDisabled}
+                >
+                  {actionLoading ? (
+                    <ActivityIndicator color="#06494F" />
+                  ) : (
+                    <Text style={styles.ctaPrimaryText}>Aceptar pedido</Text>
+                  )}
+                </Pressable>
+
+                <Pressable
+                  style={[styles.ctaDanger, secondaryDisabled && styles.ctaDisabled]}
+                  onPress={() => confirmCancel(doRejectAsSpecialist)}
+                  disabled={secondaryDisabled}
                 >
                   <Text style={styles.ctaDangerText}>Rechazar solicitud</Text>
                 </Pressable>
               </>
             )}
 
+            {/* PENDIENTE - CLIENTE */}
             {showPendingCustomerActions && (
-              <Pressable style={styles.ctaDanger} onPress={() => confirmCancel(doCancelAsCustomer)}>
+              <Pressable
+                style={[styles.ctaDanger, secondaryDisabled && styles.ctaDisabled]}
+                onPress={() => confirmCancel(doCancelAsCustomer)}
+                disabled={secondaryDisabled}
+              >
                 <Text style={styles.ctaDangerText}>Cancelar solicitud</Text>
               </Pressable>
             )}
 
+            {/* CONFIRMADOS - ambos */}
             {showConfirmedActions && (
               <>
+                {/* Cancelar */}
                 {isClient ? (
                   <Pressable
-                    style={styles.ctaDanger}
+                    style={[styles.ctaDanger, secondaryDisabled && styles.ctaDisabled]}
                     onPress={() => confirmCancel(doCancelAsCustomer)}
+                    disabled={secondaryDisabled}
                   >
                     <Text style={styles.ctaDangerText}>Cancelar solicitud</Text>
                   </Pressable>
                 ) : (
                   <Pressable
-                    style={styles.ctaDanger}
+                    style={[styles.ctaDanger, secondaryDisabled && styles.ctaDisabled]}
                     onPress={() => confirmCancel(doCancelAsSpecialist)}
+                    disabled={secondaryDisabled}
                   >
                     <Text style={styles.ctaDangerText}>Cancelar solicitud</Text>
                   </Pressable>
                 )}
 
-                <Pressable style={styles.ctaAlt} onPress={handleOpenChat}>
+                {/* Chat */}
+                <Pressable
+                  style={[styles.ctaAlt, primaryDisabled && styles.ctaDisabledAlt]}
+                  onPress={handleOpenChat}
+                  disabled={primaryDisabled}
+                >
+                  <Text style={styles.ctaAltText}>Ir al chat</Text>
+                </Pressable>
+
+                {/* Finalizar (solo especialista) */}
+                {isSpecialist && (
+                  <Pressable
+                    style={[styles.ctaPrimary, primaryDisabled && styles.ctaDisabled]}
+                    onPress={doFinish}
+                    disabled={primaryDisabled}
+                  >
+                    {actionLoading ? (
+                      <ActivityIndicator color="#06494F" />
+                    ) : (
+                      <Text style={styles.ctaPrimaryText}>Marcar como finalizado</Text>
+                    )}
+                  </Pressable>
+                )}
+              </>
+            )}
+
+            {/* REVISIÓN - cliente */}
+            {showClientReviewActions && (
+              <>
+                <Pressable
+                  style={[styles.ctaPrimary, primaryDisabled && styles.ctaDisabled]}
+                  onPress={doConfirm}
+                  disabled={primaryDisabled}
+                >
+                  {actionLoading ? (
+                    <ActivityIndicator color="#06494F" />
+                  ) : (
+                    <Text style={styles.ctaPrimaryText}>Confirmar trabajo</Text>
+                  )}
+                </Pressable>
+
+                <Pressable
+                  style={[styles.ctaAlt, secondaryDisabled && styles.ctaDisabledAlt]}
+                  onPress={() => confirmCancel(doRejectFinishAsCustomer)}
+                  disabled={secondaryDisabled}
+                >
+                  <Text style={styles.ctaAltText}>Rechazar finalización</Text>
+                </Pressable>
+
+                {/* Chat también en revisión */}
+                <Pressable
+                  style={[styles.ctaAlt, primaryDisabled && styles.ctaDisabledAlt]}
+                  onPress={handleOpenChat}
+                  disabled={primaryDisabled}
+                >
                   <Text style={styles.ctaAltText}>Ir al chat</Text>
                 </Pressable>
               </>
             )}
 
-            {showSpecialistProgressActions && (
-              <Pressable style={styles.ctaPrimary} onPress={doFinish}>
-                <Text style={styles.ctaPrimaryText}>Marcar como finalizado</Text>
-              </Pressable>
-            )}
-
-            {showClientReviewActions && (
-              <>
-                <Pressable style={styles.ctaPrimary} onPress={doConfirm}>
-                  <Text style={styles.ctaPrimaryText}>Confirmar trabajo</Text>
-                </Pressable>
-
-                <Pressable
-                  style={styles.ctaAlt}
-                  onPress={() => confirmCancel(doRejectFinishAsCustomer)}
-                >
-                  <Text style={styles.ctaAltText}>Rechazar finalización</Text>
-                </Pressable>
-              </>
-            )}
-
-            {canRate && (
-              <Pressable style={styles.ctaPrimary} onPress={openRatingModal}>
+            {/* FINALIZADO - si falta rating */}
+            {showRateActions && (
+              <Pressable
+                style={[styles.ctaPrimary, primaryDisabled && styles.ctaDisabled]}
+                onPress={() => {
+                  setRatingScore(5);
+                  setRatingComment('');
+                  setRatingModalVisible(true);
+                }}
+                disabled={primaryDisabled}
+              >
                 <Text style={styles.ctaPrimaryText}>Calificar y cerrar</Text>
               </Pressable>
             )}
           </View>
         </ScrollView>
 
+        {/* ⭐ Modal de rating */}
         <Modal
           visible={ratingModalVisible}
           transparent
@@ -950,7 +1041,7 @@ export default function OrderDetailScreen() {
                 <Pressable
                   style={styles.modalBtnSecondary}
                   onPress={() => setRatingModalVisible(false)}
-                  disabled={submittingRating}
+                  disabled={submittingRating || actionLoading}
                 >
                   <Text style={styles.modalBtnSecondaryText}>Más tarde</Text>
                 </Pressable>
@@ -958,7 +1049,7 @@ export default function OrderDetailScreen() {
                 <Pressable
                   style={styles.modalBtnPrimary}
                   onPress={submitRating}
-                  disabled={submittingRating}
+                  disabled={submittingRating || actionLoading}
                 >
                   {submittingRating ? (
                     <ActivityIndicator color="#06494F" />
@@ -1067,6 +1158,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ctaDangerText: { color: '#C0392B', fontWeight: '800' },
+
+  ctaDisabled: {
+    opacity: 0.55,
+  },
+  ctaDisabledAlt: {
+    opacity: 0.55,
+  },
 
   attachmentImage: {
     width: 90,

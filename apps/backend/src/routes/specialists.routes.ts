@@ -9,18 +9,35 @@ import { z } from 'zod';
 
 import { signToken } from '../lib/jwt';
 import { prisma } from '../lib/prisma';
+import { ensureDir, uploadsRoot } from '../lib/uploads';
 import { auth } from '../middlewares/auth';
 import { notifyKycStatus } from '../services/notifyKyc';
 
+/** ========= Storage local (MVP) ========= **/
+
 const router = Router();
 
-/** ========= Storage local (MVP) ========= **/
-const uploadDir = path.join(process.cwd(), 'uploads');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+const kycDir = path.join(uploadsRoot, 'kyc');
+const certsDir = path.join(uploadsRoot, 'certifications');
 
-/** ========= Multer storage ========= **/
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
+ensureDir(kycDir);
+ensureDir(certsDir);
+
+console.log('[specialists.routes] uploadsRoot =', uploadsRoot);
+console.log('[specialists.routes] kycDir =', kycDir);
+console.log('[specialists.routes] certsDir =', certsDir);
+
+if (!fs.existsSync(kycDir)) fs.mkdirSync(kycDir, { recursive: true });
+if (!fs.existsSync(certsDir)) fs.mkdirSync(certsDir, { recursive: true });
+
+// (opcional) logs para verificar en Render
+console.log('[specialists.routes] uploadsRoot =', uploadsRoot);
+console.log('[specialists.routes] kycDir =', kycDir);
+console.log('[specialists.routes] certsDir =', certsDir);
+
+/** ========= Multer storages ========= **/
+const storageKyc = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, kycDir),
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname) || '.jpg';
     const base = path
@@ -31,9 +48,21 @@ const storage = multer.diskStorage({
   },
 });
 
-/** Solo imágenes (JPEG/PNG/WebP) — KYC/Avatar */
+const storageCerts = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, certsDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.pdf';
+    const base = path
+      .basename(file.originalname, ext)
+      .replace(/\s+/g, '_')
+      .replace(/[^A-Za-z0-9_-]/g, '');
+    cb(null, `${Date.now()}_${base}${ext}`);
+  },
+});
+
+/** Solo imágenes (JPEG/PNG/WebP) — KYC */
 const upload = multer({
-  storage,
+  storage: storageKyc,
   limits: { fileSize: 8 * 1024 * 1024 }, // 8MB
   fileFilter: (_req, file, cb) => {
     const ok = /^image\/(jpe?g|png|webp)$/i.test(file.mimetype);
@@ -44,7 +73,7 @@ const upload = multer({
 
 /** Imágenes o PDF — Certificaciones */
 const uploadAny = multer({
-  storage,
+  storage: storageCerts,
   limits: { fileSize: 12 * 1024 * 1024 }, // 12MB
   fileFilter: (_req, file, cb) => {
     const isImg = /^image\/(jpe?g|png|webp)$/i.test(file.mimetype);
@@ -142,8 +171,11 @@ function isWithinAvailability(
   const startMins = sh * 60 + sm;
   const endMins = eh * 60 + em;
 
+  // ✅ 24hs: si start === end, se considera abierto todo el día
+  if (startMins === endMins) return true;
+
   // soporta cruce de medianoche
-  if (endMins >= startMins) {
+  if (endMins > startMins) {
     return currentMins >= startMins && currentMins <= endMins;
   }
   return currentMins >= startMins || currentMins <= endMins;
@@ -245,6 +277,12 @@ async function getSpecialistStatsById(specialistId: string) {
  *       [&priceMin=] [&priceMax=] [&sort=distance|rating|price]
  */
 router.get('/search', async (req, res) => {
+  // ✅ evita caches (proxy, cdn, etc)
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+
   console.log('[GET /specialists/search]', {
     category: req.query.category,
     lat: req.query.lat,
@@ -310,6 +348,7 @@ router.get('/search', async (req, res) => {
     const priceMin = req.query.priceMin ? Number(req.query.priceMin) : undefined;
 
     const sort = (req.query.sort as string) ?? 'distance';
+    const debug = req.query.debug === 'true';
 
     const deg = radiusKm / 111;
     const latMin = lat - deg;
@@ -400,8 +439,31 @@ router.get('/search', async (req, res) => {
       const scheduleOk = isWithinAvailability(prof?.availability);
       const visibleNow = kycOk && toggleAvailable && scheduleOk;
 
+      const debugInfo = debug
+        ? {
+            _debug: {
+              kycOk,
+              toggleAvailable,
+              scheduleOk,
+              availability: prof?.availability ?? null,
+              serverNowISO: new Date().toISOString(),
+              serverNowLocal: new Intl.DateTimeFormat('es-AR', {
+                timeZone: 'America/Argentina/Cordoba',
+                weekday: 'short',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+              }).format(new Date()),
+              tz: 'America/Argentina/Cordoba',
+            },
+          }
+        : {};
+
       return {
         ...x,
+        ...debugInfo,
+
         name,
         enabled: enabledBySpecialistId.get(x.specialistId) === true,
         kycStatus: prof?.kycStatus ?? 'UNVERIFIED',
@@ -516,7 +578,7 @@ router.post('/kyc/upload', auth, (req: Request, res: Response) => {
         fs.unlinkSync(r.file.path);
       } catch {}
 
-      const relative = `/uploads/${path.basename(webpPath)}`;
+      const relative = `/uploads/kyc/${path.basename(webpPath)}`;
 
       return res.json({
         ok: true,
@@ -882,7 +944,8 @@ router.post('/certifications/upload', auth, (req: Request, res: Response) => {
 
       const isPdf = r.file.mimetype === 'application/pdf';
       if (isPdf) {
-        const relative = `/uploads/${path.basename(r.file.path)}`;
+        const relative = `/uploads/certifications/${path.basename(r.file.path)}`;
+
         return res.json({ ok: true, url: relative, format: 'pdf' });
       }
 
@@ -903,7 +966,8 @@ router.post('/certifications/upload', auth, (req: Request, res: Response) => {
         fs.unlinkSync(r.file.path);
       } catch {}
 
-      const relative = `/uploads/${path.basename(webpPath)}`;
+      const relative = `/uploads/certifications/${path.basename(webpPath)}`;
+
       return res.json({ ok: true, url: relative, format: 'webp' });
     } catch (e) {
       if (process.env.NODE_ENV !== 'production')

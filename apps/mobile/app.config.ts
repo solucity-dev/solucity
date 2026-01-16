@@ -1,4 +1,3 @@
-// apps/mobile/app.config.ts
 import { ExpoConfig } from 'expo/config';
 
 const config: ExpoConfig = {
@@ -6,9 +5,14 @@ const config: ExpoConfig = {
   slug: 'solucity',
   version: '1.0.0',
   orientation: 'portrait',
+
+  // ✅ Ícono principal de la app (launcher)
   icon: './assets/icon.png',
+
   userInterfaceStyle: 'light',
   newArchEnabled: true,
+
+  // ✅ Splash
   splash: {
     image: './assets/splash-icon.png',
     resizeMode: 'contain',
@@ -27,19 +31,31 @@ const config: ExpoConfig = {
   },
 
   android: {
-    // ✅ ESTO ES LO QUE TE FALTA PARA EAS
     package: 'com.solucity.app',
 
-    // ✅ IMPORTANTE (ruta relativa a apps/mobile/app.config.ts)
+    // ✅ Firebase
     googleServicesFile: './google-services.json',
 
+    // ✅ Adaptive icon (Android moderno)
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',
       backgroundColor: '#ffffff',
     },
+
+    /**
+     * ✅ ÍCONO DE NOTIFICACIONES
+     * Este es el que evita el cuadrado vacío
+     * PNG blanco/transparente ✔
+     */
+    notification: {
+      icon: './assets/notification-icon.png',
+      color: '#004d5d',
+    },
+
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
     usesCleartextTraffic: true,
+
     permissions: [
       'ACCESS_COARSE_LOCATION',
       'ACCESS_FINE_LOCATION',
@@ -49,7 +65,10 @@ const config: ExpoConfig = {
     ],
   } as any,
 
-  web: { output: 'single', favicon: './assets/favicon.png' },
+  web: {
+    output: 'single',
+    favicon: './assets/favicon.png',
+  },
 
   extra: {
     API_URL: 'http://192.168.0.103:3000',

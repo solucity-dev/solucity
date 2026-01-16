@@ -1389,11 +1389,21 @@ orders.post('/:id/extend-deadline', auth, async (req, res) => {
 
 // GET /orders/:id  (detalle)
 orders.get('/:id', auth, async (req, res) => {
+  const t0 = Date.now();
+  const t = (label: string, extra?: any) => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[OrderDetailAPI]', req.params.id, label, Date.now() - t0, 'ms', extra ?? '');
+    }
+  };
+
+  t('start', { uid: getActorUserId(req), lat: req.query.lat, lng: req.query.lng });
+
   try {
     const uid = getActorUserId(req);
     if (!uid) return res.status(401).json({ ok: false, error: 'unauthorized' });
 
     const id = req.params.id;
+    t('before-prisma');
     const order = await prisma.serviceOrder.findUnique({
       where: { id },
       include: {
@@ -1423,6 +1433,8 @@ orders.get('/:id', auth, async (req, res) => {
       },
     });
 
+    t('after-prisma', { hasOrder: !!order });
+
     if (!order) return res.status(404).json({ ok: false, error: 'not_found' });
 
     const isCustomer = order.customer?.userId === uid;
@@ -1444,7 +1456,7 @@ orders.get('/:id', auth, async (req, res) => {
           })
         : Promise.resolve(null),
     ]);
-
+    t('after-avatars');
     // ───────── AUTOCANCEL PENDIENTE VENCIDA ─────────
     if (
       order.status === 'PENDING' &&
@@ -1661,7 +1673,7 @@ orders.get('/:id', auth, async (req, res) => {
       // 👈 se expone la distancia calculada
       distanceKm,
     };
-
+    t('before-response', { events: order.events?.length ?? 0, status: order.status });
     return res.json({
       ok: true,
       order: payload,

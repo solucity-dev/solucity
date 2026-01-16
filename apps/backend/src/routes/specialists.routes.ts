@@ -15,15 +15,22 @@ import { notifyKycStatus } from '../services/notifyKyc';
 const router = Router();
 
 /** ========= Storage local (MVP) ========= **/
-const uploadsRoot = path.resolve(__dirname, '..', '..', '..', 'uploads');
+const uploadsRoot = path.join(process.cwd(), 'uploads'); // ✅ apps/backend/uploads
 
-const uploadDir = uploadsRoot;
+const kycDir = path.join(uploadsRoot, 'kyc');
+const certsDir = path.join(uploadsRoot, 'certifications');
 
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+if (!fs.existsSync(kycDir)) fs.mkdirSync(kycDir, { recursive: true });
+if (!fs.existsSync(certsDir)) fs.mkdirSync(certsDir, { recursive: true });
 
-/** ========= Multer storage ========= **/
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
+// (opcional) logs para verificar en Render
+console.log('[specialists.routes] uploadsRoot =', uploadsRoot);
+console.log('[specialists.routes] kycDir =', kycDir);
+console.log('[specialists.routes] certsDir =', certsDir);
+
+/** ========= Multer storages ========= **/
+const storageKyc = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, kycDir),
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname) || '.jpg';
     const base = path
@@ -34,9 +41,21 @@ const storage = multer.diskStorage({
   },
 });
 
-/** Solo imágenes (JPEG/PNG/WebP) — KYC/Avatar */
+const storageCerts = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, certsDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.pdf';
+    const base = path
+      .basename(file.originalname, ext)
+      .replace(/\s+/g, '_')
+      .replace(/[^A-Za-z0-9_-]/g, '');
+    cb(null, `${Date.now()}_${base}${ext}`);
+  },
+});
+
+/** Solo imágenes (JPEG/PNG/WebP) — KYC */
 const upload = multer({
-  storage,
+  storage: storageKyc,
   limits: { fileSize: 8 * 1024 * 1024 }, // 8MB
   fileFilter: (_req, file, cb) => {
     const ok = /^image\/(jpe?g|png|webp)$/i.test(file.mimetype);
@@ -47,7 +66,7 @@ const upload = multer({
 
 /** Imágenes o PDF — Certificaciones */
 const uploadAny = multer({
-  storage,
+  storage: storageCerts,
   limits: { fileSize: 12 * 1024 * 1024 }, // 12MB
   fileFilter: (_req, file, cb) => {
     const isImg = /^image\/(jpe?g|png|webp)$/i.test(file.mimetype);
@@ -552,7 +571,7 @@ router.post('/kyc/upload', auth, (req: Request, res: Response) => {
         fs.unlinkSync(r.file.path);
       } catch {}
 
-      const relative = `/uploads/${path.basename(webpPath)}`;
+      const relative = `/uploads/kyc/${path.basename(webpPath)}`;
 
       return res.json({
         ok: true,
@@ -918,7 +937,8 @@ router.post('/certifications/upload', auth, (req: Request, res: Response) => {
 
       const isPdf = r.file.mimetype === 'application/pdf';
       if (isPdf) {
-        const relative = `/uploads/${path.basename(r.file.path)}`;
+        const relative = `/uploads/certifications/${path.basename(r.file.path)}`;
+
         return res.json({ ok: true, url: relative, format: 'pdf' });
       }
 
@@ -939,7 +959,8 @@ router.post('/certifications/upload', auth, (req: Request, res: Response) => {
         fs.unlinkSync(r.file.path);
       } catch {}
 
-      const relative = `/uploads/${path.basename(webpPath)}`;
+      const relative = `/uploads/certifications/${path.basename(webpPath)}`;
+
       return res.json({ ok: true, url: relative, format: 'webp' });
     } catch (e) {
       if (process.env.NODE_ENV !== 'production')

@@ -11,8 +11,7 @@ import { auth } from '../middlewares/auth';
 const router = Router();
 
 // Carpeta de uploads/avatars
-const uploadsRoot = path.resolve(__dirname, '..', '..', '..', 'uploads');
-
+const uploadsRoot = path.join(process.cwd(), 'uploads');
 const uploadDir = path.join(uploadsRoot, 'avatars');
 
 if (!fs.existsSync(uploadDir)) {

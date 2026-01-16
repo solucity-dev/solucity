@@ -389,14 +389,17 @@ export default function OrderDetailScreen() {
     return base.replace(/\/api$/i, '');
   }, [API_BASE_URL]);
 
-  const toAbsoluteUrl = (u?: string | null) => {
-    if (!u) return null;
-    if (u.startsWith('http://') || u.startsWith('https://') || u.startsWith('file://')) return u;
+  const toAbsoluteUrl = useCallback(
+    (u?: string | null) => {
+      if (!u) return null;
+      if (u.startsWith('http://') || u.startsWith('https://') || u.startsWith('file://')) return u;
 
-    const base = FILES_BASE_URL.replace(/\/$/, '');
-    const p = u.startsWith('/') ? u : `/${u}`;
-    return `${base}${p}`;
-  };
+      const base = FILES_BASE_URL.replace(/\/$/, '');
+      const p = u.startsWith('/') ? u : `/${u}`;
+      return `${base}${p}`;
+    },
+    [FILES_BASE_URL],
+  );
 
   const horarioLabel = (() => {
     if (!data) return '—';
@@ -443,7 +446,7 @@ export default function OrderDetailScreen() {
         return null;
       })
       .filter((u): u is string => typeof u === 'string');
-  }, [data, FILES_BASE_URL]);
+  }, [data, toAbsoluteUrl]);
 
   const addressText = (() => {
     const a: any = data?.address;

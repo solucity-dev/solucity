@@ -11,8 +11,7 @@ import { auth } from '../middlewares/auth';
 const router = Router();
 
 // Carpeta donde guardamos los avatares
-const uploadsRoot = path.resolve(__dirname, '..', '..', '..', 'uploads');
-
+const uploadsRoot = path.join(process.cwd(), 'uploads'); // ✅ SIEMPRE apps/backend/uploads
 const uploadDir = path.join(uploadsRoot, 'avatars');
 
 fs.mkdirSync(uploadDir, { recursive: true });

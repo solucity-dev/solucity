@@ -127,7 +127,16 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (__DEV__) console.log('[NotificationsProvider] error', status, e?.message);
+      if (__DEV__) {
+        console.log('[NotificationsProvider][ERR]', {
+          status: e?.response?.status,
+          url: (e?.config?.baseURL ?? '') + (e?.config?.url ?? ''),
+          method: e?.config?.method,
+          data: e?.response?.data,
+          code: e?.code,
+          message: e?.message,
+        });
+      }
     } finally {
       inFlightRef.current = false;
       setRefreshing(false);
@@ -208,11 +217,14 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         await refresh();
       } catch (e: any) {
         if (__DEV__) {
-          console.log(
-            '[NotificationsProvider] fallback mark read failed',
-            e?.response?.status,
-            e?.message,
-          );
+          console.log('[NotificationsProvider][FALLBACK_ERR]', {
+            status: e?.response?.status,
+            url: (e?.config?.baseURL ?? '') + (e?.config?.url ?? ''),
+            method: e?.config?.method,
+            data: e?.response?.data,
+            code: e?.code,
+            message: e?.message,
+          });
         }
       }
     },

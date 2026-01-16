@@ -247,18 +247,20 @@ export default function NotificationsScreen() {
 
     if (__DEV__) console.log('[Notifications] NAV → OrderDetail (from list)');
 
+    const refreshAt = Date.now();
+
     // ✅ NO pasamos role (lo resuelve Auth/Stack)
     if (parent?.navigate) {
       parent.navigate('Agenda', {
         screen: 'OrderDetail',
-        params: { id: String(orderId), from: 'notifications' },
+        params: { id: String(orderId), from: 'notifications', refreshAt },
       });
       return;
     }
 
     navigation.navigate('Agenda', {
       screen: 'OrderDetail',
-      params: { id: String(orderId), from: 'notifications' },
+      params: { id: String(orderId), from: 'notifications', refreshAt },
     });
   };
 

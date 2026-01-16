@@ -1,4 +1,3 @@
-// apps/mobile/src/navigation/navigationRef.ts
 import { createNavigationContainerRef } from '@react-navigation/native';
 
 export const navigationRef = createNavigationContainerRef<any>();
@@ -17,7 +16,6 @@ let pendingNav: PendingNav = null;
 export function setNavRole(role: NavRole) {
   navRole = role;
   if (__DEV__) console.log('[NAV] setNavRole =', role);
-  // ✅ si había navegación pendiente y ahora ya sabemos el rol
   flushPendingNav();
 }
 
@@ -46,7 +44,7 @@ export function flushPendingNav() {
 }
 
 /**
- * ✅ Navegación global al OrderDetail:
+ * ✅ Navegación global al OrderDetail
  */
 export function navigateToOrderDetail(orderId: string) {
   if (!navigationRef.isReady()) {
@@ -60,22 +58,19 @@ export function navigateToOrderDetail(orderId: string) {
   navigationRef.navigate(root, {
     screen: 'Agenda',
     params: {
-      // SpecialistTabs usa AgendaMain como primera, pero navegar directo a OrderDetail funciona igual
       screen: 'OrderDetail',
       params: {
         id: orderId,
         role: isSpecialist ? 'specialist' : 'customer',
         from: 'notif-tap',
+        refreshAt: Date.now(),
       },
     },
   });
 }
 
 /**
- * ✅ NUEVO: Navegación global al chat thread:
- * - Va al Tab "Chat"
- * - Abre "ChatThread" dentro del ChatStack
- * - Pasa threadId y (si existe) orderId
+ * ✅ Navegación global al chat thread
  */
 export function navigateToChatThread(threadId: string, orderId?: string | null) {
   if (!navigationRef.isReady()) {
@@ -104,9 +99,6 @@ export function navigateToChatThread(threadId: string, orderId?: string | null) 
       params: {
         threadId,
         orderId: orderId ?? undefined,
-        // opcional: el título lo resuelve ChatList normalmente,
-        // pero si en el futuro lo querés, podés mandarlo.
-        // title: 'Chat',
       },
     },
   });

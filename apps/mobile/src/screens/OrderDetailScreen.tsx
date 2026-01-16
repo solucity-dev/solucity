@@ -366,7 +366,16 @@ export default function OrderDetailScreen() {
     const ra = route.params?.refreshAt ? Number(route.params.refreshAt) : 0;
     if (ra) {
       devLog('[OrderDetail][effect] skipped initial (refreshAt present)', { ra });
-      didInitialLoadRef.current = false; // dejamos que el focusEffect haga el load
+
+      didInitialLoadRef.current = false;
+      return;
+    }
+
+    // 🔥 FIX FINAL
+    if (lastRefreshAtHandledRef.current) {
+      devLog('[OrderDetail][effect] skipped initial (already handled refreshAt)', {
+        handled: lastRefreshAtHandledRef.current,
+      });
       return;
     }
 
@@ -393,14 +402,12 @@ export default function OrderDetailScreen() {
 
         devLog('[OrderDetail][focus] refreshAt detected -> forcing load', { ra });
 
-        // ✅ IMPORTANTE: bloquear el refresh normal inmediato
-        lastFocusReloadRef.current = Date.now();
+        didInitialLoadRef.current = true; // ✅ clave: ya hicimos “la carga inicial”
+        lastFocusReloadRef.current = Date.now(); // ✅ bloquea el refresh normal inmediato
 
         load(orderId);
 
-        // 🔥 consumir refreshAt
-        nav.setParams({ refreshAt: undefined });
-
+        nav.setParams({ refreshAt: undefined }); // consume
         return;
       }
 

@@ -9,16 +9,23 @@ import { z } from 'zod';
 
 import { signToken } from '../lib/jwt';
 import { prisma } from '../lib/prisma';
+import { ensureDir, uploadsRoot } from '../lib/uploads';
 import { auth } from '../middlewares/auth';
 import { notifyKycStatus } from '../services/notifyKyc';
 
-const router = Router();
-
 /** ========= Storage local (MVP) ========= **/
-const uploadsRoot = path.join(process.cwd(), 'uploads'); // ✅ apps/backend/uploads
+
+const router = Router();
 
 const kycDir = path.join(uploadsRoot, 'kyc');
 const certsDir = path.join(uploadsRoot, 'certifications');
+
+ensureDir(kycDir);
+ensureDir(certsDir);
+
+console.log('[specialists.routes] uploadsRoot =', uploadsRoot);
+console.log('[specialists.routes] kycDir =', kycDir);
+console.log('[specialists.routes] certsDir =', certsDir);
 
 if (!fs.existsSync(kycDir)) fs.mkdirSync(kycDir, { recursive: true });
 if (!fs.existsSync(certsDir)) fs.mkdirSync(certsDir, { recursive: true });

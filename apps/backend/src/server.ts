@@ -1,5 +1,4 @@
 // apps/backend/src/server.ts
-import path from 'path';
 
 import cors from 'cors';
 import 'dotenv/config';
@@ -9,6 +8,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 
 import { prisma } from './lib/prisma';
+import { uploadsRoot } from './lib/uploads';
 import { errorHandler, notFound } from './middlewares/error';
 import adminRoutes from './routes/admin.routes';
 import { categories } from './routes/categories';
@@ -74,9 +74,8 @@ app.use(
 app.options('*', cors({ origin: ALLOWED_ORIGINS.length ? ALLOWED_ORIGINS : true }));
 
 /** ================== Static uploads (DEV/PROD) ================== **/
-const uploadsPath = path.join(process.cwd(), 'uploads'); // ✅ SIEMPRE apps/backend/uploads
-app.use('/uploads', express.static(uploadsPath));
-console.log('[static] uploadsPath =', uploadsPath);
+app.use('/uploads', express.static(uploadsRoot));
+console.log('[static] uploadsRoot =', uploadsRoot);
 
 /** ================== Utilitarias ================== **/
 app.get('/health', (_req: Request, res: Response) => {

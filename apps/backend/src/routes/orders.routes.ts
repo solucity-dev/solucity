@@ -1390,8 +1390,11 @@ orders.post('/:id/extend-deadline', auth, async (req, res) => {
 // GET /orders/:id  (detalle)
 orders.get('/:id', auth, async (req, res) => {
   const t0 = Date.now();
+
+  const debug = process.env.DEBUG_ORDER_DETAIL === '1';
+
   const t = (label: string, extra?: any) => {
-    if (process.env.NODE_ENV !== 'production') {
+    if (debug) {
       console.log('[OrderDetailAPI]', req.params.id, label, Date.now() - t0, 'ms', extra ?? '');
     }
   };

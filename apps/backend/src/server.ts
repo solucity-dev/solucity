@@ -1,4 +1,6 @@
 // apps/backend/src/server.ts
+import fs from 'fs';
+import path from 'path';
 
 import cors from 'cors';
 import 'dotenv/config';
@@ -76,6 +78,27 @@ app.options('*', cors({ origin: ALLOWED_ORIGINS.length ? ALLOWED_ORIGINS : true 
 /** ================== Static uploads (DEV/PROD) ================== **/
 app.use('/uploads', express.static(uploadsRoot));
 console.log('[static] uploadsRoot =', uploadsRoot);
+// ✅ Fallback para rutas legacy /uploads/avatars/*
+// (si el archivo no está en uploads/avatars, lo busca en otras rutas)
+app.get('/uploads/avatars/:file', (req, res) => {
+  const file = req.params.file;
+
+  const candidates = [
+    path.join(uploadsRoot, 'avatars', file), // uploads/avatars/file
+    path.join(uploadsRoot, file), // uploads/file (raíz)
+    path.join(uploadsRoot, 'customers', file), // uploads/customers/file (por si quedó viejo)
+  ];
+
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      console.log('[uploads-fallback] HIT', req.path, '->', p);
+      return res.sendFile(p);
+    }
+  }
+
+  console.warn('[uploads-fallback] MISS', req.path, 'candidates=', candidates);
+  return res.status(404).end();
+});
 
 /** ================== Utilitarias ================== **/
 app.get('/health', (_req: Request, res: Response) => {

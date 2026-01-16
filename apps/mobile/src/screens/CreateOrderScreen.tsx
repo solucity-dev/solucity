@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Keyboard,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -79,6 +80,9 @@ export default function CreateOrderScreen() {
   const specialistNameParam = p?.specialistName as string | undefined;
 
   const reqIdRef = useRef<string>(mkReqId());
+
+  // ✅ bloqueo instantáneo (evita doble tap antes de que React re-renderice)
+  const submittingRef = useRef(false);
 
   // ========= Me (para obtener customerId y defaultAddressId) =========
   const [me, setMe] = useState<MeResponse | null>(null);
@@ -241,6 +245,10 @@ export default function CreateOrderScreen() {
   };
 
   const onConfirm = async () => {
+    // ✅ si ya está enviando, no hacemos nada (bloqueo instantáneo)
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+
     const reqId = reqIdRef.current || mkReqId();
     reqIdRef.current = reqId;
 
@@ -294,6 +302,8 @@ export default function CreateOrderScreen() {
         return;
       }
 
+      setSubmitting(true);
+
       // ========== serviceId ==========
       let serviceId: string | undefined = serviceIdParam;
 
@@ -341,6 +351,8 @@ export default function CreateOrderScreen() {
           'Falta elegir servicio',
           'Este especialista no tiene servicios disponibles para este rubro.',
         );
+        submittingRef.current = false;
+        setSubmitting(false);
         return;
       }
 
@@ -355,8 +367,6 @@ export default function CreateOrderScreen() {
 
       const locationIdToSend =
         explicitLocationId ?? (shouldSendLocationId ? me?.defaultAddress?.id : null);
-
-      setSubmitting(true);
 
       // subir fotos
       const photosWithRemote = await Promise.all(
@@ -435,6 +445,7 @@ export default function CreateOrderScreen() {
 
       Alert.alert('Error', String(msg));
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -457,6 +468,8 @@ export default function CreateOrderScreen() {
         </View>
 
         <ScrollView
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
             paddingHorizontal: 16,
@@ -506,7 +519,14 @@ export default function CreateOrderScreen() {
           />
 
           {/* Fotos */}
-          <Pressable onPress={pickImages} style={styles.addPhotos}>
+          <Pressable
+            onPress={async () => {
+              Keyboard.dismiss();
+              await new Promise((r) => setTimeout(r, 80)); // ✅ evita doble tap Android
+              pickImages();
+            }}
+            style={styles.addPhotos}
+          >
             <MDI name="camera-outline" size={18} color="#06494F" />
             <Text style={styles.addPhotosText}>Agregar fotos</Text>
           </Pressable>

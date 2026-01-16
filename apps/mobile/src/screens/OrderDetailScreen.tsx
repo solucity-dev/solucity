@@ -397,24 +397,6 @@ export default function OrderDetailScreen() {
 
   const headerInitial = (headerName?.trim?.()[0] ?? 'U').toUpperCase();
 
-  const API_BASE_URL = api.defaults.baseURL || process.env.EXPO_PUBLIC_API_URL || '';
-  const FILES_BASE_URL = useMemo(() => {
-    const base = String(API_BASE_URL || '').replace(/\/$/, '');
-    return base.replace(/\/api$/i, '');
-  }, [API_BASE_URL]);
-
-  const toAbsoluteUrl = useCallback(
-    (u?: string | null) => {
-      if (!u) return null;
-      if (u.startsWith('http://') || u.startsWith('https://') || u.startsWith('file://')) return u;
-
-      const base = FILES_BASE_URL.replace(/\/$/, '');
-      const p = u.startsWith('/') ? u : `/${u}`;
-      return `${base}${p}`;
-    },
-    [FILES_BASE_URL],
-  );
-
   const horarioLabel = (() => {
     if (!data) return '—';
     if (data.isUrgent) return 'Lo antes posible';
@@ -540,12 +522,26 @@ export default function OrderDetailScreen() {
   const doRejectAsSpecialist = async () =>
     runAction(async () => {
       if (!data) return;
-      await api.post(`/orders/${data.id}/cancel-by-specialist`, {
-        reason: 'Rechazado por el especialista',
-      });
-      Alert.alert('Listo', 'Solicitud rechazada');
-      const fresh = orderId ? await load(orderId) : null;
-      handleBackToAgenda(fresh?.order?.status ?? 'CANCELLED_BY_SPECIALIST', fresh?.meta);
+
+      try {
+        await api.post(`/orders/${data.id}/cancel-by-specialist`, {
+          reason: 'Rechazado por el especialista',
+        });
+
+        Alert.alert('Listo', 'Solicitud rechazada');
+
+        const fresh = orderId ? await load(orderId) : null;
+        handleBackToAgenda(fresh?.order?.status ?? 'CANCELLED_BY_SPECIALIST', fresh?.meta);
+      } catch (e: any) {
+        console.log(
+          '❌ [cancel-by-specialist][REJECT]',
+          'status =',
+          e?.response?.status,
+          'data =',
+          e?.response?.data,
+        );
+        throw e;
+      }
     });
 
   const doCancelAsCustomer = async () =>

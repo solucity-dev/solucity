@@ -1284,8 +1284,25 @@ orders.post('/:id/cancel-by-specialist', auth, async (req, res) => {
   if (!uid || uid !== order.specialist.userId) {
     return res.status(403).json({ ok: false, error: 'only_assigned_specialist' });
   }
-  if (!['ASSIGNED', 'IN_PROGRESS'].includes(order.status as OrderStatus)) {
+  // ✅ Permitimos rechazar también en PENDING (antes de aceptar)
+  console.log('[cancel-by-specialist][DEBUG]', {
+    orderId,
+    uid,
+    dbStatus: order.status,
+    specialistId: order.specialistId,
+    specialistUserId: order.specialist?.userId,
+    acceptDeadlineAt: order.acceptDeadlineAt,
+    now: new Date().toISOString(),
+  });
+
+  if (!['PENDING', 'ASSIGNED', 'IN_PROGRESS'].includes(order.status as OrderStatus)) {
+    console.log('[cancel-by-specialist][INVALID_STATE]', { orderId, dbStatus: order.status });
     return res.status(409).json({ ok: false, error: 'invalid_state' });
+  }
+
+  // ✅ Si está PENDING y ya venció, no dejamos cancelar manualmente (ya es autocancel)
+  if (order.status === 'PENDING' && order.acceptDeadlineAt && order.acceptDeadlineAt < new Date()) {
+    return res.status(409).json({ ok: false, error: 'deadline_expired' });
   }
 
   const updated = await prisma.serviceOrder.update({
@@ -1297,8 +1314,11 @@ orders.post('/:id/cancel-by-specialist', auth, async (req, res) => {
     reason: reason ?? null,
   } as any);
 
-  // ✅ penaliza especialista
-  await bumpSpecialistCanceledStats(order.specialist.id);
+  // ✅ Penaliza SOLO si ya estaba tomada (ASSIGNED / IN_PROGRESS).
+  // En PENDING es "rechazo" y NO suma cancelados.
+  if (order.status !== 'PENDING') {
+    await bumpSpecialistCanceledStats(order.specialist.id);
+  }
 
   // ✅ Notificar al cliente (DB + PUSH)
   try {

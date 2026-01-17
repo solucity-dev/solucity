@@ -173,6 +173,9 @@ export default function OrderDetailScreen() {
   // ✅ evita doble load al entrar (useEffect + focus)
   const didInitialLoadRef = useRef(false);
 
+  // ✅ salta el primer focus después de montar la pantalla
+  const skipNextFocusReloadRef = useRef(true);
+
   // ✅ evita refresh duplicado por focus
   const lastFocusReloadRef = useRef<number>(0);
 
@@ -385,6 +388,8 @@ export default function OrderDetailScreen() {
 
     devLog('[OrderDetail][effect] initial load for orderId =', orderId);
     didInitialLoadRef.current = true;
+    skipNextFocusReloadRef.current = true;
+
     load(orderId);
   }, [orderId, route.params?.refreshAt]);
 
@@ -408,6 +413,13 @@ export default function OrderDetailScreen() {
         load(orderId);
 
         nav.setParams({ refreshAt: undefined }); // consume
+        return;
+      }
+
+      // 🚫 saltar el primer focus después del mount
+      if (skipNextFocusReloadRef.current) {
+        skipNextFocusReloadRef.current = false;
+        devLog('[OrderDetail][focus] skipped (first focus)');
         return;
       }
 
@@ -609,18 +621,40 @@ export default function OrderDetailScreen() {
   })();
 
   // ✅ Chat disponible por estado
-  const canShowChat = !isPending && !isCancelled;
+  // ✅ Chat disponible si no está pendiente/cancelada y existe thread
+  const canShowChat = !isPending && !isCancelled && !!data?.chatThreadId;
 
-  const confirmCancel = (onConfirm: () => void) => {
-    Alert.alert(
-      '¿Cancelar solicitud?',
-      'Esta acción cancelará la orden. ¿Seguro que querés continuar?',
-      [
-        { text: 'No', style: 'cancel' },
-        { text: 'Sí, cancelar', style: 'destructive', onPress: onConfirm },
-      ],
-    );
+  const confirmAction = ({
+    title,
+    message,
+    confirmText = 'Confirmar',
+    destructive = true,
+    onConfirm,
+  }: {
+    title: string;
+    message: string;
+    confirmText?: string;
+    destructive?: boolean;
+    onConfirm: () => void;
+  }) => {
+    Alert.alert(title, message, [
+      { text: 'No', style: 'cancel' },
+      {
+        text: confirmText,
+        style: destructive ? 'destructive' : 'default',
+        onPress: onConfirm,
+      },
+    ]);
   };
+
+  const confirmCancel = (onConfirm: () => void) =>
+    confirmAction({
+      title: '¿Cancelar solicitud?',
+      message: 'Esta acción cancelará la orden. ¿Seguro que querés continuar?',
+      confirmText: 'Sí, cancelar',
+      destructive: true,
+      onConfirm,
+    });
 
   // ───────────────────── Acciones (con loading seguro) ─────────────────────
   const runAction = async (fn: () => Promise<void>) => {
@@ -1030,7 +1064,16 @@ export default function OrderDetailScreen() {
 
                 <Pressable
                   style={[styles.ctaDanger, secondaryDisabled && styles.ctaDisabled]}
-                  onPress={() => confirmCancel(doRejectAsSpecialist)}
+                  onPress={() =>
+                    confirmAction({
+                      title: '¿Rechazar solicitud?',
+                      message:
+                        'El cliente será notificado y la solicitud se marcará como rechazada. ¿Querés continuar?',
+                      confirmText: 'Sí, rechazar',
+                      destructive: true,
+                      onConfirm: doRejectAsSpecialist,
+                    })
+                  }
                   disabled={secondaryDisabled}
                 >
                   <Text style={styles.ctaDangerText}>Rechazar solicitud</Text>
@@ -1071,15 +1114,6 @@ export default function OrderDetailScreen() {
                   </Pressable>
                 )}
 
-                {/* Chat */}
-                <Pressable
-                  style={[styles.ctaAlt, primaryDisabled && styles.ctaDisabledAlt]}
-                  onPress={handleOpenChat}
-                  disabled={primaryDisabled}
-                >
-                  <Text style={styles.ctaAltText}>Ir al chat</Text>
-                </Pressable>
-
                 {/* Finalizar (solo especialista) */}
                 {isSpecialist && (
                   <Pressable
@@ -1108,25 +1142,24 @@ export default function OrderDetailScreen() {
                   {actionLoading ? (
                     <ActivityIndicator color="#06494F" />
                   ) : (
-                    <Text style={styles.ctaPrimaryText}>Confirmar trabajo</Text>
+                    <Text style={styles.ctaPrimaryText}>Confirmar y calificar trabajo</Text>
                   )}
                 </Pressable>
 
                 <Pressable
                   style={[styles.ctaAlt, secondaryDisabled && styles.ctaDisabledAlt]}
-                  onPress={() => confirmCancel(doRejectFinishAsCustomer)}
-                  disabled={secondaryDisabled}
+                  onPress={() =>
+                    confirmAction({
+                      title: '¿Rechazar finalización?',
+                      message:
+                        'El especialista va a ser notificado y el trabajo volverá a estar en curso. ¿Querés continuar?',
+                      confirmText: 'Sí, rechazar',
+                      destructive: true,
+                      onConfirm: doRejectFinishAsCustomer,
+                    })
+                  }
                 >
                   <Text style={styles.ctaAltText}>Rechazar finalización</Text>
-                </Pressable>
-
-                {/* Chat también en revisión */}
-                <Pressable
-                  style={[styles.ctaAlt, primaryDisabled && styles.ctaDisabledAlt]}
-                  onPress={handleOpenChat}
-                  disabled={primaryDisabled}
-                >
-                  <Text style={styles.ctaAltText}>Ir al chat</Text>
                 </Pressable>
               </>
             )}
@@ -1143,6 +1176,17 @@ export default function OrderDetailScreen() {
                 disabled={primaryDisabled}
               >
                 <Text style={styles.ctaPrimaryText}>Calificar y cerrar</Text>
+              </Pressable>
+            )}
+
+            {/* ✅ Chat global: visible para ambos roles cuando corresponde */}
+            {canShowChat && (
+              <Pressable
+                style={[styles.ctaAlt, primaryDisabled && styles.ctaDisabledAlt]}
+                onPress={handleOpenChat}
+                disabled={primaryDisabled}
+              >
+                <Text style={styles.ctaAltText}>Ir al chat</Text>
               </Pressable>
             )}
           </View>

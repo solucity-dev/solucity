@@ -1,16 +1,16 @@
 // apps/mobile/src/screens/ChatListScreen.tsx
-import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMemo } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import type { ChatStackParamList } from '@/types/chat';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useChatThreads } from '@/hooks/useChatThreads';
 import { api } from '@/lib/api';
-import type { ChatStackParamList } from '@/types/chat';
 
 type Nav = NativeStackNavigationProp<ChatStackParamList, 'ChatList'>;
 
@@ -31,16 +31,6 @@ export default function ChatListScreen() {
   const { data, isLoading, refetch } = useChatThreads();
 
   const threads = useMemo(() => data ?? [], [data]);
-
-  const handleDeleteThread = async (threadId: string) => {
-    try {
-      await api.delete(`/chat/threads/${threadId}`);
-      await refetch();
-    } catch (e: any) {
-      console.log('[ChatList] error deleting thread', e?.response?.status, e?.message);
-      Alert.alert('Error', 'No se pudo eliminar la conversación. Intentá de nuevo más tarde.');
-    }
-  };
 
   if (isLoading) {
     return (
@@ -219,34 +209,6 @@ export default function ChatListScreen() {
                     {lastLine}
                   </Text>
                 </View>
-              </Pressable>
-
-              {/* Botón de borrar */}
-              <Pressable
-                onPress={() => {
-                  Alert.alert(
-                    'Eliminar chat',
-                    '¿Querés eliminar esta conversación? Esta acción no se puede deshacer.',
-                    [
-                      { text: 'Cancelar', style: 'cancel' },
-                      {
-                        text: 'Eliminar',
-                        style: 'destructive',
-                        onPress: () => handleDeleteThread(item.id),
-                      },
-                    ],
-                  );
-                }}
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 22,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: 'rgba(192, 57, 43, 0.9)',
-                }}
-              >
-                <Ionicons name="trash-outline" size={20} color="#E9FEFF" />
               </Pressable>
             </View>
           );

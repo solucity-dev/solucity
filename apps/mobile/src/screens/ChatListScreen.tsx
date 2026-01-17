@@ -1,8 +1,8 @@
 // apps/mobile/src/screens/ChatListScreen.tsx
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -31,6 +31,13 @@ export default function ChatListScreen() {
   const { data, isLoading, refetch } = useChatThreads();
 
   const threads = useMemo(() => data ?? [], [data]);
+
+  // ✅ refrescar automáticamente cada vez que la pantalla vuelve a enfocarse
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch]),
+  );
 
   if (isLoading) {
     return (

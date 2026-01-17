@@ -27,7 +27,7 @@ const groups: GroupSeed[] = [
       'Yesería / Durlock',
       'Carpintería',
       'Herrería',
-      'Plomería',
+      'Plomería / Gasista',
       'Pintura',
       'Jardinería',
       'Piscinas',
@@ -51,7 +51,13 @@ const groups: GroupSeed[] = [
   {
     name: 'Servicios',
     slug: 'servicios',
-    rubros: ['Limpieza', 'Acompañante terapéutico', 'Clases particulares', 'Paseador de perros'],
+    rubros: [
+      'Limpieza',
+      'Acompañante terapéutico',
+      'Clases particulares',
+      'Paseador de perros',
+      'Fletes',
+    ],
   },
 ];
 
@@ -67,6 +73,9 @@ function slugify(name: string) {
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-');
 }
+
+// Rubros que requieren matrícula/título (certificación por rubro)
+const REQUIRES_CERTIFICATION = new Set<string>(['climatizacion', 'plomeria-gasista']);
 
 async function upsertCategories() {
   for (let i = 0; i < groups.length; i++) {
@@ -89,6 +98,7 @@ async function upsertCategories() {
 
     for (const r of g.rubros) {
       const slug = slugify(r);
+      const requiresCertification = REQUIRES_CERTIFICATION.has(slug);
 
       await prisma.serviceCategory.upsert({
         where: { slug },
@@ -96,12 +106,14 @@ async function upsertCategories() {
           name: r,
           groupId: group.id, // por si antes estaba mal asociado
           isActive: true,
+          requiresCertification,
         },
         create: {
           name: r,
           slug,
           groupId: group.id,
           isActive: true,
+          requiresCertification,
         },
       });
     }

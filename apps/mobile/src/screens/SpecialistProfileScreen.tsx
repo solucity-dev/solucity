@@ -190,7 +190,6 @@ export default function SpecialistProfileScreen() {
     return `${Math.round(km)} km`;
   };
 
-  const badgeText = spec?.badge ? BADGE_LABEL[spec.badge] : 'Bronce';
   const availability = spec?.availability ?? { days: [], start: '09:00', end: '18:00' };
   const days = availability.days ?? [];
 
@@ -277,9 +276,6 @@ export default function SpecialistProfileScreen() {
                   </View>
 
                   <View style={[styles.row, { marginTop: 4 }]}>
-                    <MDI name="medal-outline" size={16} color="#E9FEFF" />
-                    <Text style={styles.muted}>{badgeText}</Text>
-                    <Text style={styles.dotSep}>•</Text>
                     <MDI name="shield-check-outline" size={16} color="#E9FEFF" />
                     <Text style={styles.muted}>
                       {spec.enabled ? 'Habilitado' : 'No habilitado'}

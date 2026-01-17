@@ -414,18 +414,32 @@ router.get('/search', async (req, res) => {
     const profById = new Map(profiles.map((p) => [p.id, p]));
     const userById = new Map(users.map((u) => [u.id, u]));
 
-    // 3.5) enabled = certificación aprobada PARA ESE RUBRO
+    // 3.5) enabled correcto por rubro:
+    // - si el rubro NO requiere certificación => enabled=true
+    // - si requiere => enabled=true solo si tiene cert APPROVED para ese rubro
     const enabledBySpecialistId = new Map<string, boolean>();
+
     if (category) {
-      const approvedCerts = await prisma.specialistCertification.findMany({
-        where: {
-          specialistId: { in: withDist.map((x) => x.specialistId) },
-          status: 'APPROVED',
-          category: { slug: category },
-        },
-        select: { specialistId: true },
+      const cat = await prisma.serviceCategory.findUnique({
+        where: { slug: category },
+        select: { requiresCertification: true },
       });
-      for (const c of approvedCerts) enabledBySpecialistId.set(c.specialistId, true);
+
+      const requires = cat?.requiresCertification ?? false;
+
+      if (!requires) {
+        for (const x of withDist) enabledBySpecialistId.set(x.specialistId, true);
+      } else {
+        const approvedCerts = await prisma.specialistCertification.findMany({
+          where: {
+            specialistId: { in: withDist.map((x) => x.specialistId) },
+            status: 'APPROVED',
+            category: { slug: category },
+          },
+          select: { specialistId: true },
+        });
+        for (const c of approvedCerts) enabledBySpecialistId.set(c.specialistId, true);
+      }
     }
 
     // 4) construir lista final + disponibilidad REAL (toggle + horario)
@@ -1134,12 +1148,6 @@ router.get('/:id', async (req, res) => {
       distanceKm = 2 * 6371 * Math.asin(Math.sqrt(a));
     }
 
-    // enabled global (tiene al menos 1 cert APPROVED)
-    const hasApprovedCert = await prisma.specialistCertification.findFirst({
-      where: { specialistId: spec.id, status: 'APPROVED' },
-      select: { id: true },
-    });
-
     // ✅ Si viene categorySlug, devolvemos services SOLO de ese rubro
     let categorySlug = typeof req.query.categorySlug === 'string' ? req.query.categorySlug : '';
     categorySlug = categorySlug.trim().toLowerCase();
@@ -1164,12 +1172,48 @@ router.get('/:id', async (req, res) => {
     const rawCategorySlug = categorySlug;
     categorySlug = CATEGORY_ALIASES[categorySlug] ?? categorySlug;
 
+    // ✅ enabled por rubro (si viene categorySlug) usando requiresCertification
+    let enabled = false;
+
+    if (categorySlug) {
+      const cat = await prisma.serviceCategory.findUnique({
+        where: { slug: categorySlug },
+        select: { id: true, requiresCertification: true },
+      });
+
+      if (cat) {
+        if (!cat.requiresCertification) {
+          enabled = true;
+        } else {
+          const cert = await prisma.specialistCertification.findUnique({
+            where: { specialistId_categoryId: { specialistId: spec.id, categoryId: cat.id } },
+            select: { status: true },
+          });
+          enabled = cert?.status === 'APPROVED';
+        }
+      } else {
+        enabled = false;
+      }
+    } else {
+      // fallback (si no viene rubro): true si tiene alguna cert aprobada
+      const hasApproved = await prisma.specialistCertification.findFirst({
+        where: { specialistId: spec.id, status: 'APPROVED' },
+        select: { id: true },
+      });
+      enabled = Boolean(hasApproved);
+    }
+
     if (rawCategorySlug && rawCategorySlug !== categorySlug) {
       console.log('[GET /specialists/:id][alias]', { rawCategorySlug, mappedTo: categorySlug });
     }
 
     // categorías (IDs) que el especialista realmente tiene
     const specialtyBySlug = new Map(spec.specialties.map((s) => [s.category.slug, s.categoryId]));
+
+    // ✅ Si pidieron un rubro que el especialista NO tiene, forzamos enabled=false
+    if (categorySlug && !specialtyBySlug.has(categorySlug)) {
+      enabled = false;
+    }
 
     // Si no pasan categorySlug, devolvemos servicios de todas las specialties (como antes)
     const categoryIds = categorySlug
@@ -1266,7 +1310,7 @@ router.get('/:id', async (req, res) => {
       ratingAvg: spec.ratingAvg,
       ratingCount: spec.ratingCount,
       badge: spec.badge,
-      enabled: Boolean(hasApprovedCert),
+      enabled,
       availableNow: safeAvailableNow,
       visitPrice: spec.visitPrice,
       pricingLabel: spec.pricingLabel ?? null, // ✅ NUEVO

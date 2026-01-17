@@ -208,6 +208,8 @@ model ServiceCategory {
   slug     String               @unique
   isActive Boolean              @default(true)
 
+   requiresCertification Boolean @default(false)
+
   services Service[]
   specs    SpecialistSpecialty[]
 

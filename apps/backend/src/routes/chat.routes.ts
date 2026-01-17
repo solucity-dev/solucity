@@ -1,4 +1,4 @@
-// apps/backend/src/routes/chat.ts (o donde lo tengas)
+// apps/backend/src/routes/chat.routes.ts
 import { Router } from 'express';
 import { z } from 'zod';
 
@@ -6,16 +6,22 @@ import { prisma } from '../lib/prisma';
 import { auth } from '../middlewares/auth';
 import { sendExpoPush } from '../services/pushExpo';
 
-const headerUserId = (req: import('express').Request) =>
-  String(req.header('x-user-id') || '').trim() || null;
-
-const getActorUserId = (req: any): string | null =>
-  (req.user?.id as string | undefined) ?? headerUserId(req);
+import type { Request } from 'express';
 
 export const chat = Router();
 
 /* ───────────────── Helpers ───────────────── */
 
+const headerUserId = (req: Request) => String(req.header('x-user-id') || '').trim() || null;
+
+const getActorUserId = (req: any): string | null =>
+  (req.user?.id as string | undefined) ?? headerUserId(req);
+
+/**
+ * En tu schema:
+ * ServiceOrder.customer -> CustomerProfile (tiene userId)
+ * ServiceOrder.specialist -> SpecialistProfile (tiene userId)
+ */
 async function canAccessOrder(orderId: string, uid: string): Promise<boolean> {
   const order = await prisma.serviceOrder.findUnique({
     where: { id: orderId },
@@ -25,12 +31,10 @@ async function canAccessOrder(orderId: string, uid: string): Promise<boolean> {
     },
   });
   if (!order) return false;
-  const isCustomer = order.customer?.userId === uid;
-  const isSpecialist = order.specialist?.userId === uid;
-  return isCustomer || isSpecialist;
+  return order.customer?.userId === uid || order.specialist?.userId === uid;
 }
 
-// ✅ helper push igual al de orders: envía a todos los tokens enabled del user
+// ✅ helper push: envía a todos los tokens enabled del user
 async function pushToUser(params: { userId: string; title: string; body: string; data: any }) {
   const tokens = await prisma.pushToken.findMany({
     where: { userId: params.userId, enabled: true },
@@ -53,6 +57,22 @@ async function pushToUser(params: { userId: string; title: string; body: string;
   );
 }
 
+/**
+ * ✅ Reglas de “visibilidad” del chat en el listado:
+ * - Si la orden está CLOSED o cancelada/vencida, no la mostramos.
+ * - Esto evita lista gigante sin “chats eliminados”.
+ *
+ * Ajustable si querés: por ejemplo, permitir ver CONFIRMED_BY_CLIENT.
+ */
+const VISIBLE_ORDER_STATUSES = [
+  'ASSIGNED',
+  'IN_PROGRESS',
+  'PAUSED',
+  'FINISHED_BY_SPECIALIST',
+  'IN_CLIENT_REVIEW',
+  'CONFIRMED_BY_CLIENT',
+] as const;
+
 /* ────────────── POST /chat/ensure (orderId) ────────────── */
 /** Asegura que exista un thread para una orden y lo devuelve */
 chat.post('/ensure', auth, async (req, res) => {
@@ -63,11 +83,13 @@ chat.post('/ensure', auth, async (req, res) => {
   if (!parse.success) {
     return res.status(400).json({ ok: false, error: parse.error.flatten() });
   }
+
   const { orderId } = parse.data;
 
   const allowed = await canAccessOrder(orderId, uid);
   if (!allowed) return res.status(403).json({ ok: false, error: 'forbidden' });
 
+  // crea si no existe
   let thread = await prisma.chatThread.findUnique({ where: { orderId } });
   if (!thread) {
     thread = await prisma.chatThread.create({ data: { orderId } });
@@ -90,7 +112,12 @@ chat.get('/threads', auth, async (req: any, res) => {
 
   const rows = await prisma.chatThread.findMany({
     where: {
+      // acceso
       OR: [{ order: { customer: { userId: uid } } }, { order: { specialist: { userId: uid } } }],
+      // ✅ ocultar chats “cerrados/cancelados” del listado
+      order: {
+        status: { in: [...VISIBLE_ORDER_STATUSES] as any },
+      },
     },
     include: {
       order: {
@@ -107,7 +134,7 @@ chat.get('/threads', auth, async (req: any, res) => {
         include: { sender: { select: { name: true, surname: true } } },
       },
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: 'desc' }, // ✅ ChatThread NO tiene updatedAt en tu schema
     take: 100,
   });
 
@@ -130,7 +157,7 @@ chat.get('/threads', auth, async (req: any, res) => {
       : cust
         ? {
             kind: 'customer' as const,
-            name: `${cust.user?.name ?? 'Cliente'}`.trim(),
+            name: `${cust.user?.name ?? 'Cliente'} ${cust.user?.surname ?? ''}`.trim(),
             avatarUrl: cust.avatarUrl ?? null,
           }
         : { kind: 'customer' as const, name: 'Cliente', avatarUrl: null };
@@ -172,21 +199,26 @@ chat.get('/threads/:threadId/messages', auth, async (req, res) => {
     include: {
       order: {
         select: {
+          id: true,
+          status: true,
           customer: { select: { userId: true } },
           specialist: { select: { userId: true } },
         },
       },
     },
   });
-  if (!thread) {
-    return res.status(404).json({ ok: false, error: 'thread_not_found' });
-  }
+  if (!thread) return res.status(404).json({ ok: false, error: 'thread_not_found' });
 
   const uCustomer = thread.order?.customer?.userId === uid;
   const uSpecial = thread.order?.specialist?.userId === uid;
-  if (!uCustomer && !uSpecial) {
-    return res.status(403).json({ ok: false, error: 'forbidden' });
-  }
+  if (!uCustomer && !uSpecial) return res.status(403).json({ ok: false, error: 'forbidden' });
+
+  // ✅ Si querés también bloquear ver mensajes cuando ya no está visible:
+  // (yo NO lo bloqueo, solo lo oculto del listado, pero lo dejo opcional)
+  // const st = String(thread.order?.status ?? '');
+  // if (!VISIBLE_ORDER_STATUSES.includes(st as any)) {
+  //   return res.status(403).json({ ok: false, error: 'thread_closed' });
+  // }
 
   const where = cursorDate ? { threadId, createdAt: { lt: cursorDate } } : { threadId };
 
@@ -194,9 +226,7 @@ chat.get('/threads/:threadId/messages', auth, async (req, res) => {
     where,
     orderBy: { createdAt: 'desc' },
     take,
-    include: {
-      sender: { select: { name: true, surname: true } },
-    },
+    include: { sender: { select: { name: true, surname: true } } },
   });
 
   return res.json({
@@ -225,12 +255,14 @@ chat.post('/threads/:threadId/messages', auth, async (req, res) => {
   const { text } = parse.data;
 
   const threadId = String(req.params.threadId);
+
   const thread = await prisma.chatThread.findUnique({
     where: { id: threadId },
     include: {
       order: {
         select: {
           id: true,
+          status: true,
           customer: { select: { userId: true } },
           specialist: { select: { userId: true } },
         },
@@ -241,8 +273,16 @@ chat.post('/threads/:threadId/messages', auth, async (req, res) => {
 
   const uCustomer = thread.order.customer?.userId === uid;
   const uSpecial = thread.order.specialist?.userId === uid;
-  if (!uCustomer && !uSpecial) {
-    return res.status(403).json({ ok: false, error: 'forbidden' });
+  if (!uCustomer && !uSpecial) return res.status(403).json({ ok: false, error: 'forbidden' });
+
+  // ✅ opcional: bloquear envío si la orden ya no está en estados visibles
+  const st = String(thread.order?.status ?? '');
+  if (!VISIBLE_ORDER_STATUSES.includes(st as any)) {
+    return res.status(409).json({
+      ok: false,
+      error: 'chat_closed',
+      message: 'Este chat está cerrado porque la orden ya finalizó o fue cancelada.',
+    });
   }
 
   const msg = await prisma.chatMessage.create({
@@ -253,7 +293,7 @@ chat.post('/threads/:threadId/messages', auth, async (req, res) => {
     },
   });
 
-  // 🔔 Notificación + PUSH al otro usuario (con notificationId)
+  // 🔔 Notificación + PUSH al otro usuario
   try {
     const customerUid = thread.order.customer?.userId ?? null;
     const specialistUid = thread.order.specialist?.userId ?? null;
@@ -263,7 +303,7 @@ chat.post('/threads/:threadId/messages', auth, async (req, res) => {
       const title = 'Nuevo mensaje recibido';
       const body = text.length > 60 ? text.slice(0, 60) + '…' : text;
 
-      // 1) Guardar notificación en DB
+      // 1) Guardar notificación
       const notif = await prisma.notification.create({
         data: {
           userId: recipientId,
@@ -279,13 +319,13 @@ chat.post('/threads/:threadId/messages', auth, async (req, res) => {
         select: { id: true, title: true, body: true },
       });
 
-      // 2) PUSH REAL con notificationId (clave para marcar read desde el tap)
+      // 2) PUSH REAL con notificationId
       await pushToUser({
         userId: recipientId,
         title: notif.title ?? title,
         body: notif.body ?? body,
         data: {
-          notificationId: notif.id, // ✅ CLAVE
+          notificationId: notif.id,
           type: 'CHAT_MESSAGE',
           threadId,
           orderId: thread.order.id,
@@ -309,45 +349,15 @@ chat.post('/threads/:threadId/messages', auth, async (req, res) => {
   });
 });
 
-/* ────────────── DELETE /chat/threads/:threadId ────────────── */
-chat.delete('/threads/:threadId', auth, async (req, res) => {
-  const uid = getActorUserId(req);
-  if (!uid) {
-    return res.status(401).json({ ok: false, error: 'unauthorized' });
-  }
-
-  const threadId = String(req.params.threadId);
-
-  try {
-    const thread = await prisma.chatThread.findUnique({
-      where: { id: threadId },
-      include: {
-        order: {
-          select: {
-            id: true,
-            customer: { select: { userId: true } },
-            specialist: { select: { userId: true } },
-          },
-        },
-      },
-    });
-
-    if (!thread) {
-      return res.status(404).json({ ok: false, error: 'thread_not_found' });
-    }
-
-    const isCustomer = thread.order?.customer?.userId === uid;
-    const isSpecialist = thread.order?.specialist?.userId === uid;
-
-    if (!isCustomer && !isSpecialist) {
-      return res.status(403).json({ ok: false, error: 'forbidden' });
-    }
-
-    await prisma.chatThread.delete({ where: { id: threadId } });
-
-    return res.json({ ok: true });
-  } catch (e) {
-    console.error('[DELETE /chat/threads/:threadId] error', e);
-    return res.status(500).json({ ok: false, error: 'No se pudo eliminar la conversación' });
-  }
+/**
+ * ❌ DELETE removido a propósito.
+ * Si alguien lo llama, devolvemos 405.
+ */
+chat.delete('/threads/:threadId', auth, async (_req, res) => {
+  return res.status(405).json({
+    ok: false,
+    error: 'method_not_allowed',
+    message:
+      'Eliminar chats está deshabilitado. Los chats se ocultan automáticamente al finalizar.',
+  });
 });

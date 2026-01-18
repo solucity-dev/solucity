@@ -11,14 +11,6 @@ import type { CategorySlug, HomeStackParamList, RootCategoryId } from '../types'
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-// 👇 alias de slugs → ids raíz
-const CATEGORY_ALIAS: Record<string, RootCategoryId> = {
-  albañileria: 'construccion-mantenimiento',
-  albanileria: 'construccion-mantenimiento',
-  albañilería: 'construccion-mantenimiento',
-  // sumá otros alias si usás
-};
-
 type SubcatItem = {
   id: string;
   title: string;
@@ -29,11 +21,47 @@ export default function CategoryScreen() {
   const { params } = useRoute<RouteProp<HomeStackParamList, 'Category'>>();
   const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
 
-  const raw = params.id as CategorySlug;
-  const rootId: RootCategoryId = (CATEGORY_ALIAS[raw] ?? raw) as RootCategoryId;
+  // ✅ Este screen debe recibir SIEMPRE un RootCategoryId
+  const rootId = params.id as RootCategoryId;
 
   const cat = ROOT_CATEGORY_MAP[rootId];
   const rubros = (SUBCATEGORIES[rootId] || []) as SubcatItem[];
+
+  // 🔒 Fallback seguro si llega algo inesperado
+  if (!cat) {
+    return (
+      <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
+        <SafeAreaView style={styles.safe} edges={['top']}>
+          <View style={styles.header}>
+            <View style={styles.brandRow}>
+              <Image
+                source={require('../assets/logo.png')}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+              <Text style={styles.brandText}>Solucity</Text>
+            </View>
+          </View>
+
+          <View style={{ paddingHorizontal: 20, paddingTop: 18 }}>
+            <Text style={{ color: '#fff', fontWeight: '900', fontSize: 18 }}>
+              Categoría no encontrada
+            </Text>
+            <Text style={{ color: 'rgba(233,254,255,0.9)', marginTop: 8 }}>
+              Recibí: {String(params?.id)}
+            </Text>
+
+            <Pressable
+              onPress={() => nav.goBack()}
+              style={[styles.card, { marginTop: 18, width: '100%' }]}
+            >
+              <Text style={styles.cardText}>Volver</Text>
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>

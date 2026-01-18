@@ -115,7 +115,7 @@ export default function SpecialistProfileScreen() {
           params: {
             lat,
             lng,
-            ...(categorySlug ? { categorySlug } : {}),
+            ...(categorySlug ? { category: categorySlug } : {}),
           },
         });
 

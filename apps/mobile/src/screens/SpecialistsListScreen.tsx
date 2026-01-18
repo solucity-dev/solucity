@@ -226,6 +226,12 @@ export default function SpecialistsListScreen() {
 
         const res = await api.get<SpecialistRow[]>('/specialists/search', { params: paramsQ });
 
+        if (__DEV__) {
+          console.log('[SPECIALISTS][RES][0]', {
+            categorySent: dbCategorySlug,
+            first: res.data?.[0],
+          });
+        }
         setItems(res.data ?? []);
         resultsCache.set(key, { at: Date.now(), items: res.data ?? [] });
         lastKeyRef.current = key;
@@ -417,7 +423,8 @@ export default function SpecialistsListScreen() {
       });
     }
 
-    const isEnabled = s.enabled ?? s.verified;
+    const isEnabled = s.enabled; // puede ser true/false/undefined
+
     const showPricePill = s.visitPrice != null;
 
     return (
@@ -459,7 +466,9 @@ export default function SpecialistsListScreen() {
           <View style={styles.pillsRow}>
             <View style={[styles.pillSolid, isEnabled ? styles.pillGood : styles.pillBad]}>
               <MDI name="badge-account-horizontal-outline" size={14} color="#E9FEFF" />
-              <Text style={styles.pillSolidText}>{isEnabled ? 'Habilitado' : 'No habilitado'}</Text>
+              <Text style={styles.pillSolidText}>
+                {isEnabled === true ? 'Habilitado' : isEnabled === false ? 'No habilitado' : '—'}
+              </Text>
             </View>
 
             <View style={[styles.pillSolid, online ? styles.pillGood : styles.pillBad]}>

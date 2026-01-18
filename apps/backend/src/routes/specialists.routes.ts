@@ -414,31 +414,49 @@ router.get('/search', async (req, res) => {
     const profById = new Map(profiles.map((p) => [p.id, p]));
     const userById = new Map(users.map((u) => [u.id, u]));
 
-    // 3.5) enabled correcto por rubro:
-    // - si el rubro NO requiere certificación => enabled=true
-    // - si requiere => enabled=true solo si tiene cert APPROVED para ese rubro
+    // 3.5) Habilitación por rubro (certificación) + info para UI
     const enabledBySpecialistId = new Map<string, boolean>();
+    const certStatusBySpecialistId = new Map<string, 'PENDING' | 'APPROVED' | 'REJECTED' | null>();
+
+    let requiresCertificationForCategory = false;
 
     if (category) {
       const cat = await prisma.serviceCategory.findUnique({
         where: { slug: category },
-        select: { requiresCertification: true },
+        select: { id: true, requiresCertification: true },
       });
 
-      const requires = cat?.requiresCertification ?? false;
+      requiresCertificationForCategory = cat?.requiresCertification ?? false;
 
-      if (!requires) {
-        for (const x of withDist) enabledBySpecialistId.set(x.specialistId, true);
-      } else {
-        const approvedCerts = await prisma.specialistCertification.findMany({
+      // Si NO requiere certificación => todos habilitados por rubro
+      if (!requiresCertificationForCategory) {
+        for (const x of withDist) {
+          enabledBySpecialistId.set(x.specialistId, true);
+          certStatusBySpecialistId.set(x.specialistId, null);
+        }
+      } else if (cat?.id) {
+        // Traer el estado de cert (no solo APPROVED) para cada especialista de ese rubro
+        const certs = await prisma.specialistCertification.findMany({
           where: {
             specialistId: { in: withDist.map((x) => x.specialistId) },
-            status: 'APPROVED',
-            category: { slug: category },
+            categoryId: cat.id,
           },
-          select: { specialistId: true },
+          select: { specialistId: true, status: true },
         });
-        for (const c of approvedCerts) enabledBySpecialistId.set(c.specialistId, true);
+
+        for (const c of certs) {
+          const st = c.status as any as 'PENDING' | 'APPROVED' | 'REJECTED';
+          certStatusBySpecialistId.set(c.specialistId, st);
+          enabledBySpecialistId.set(c.specialistId, st === 'APPROVED');
+        }
+
+        // Los que no tienen cert cargada => quedan PENDING/null y enabled false
+        for (const x of withDist) {
+          if (!certStatusBySpecialistId.has(x.specialistId))
+            certStatusBySpecialistId.set(x.specialistId, null);
+          if (!enabledBySpecialistId.has(x.specialistId))
+            enabledBySpecialistId.set(x.specialistId, false);
+        }
       }
     }
 
@@ -474,16 +492,28 @@ router.get('/search', async (req, res) => {
           }
         : {};
 
+      const certStatus = category ? (certStatusBySpecialistId.get(x.specialistId) ?? null) : null;
+
+      const categoryEnabled = category ? enabledBySpecialistId.get(x.specialistId) === true : true;
+
       return {
         ...x,
         ...debugInfo,
 
         name,
-        enabled: enabledBySpecialistId.get(x.specialistId) === true,
+
+        // 👇 compat (hasta que el mobile use categoryEnabled)
+        enabled: categoryEnabled,
+
+        // 👇 nuevos campos para dejarlo perfecto
+        requiresCertification: category ? requiresCertificationForCategory : false,
+        certStatus, // 'PENDING' | 'APPROVED' | 'REJECTED' | null
+        categoryEnabled, // boolean final por rubro
+
         kycStatus: prof?.kycStatus ?? 'UNVERIFIED',
         avatarUrl: prof?.avatarUrl ?? null,
         availableNow: visibleNow,
-        pricingLabel: prof?.pricingLabel ?? null, // ✅ NUEVO
+        pricingLabel: prof?.pricingLabel ?? null,
       };
     });
 
@@ -1175,32 +1205,55 @@ router.get('/:id', async (req, res) => {
     // ✅ enabled por rubro (si viene categorySlug) usando requiresCertification
     let enabled = false;
 
+    // 👇 NUEVO: info para UI (detalle)
+    let requiresCertification = false;
+    let certStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | null = null;
+    let categoryEnabled = false;
+
     if (categorySlug) {
       const cat = await prisma.serviceCategory.findUnique({
         where: { slug: categorySlug },
         select: { id: true, requiresCertification: true },
       });
 
+      requiresCertification = !!cat?.requiresCertification;
+
       if (cat) {
-        if (!cat.requiresCertification) {
+        if (!requiresCertification) {
+          // no requiere matrícula => habilitado
+          categoryEnabled = true;
           enabled = true;
+          certStatus = null;
         } else {
           const cert = await prisma.specialistCertification.findUnique({
             where: { specialistId_categoryId: { specialistId: spec.id, categoryId: cat.id } },
             select: { status: true },
           });
-          enabled = cert?.status === 'APPROVED';
+
+          certStatus = (cert?.status as any) ?? null;
+          categoryEnabled = cert?.status === 'APPROVED';
+          enabled = categoryEnabled;
         }
       } else {
+        // categoría inexistente
+        requiresCertification = false;
+        certStatus = null;
+        categoryEnabled = false;
         enabled = false;
       }
     } else {
-      // fallback (si no viene rubro): true si tiene alguna cert aprobada
+      // fallback (si no viene rubro): mantenemos compat anterior
       const hasApproved = await prisma.specialistCertification.findFirst({
         where: { specialistId: spec.id, status: 'APPROVED' },
         select: { id: true },
       });
+
       enabled = Boolean(hasApproved);
+
+      // en modo "sin rubro", no aplican estos flags
+      requiresCertification = false;
+      certStatus = null;
+      categoryEnabled = true;
     }
 
     if (rawCategorySlug && rawCategorySlug !== categorySlug) {
@@ -1213,6 +1266,7 @@ router.get('/:id', async (req, res) => {
     // ✅ Si pidieron un rubro que el especialista NO tiene, forzamos enabled=false
     if (categorySlug && !specialtyBySlug.has(categorySlug)) {
       enabled = false;
+      categoryEnabled = false;
     }
 
     // Si no pasan categorySlug, devolvemos servicios de todas las specialties (como antes)
@@ -1311,6 +1365,9 @@ router.get('/:id', async (req, res) => {
       ratingCount: spec.ratingCount,
       badge: spec.badge,
       enabled,
+      requiresCertification,
+      certStatus,
+      categoryEnabled,
       availableNow: safeAvailableNow,
       visitPrice: spec.visitPrice,
       pricingLabel: spec.pricingLabel ?? null, // ✅ NUEVO

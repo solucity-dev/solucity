@@ -1,4 +1,4 @@
-// src/data/categories.ts
+// apps/mobile/src/data/categories.ts
 import type { RootCategoryId } from '../types';
 
 type IconSpec = { set: 'ion' | 'mdi'; name: string };
@@ -35,55 +35,65 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     { id: 'yeseria-durlock', title: 'Yesería / Durlock', icon: { set: 'mdi', name: 'saw-blade' } },
     { id: 'carpinteria', title: 'Carpintería', icon: { set: 'mdi', name: 'ruler-square' } },
     { id: 'herreria', title: 'Herrería', icon: { set: 'mdi', name: 'anvil' } },
-    { id: 'plomeria', title: 'Plomería', icon: { set: 'mdi', name: 'pipe-wrench' } },
+
+    // ✅ slug real del backend
+    {
+      id: 'plomeria-gasista',
+      title: 'Plomería / Gasista',
+      icon: { set: 'mdi', name: 'pipe-wrench' },
+    },
+
     { id: 'pintura', title: 'Pintura', icon: { set: 'mdi', name: 'format-paint' } },
     { id: 'jardineria', title: 'Jardinería', icon: { set: 'mdi', name: 'shovel' } },
     { id: 'piscinas', title: 'Piscinas', icon: { set: 'mdi', name: 'pool' } },
   ],
+
   'informatica-electronica': [
-    {
-      id: 'aire-acondicionado',
-      title: 'Climatización',
-      icon: { set: 'mdi', name: 'air-conditioner' },
-    },
+    // ✅ Climatización va acá (NO en construcción)
+    { id: 'climatizacion', title: 'Climatización', icon: { set: 'mdi', name: 'air-conditioner' } },
 
     {
-      id: 'st-electronica',
+      id: 'servicio-tecnico-electronica',
       title: 'Servicio técnico (electrónica)',
       icon: { set: 'mdi', name: 'resistor' },
     },
     {
-      id: 'st-electrodom',
+      id: 'servicio-tecnico-electrodomesticos',
       title: 'Servicio técnico (electrodomésticos)',
       icon: { set: 'mdi', name: 'washing-machine' },
     },
     {
-      id: 'st-informatica',
+      id: 'servicio-tecnico-informatica',
       title: 'Servicio técnico (informática)',
       icon: { set: 'mdi', name: 'desktop-classic' },
     },
   ],
+
   seguridad: [
-    { id: 'camaras-alarmas', title: 'Cámaras y alarmas', icon: { set: 'mdi', name: 'cctv' } },
+    { id: 'camaras-y-alarmas', title: 'Cámaras y alarmas', icon: { set: 'mdi', name: 'cctv' } },
     { id: 'cerrajeria', title: 'Cerrajería', icon: { set: 'mdi', name: 'key-variant' } },
     {
-      id: 'personal-seg',
+      id: 'personal-de-seguridad',
       title: 'Personal de seguridad',
       icon: { set: 'mdi', name: 'shield-account-outline' },
     },
   ],
+
   servicios: [
     { id: 'limpieza', title: 'Limpieza', icon: { set: 'mdi', name: 'broom' } },
     {
-      id: 'acompanante-ter',
+      id: 'acompanante-terapeutico',
       title: 'Acompañante terapéutico',
       icon: { set: 'mdi', name: 'hand-heart' },
     },
     {
-      id: 'clases-part',
+      id: 'clases-particulares',
       title: 'Clases particulares',
       icon: { set: 'mdi', name: 'book-open-variant' },
     },
-    { id: 'paseador-perros', title: 'Paseador de perros', icon: { set: 'mdi', name: 'dog' } },
+    { id: 'paseador-de-perros', title: 'Paseador de perros', icon: { set: 'mdi', name: 'dog' } },
+
+    // ✅ NUEVO RUBRO
+    { id: 'fletes', title: 'Fletes', icon: { set: 'mdi', name: 'truck-fast-outline' } },
   ],
 };

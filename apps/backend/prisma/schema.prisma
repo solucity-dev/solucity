@@ -67,6 +67,12 @@ enum CertStatus {
   REJECTED
 }
 
+enum BackgroundCheckStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 /**
  * ===================== Core: Identidad =====================
  */
@@ -150,8 +156,9 @@ model SpecialistProfile {
   specialties SpecialistSpecialty[]
 
   // 🔹 Back-relations necesarios
-  kycSubmissions KycSubmission[]
-  certifications SpecialistCertification[] // 👈 NUEVO
+  kycSubmissions  KycSubmission[]
+  certifications  SpecialistCertification[]
+  backgroundCheck SpecialistBackgroundCheck?
 
   // Operativa
   orders       ServiceOrder[]         @relation("SpecialistOrders")
@@ -208,7 +215,7 @@ model ServiceCategory {
   slug     String               @unique
   isActive Boolean              @default(true)
 
-   requiresCertification Boolean @default(false)
+  requiresCertification Boolean @default(false)
 
   services Service[]
   specs    SpecialistSpecialty[]
@@ -534,4 +541,22 @@ model PushToken {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+
+model SpecialistBackgroundCheck {
+  id           String            @id @default(cuid())
+  specialistId String            @unique
+  specialist   SpecialistProfile @relation(fields: [specialistId], references: [id], onDelete: Cascade)
+
+  fileUrl String
+  status  BackgroundCheckStatus @default(PENDING)
+
+  reviewerId      String? // admin userId
+  rejectionReason String?
+  reviewedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
 }

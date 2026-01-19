@@ -682,21 +682,19 @@ export default function ProfileScreen() {
             <ProfileRow
               icon={<Ionicons name="chatbox-ellipses-outline" size={20} color="#E9FEFF" />}
               label="Soporte técnico"
-              onPress={() =>
-                Alert.alert('Soporte', 'En breve podrás contactar al soporte desde la app.')
-              }
+              onPress={() => navigation.navigate('Support')}
             />
 
             <ProfileRow
               icon={<Ionicons name="document-text-outline" size={20} color="#E9FEFF" />}
               label="Términos y condiciones"
-              onPress={() => Alert.alert('Términos', 'Próximamente.')}
+              onPress={() => navigation.navigate('Terms')}
             />
 
             <ProfileRow
               icon={<Ionicons name="shield-checkmark-outline" size={20} color="#E9FEFF" />}
               label="Política de privacidad"
-              onPress={() => Alert.alert('Privacidad', 'Próximamente.')}
+              onPress={() => navigation.navigate('PrivacyPolicy')}
             />
           </View>
 

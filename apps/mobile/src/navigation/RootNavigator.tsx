@@ -10,7 +10,10 @@ import { useAuth } from '../auth/AuthProvider';
 import ChooseRole from '../screens/ChooseRole';
 import ForgotPassword from '../screens/ForgotPassword';
 import KycStatusScreen from '../screens/KycStatusScreen';
-import KycUploadScreen from '../screens/KycUploadScreen';
+// import KycUploadScreen from '../screens/KycUploadScreen'; // ✅ si existe en tu proyecto, descomentá
+import PrivacyPolicyScreen from '../screens/legal/PrivacyPolicyScreen';
+import SupportScreen from '../screens/legal/SupportScreen';
+import TermsScreen from '../screens/legal/TermsScreen';
 import LoginScreen from '../screens/LoginScreen';
 import Onboarding from '../screens/Onboarding';
 import RegisterClient from '../screens/RegisterClient';
@@ -42,6 +45,7 @@ export default function RootNavigator() {
         if (!cancelled) setBootReady(true);
       }
     })();
+
     return () => {
       cancelled = true;
     };
@@ -52,9 +56,7 @@ export default function RootNavigator() {
     return <Splash duration={1200} />;
   }
 
-  // ✅ CLAVE anti-flash:
-  // Si hay token pero todavía no tenemos user (todavía está corriendo /auth/me),
-  // NO renderizamos ClientTabs "por defecto". Mostramos Splash.
+  // ✅ Anti-flash: si hay token pero aún no cargó user (/auth/me)
   if (token && !user) {
     return <Splash duration={600} />;
   }
@@ -73,7 +75,12 @@ export default function RootNavigator() {
 
         {/* ✅ Global */}
         <Stack.Screen name="KycStatus" component={KycStatusScreen} />
-        <Stack.Screen name="KycUpload" component={KycUploadScreen} />
+        {/* <Stack.Screen name="KycUpload" component={KycUploadScreen} /> */}
+
+        {/* ✅ Legal + soporte global */}
+        <Stack.Screen name="Support" component={SupportScreen} />
+        <Stack.Screen name="Terms" component={TermsScreen} />
+        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
       </Stack.Navigator>
     );
   }
@@ -106,7 +113,7 @@ export default function RootNavigator() {
           <Welcome
             onCreateAccount={() => navigation.navigate('ChooseRole')}
             onLogin={() => navigation.navigate('Login')}
-            onOpenTerms={() => {}}
+            onOpenTerms={() => navigation.navigate('Terms')}
           />
         )}
       />
@@ -136,6 +143,11 @@ export default function RootNavigator() {
           <SpecialistWizard onClose={() => navigation.replace('Welcome')} />
         )}
       />
+
+      {/* ✅ Legal + soporte global */}
+      <Stack.Screen name="Support" component={SupportScreen} />
+      <Stack.Screen name="Terms" component={TermsScreen} />
+      <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
     </Stack.Navigator>
   );
 }

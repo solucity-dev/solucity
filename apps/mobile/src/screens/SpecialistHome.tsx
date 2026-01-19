@@ -109,7 +109,7 @@ const SPECIALTY_OPTIONS = [
   'yeseria-durlock',
   'carpinteria',
   'herreria',
-  'plomeria',
+  'plomeria-gasista',
   'pintura',
   'jardineria',
   'piscinas',
@@ -125,6 +125,16 @@ const SPECIALTY_OPTIONS = [
   'clases-particulares',
   'paseador-de-perros',
 ] as const;
+
+const REQUIRES_CERT_FALLBACK = new Set([
+  'plomeria-gasista',
+  'electricidad',
+  'climatizacion',
+  'camaras-y-alarmas',
+  'personal-de-seguridad',
+  'cerrajeria',
+  'acompanante-terapeutico',
+]);
 
 const DAY_LABELS = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
 
@@ -179,7 +189,14 @@ export default function SpecialistHome() {
   const [openCerts, setOpenCerts] = useState(true);
 
   // catálogo rubros
-  type CategoryOption = { slug: string; name: string; groupSlug: string; groupName: string };
+  type CategoryOption = {
+    slug: string;
+    name: string;
+    groupSlug: string;
+    groupName: string;
+    requiresCertification?: boolean;
+  };
+
   const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>([]);
   const categoriesLoadedOnceRef = useRef(false);
 
@@ -241,6 +258,7 @@ export default function SpecialistHome() {
           name: c.name,
           groupSlug: g.slug,
           groupName: g.name,
+          requiresCertification: !!c.requiresCertification,
         })),
       );
 
@@ -249,6 +267,12 @@ export default function SpecialistHome() {
       if (__DEV__) console.log('[loadCategories] error', e);
     }
   }, []);
+
+  function requiresCert(slug: string) {
+    const fromApi = categoryOptions.find((c) => c.slug === slug)?.requiresCertification;
+    if (typeof fromApi === 'boolean') return fromApi;
+    return REQUIRES_CERT_FALLBACK.has(slug);
+  }
 
   function catNameBySlug(slug: string) {
     return categoryOptions.find((c) => c.slug === slug)?.name ?? slug;
@@ -782,6 +806,11 @@ export default function SpecialistHome() {
     return (SPECIALTY_OPTIONS as readonly string[]).map((s) => ({ slug: s, name: s }));
   }, [categoryOptions]);
 
+  const specialtiesRequiringCert = useMemo(
+    () => specialties.filter((s) => requiresCert(s)),
+    [specialties, categoryOptions],
+  );
+
   if (loading) {
     return (
       <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
@@ -1155,9 +1184,9 @@ export default function SpecialistHome() {
             open={openCerts}
             onToggle={() => setOpenCerts((v) => !v)}
           >
-            {specialties.length ? (
+            {specialtiesRequiringCert.length ? (
               <View style={{ gap: 10 }}>
-                {specialties.map((slug) => {
+                {specialtiesRequiringCert.map((slug) => {
                   const c = findCert(slug);
                   const badge = certStatusBadge(c?.status);
                   return (
@@ -1187,7 +1216,7 @@ export default function SpecialistHome() {
               </View>
             ) : (
               <Text style={styles.muted}>
-                Elegí al menos un rubro arriba para cargar su matrícula.
+                Ninguno de tus rubros seleccionados requiere matrícula.
               </Text>
             )}
           </Section>

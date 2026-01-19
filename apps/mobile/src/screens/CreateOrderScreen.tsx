@@ -11,6 +11,7 @@ import {
   Alert,
   Image,
   Keyboard,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -57,6 +58,44 @@ function safeJson(obj: any) {
     return String(obj);
   }
 }
+
+const LOCALITIES_RIO_CUARTO = [
+  // ✅ Río Cuarto / Gran Río Cuarto
+  'Río Cuarto',
+  'Las Higueras',
+  'Santa Catalina Holmberg',
+
+  // ✅ Zona sur / sierras
+  'Sampacho',
+  'Bulnes',
+  'Coronel Moldes',
+  'Chaján',
+  'Achiras',
+  'San Basilio',
+  'Suco',
+  'La Cautiva',
+
+  // ✅ Zona oeste / ruta 8 / 36
+  'Alcira Gigena',
+  'Berrotarán',
+  'Elena',
+  'La Carlota',
+  'Reducción',
+
+  // ✅ Zona norte / ruta 158
+  'General Cabrera',
+  'Carnerillo',
+  'General Deheza',
+
+  // ✅ Zona este / ruta 35
+  'Vicuña Mackenna',
+  'Washington',
+
+  // ✅ Más cercanas (opcionales, pero útiles)
+  'Adelia María',
+  'Tosquita',
+  'Pacheco de Melo',
+];
 
 export default function CreateOrderScreen() {
   const insets = useSafeAreaInsets();
@@ -127,6 +166,9 @@ export default function CreateOrderScreen() {
 
   // ========= Form state =========
   const [address, setAddress] = useState(paramAddress);
+
+  const [locality, setLocality] = useState('Río Cuarto');
+  const [localityOpen, setLocalityOpen] = useState(false);
 
   useEffect(() => {
     if (!paramAddress && me?.defaultAddress?.formatted) {
@@ -270,11 +312,14 @@ export default function CreateOrderScreen() {
         );
       }
 
-      const typedFormatted = address.trim();
-      if (!typedFormatted) {
+      const baseAddress = address.trim();
+      if (!baseAddress) {
         Alert.alert('Falta la dirección', 'Indicá dónde realizar el trabajo.');
         return;
       }
+
+      const loc = (locality ?? '').trim();
+      const typedFormatted = loc ? `${baseAddress}, ${loc}, Córdoba` : baseAddress;
 
       if (mode === 'schedule' && !scheduledAt) {
         Alert.alert('Faltan datos', 'Indicá fecha y hora o elegí “Ahora”.');
@@ -505,6 +550,82 @@ export default function CreateOrderScreen() {
               <Text style={styles.linkText}>EDITAR</Text>
             </Pressable>
           </View>
+
+          {/* Localidad */}
+          <Text style={[styles.label, { marginTop: 10 }]}>Localidad</Text>
+
+          <Pressable style={styles.inputRow} onPress={() => setLocalityOpen(true)}>
+            <MDI name="map-marker-radius-outline" size={18} color="#06494F" />
+
+            <Text style={{ flex: 1, color: '#06494F', fontWeight: '800' }}>
+              {locality || 'Seleccionar localidad'}
+            </Text>
+
+            <Ionicons name="chevron-down" size={18} color="#06494F" />
+          </Pressable>
+
+          <Modal
+            visible={localityOpen}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setLocalityOpen(false)}
+          >
+            <View
+              style={{
+                flex: 1,
+                backgroundColor: 'rgba(0,0,0,0.55)',
+                justifyContent: 'center',
+                padding: 16,
+              }}
+            >
+              <View style={{ backgroundColor: '#E9FEFF', borderRadius: 16, padding: 14 }}>
+                <Text
+                  style={{
+                    color: '#06494F',
+                    fontWeight: '900',
+                    fontSize: 16,
+                    marginBottom: 10,
+                  }}
+                >
+                  Elegir localidad
+                </Text>
+
+                <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
+                  {LOCALITIES_RIO_CUARTO.map((loc) => (
+                    <Pressable
+                      key={loc}
+                      onPress={() => {
+                        setLocality(loc);
+                        setLocalityOpen(false);
+                      }}
+                      style={{
+                        paddingVertical: 12,
+                        paddingHorizontal: 10,
+                        borderRadius: 12,
+                        backgroundColor: loc === locality ? 'rgba(6,73,79,0.10)' : 'transparent',
+                        marginBottom: 6,
+                      }}
+                    >
+                      <Text style={{ color: '#06494F', fontWeight: '800' }}>{loc}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+
+                <Pressable
+                  onPress={() => setLocalityOpen(false)}
+                  style={{
+                    marginTop: 8,
+                    paddingVertical: 12,
+                    borderRadius: 12,
+                    alignItems: 'center',
+                    backgroundColor: '#06494F',
+                  }}
+                >
+                  <Text style={{ color: '#E9FEFF', fontWeight: '900' }}>Cerrar</Text>
+                </Pressable>
+              </View>
+            </View>
+          </Modal>
 
           {/* ✅ Descripción (solo texto libre) */}
           <Text style={[styles.label, { marginTop: 12 }]}>Descripción del problema</Text>

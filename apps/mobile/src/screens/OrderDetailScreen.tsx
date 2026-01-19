@@ -10,7 +10,9 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  Linking,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -95,6 +97,46 @@ function getErrorMessage(e: any) {
     return 'Error inesperado';
   }
 }
+
+const openInMaps = async (q: string) => {
+  const query = (q ?? '').trim();
+  if (!query) {
+    Alert.alert('Dirección vacía', 'No hay una dirección válida para abrir en Maps.');
+    return;
+  }
+
+  const encoded = encodeURIComponent(query);
+
+  // URLs / intents
+  const webGoogle = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
+  const webAlt = `https://maps.google.com/?q=${encoded}`;
+  const androidGeo = `geo:0,0?q=${encoded}`;
+  const iosApple = `maps://?q=${encoded}`;
+
+  // 1) Intento directo web (evita falso negativo de canOpenURL)
+  try {
+    await Linking.openURL(webGoogle);
+    return;
+  } catch {}
+
+  // 2) Fallback por plataforma
+  try {
+    if (Platform.OS === 'android') {
+      await Linking.openURL(androidGeo);
+      return;
+    }
+    await Linking.openURL(iosApple);
+    return;
+  } catch {}
+
+  // 3) Último fallback web
+  try {
+    await Linking.openURL(webAlt);
+    return;
+  } catch {}
+
+  Alert.alert('No disponible', 'No se pudo abrir Maps en este dispositivo.');
+};
 
 /**
  * ✅ Mapeo estado REAL -> sección Agenda (NUEVO: review/finished)
@@ -923,7 +965,7 @@ export default function OrderDetailScreen() {
                 </View>
               )}
 
-              <View style={{ marginLeft: 10 }}>
+              <View style={{ marginLeft: 12 }}>
                 <Text style={styles.clientName}>{headerName}</Text>
               </View>
             </View>
@@ -958,6 +1000,15 @@ export default function OrderDetailScreen() {
               <Ionicons name="home-outline" size={18} color="#E9FEFF" />
               <Text style={styles.muted}>Dirección: {addressText}</Text>
             </View>
+
+            {addressText !== '—' && (
+              <Pressable
+                onPress={() => openInMaps(addressText)}
+                style={[styles.ctaAlt, { marginTop: 10 }]}
+              >
+                <Text style={styles.ctaAltText}>Abrir en Google Maps</Text>
+              </Pressable>
+            )}
 
             {data.description && (
               <>
@@ -1306,24 +1357,26 @@ const styles = StyleSheet.create({
   },
 
   avatarCircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 62,
+    height: 62,
+    borderRadius: 31,
     borderWidth: 2,
     borderColor: '#FFE164',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0, 35, 40, 0.7)',
   },
+
   avatarImage: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 62,
+    height: 62,
+    borderRadius: 31,
     borderWidth: 2,
     borderColor: '#FFE164',
   },
-  avatarInitial: { color: '#FFE164', fontWeight: '900', fontSize: 18 },
-  clientName: { color: '#E9FEFF', fontWeight: '800', fontSize: 16 },
+
+  avatarInitial: { color: '#FFE164', fontWeight: '900', fontSize: 24 },
+  clientName: { color: '#E9FEFF', fontWeight: '900', fontSize: 17 },
 
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
   muted: { color: 'rgba(233,254,255,0.95)', flexShrink: 1 },

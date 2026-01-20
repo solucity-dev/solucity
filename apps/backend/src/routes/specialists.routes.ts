@@ -19,16 +19,15 @@ const router = Router();
 
 const kycDir = path.join(uploadsRoot, 'kyc');
 const certsDir = path.join(uploadsRoot, 'certifications');
+const backgroundChecksDir = path.join(uploadsRoot, 'background-checks');
 
 ensureDir(kycDir);
 ensureDir(certsDir);
-
-console.log('[specialists.routes] uploadsRoot =', uploadsRoot);
-console.log('[specialists.routes] kycDir =', kycDir);
-console.log('[specialists.routes] certsDir =', certsDir);
+ensureDir(backgroundChecksDir);
 
 if (!fs.existsSync(kycDir)) fs.mkdirSync(kycDir, { recursive: true });
 if (!fs.existsSync(certsDir)) fs.mkdirSync(certsDir, { recursive: true });
+if (!fs.existsSync(backgroundChecksDir)) fs.mkdirSync(backgroundChecksDir, { recursive: true });
 
 // (opcional) logs para verificar en Render
 console.log('[specialists.routes] uploadsRoot =', uploadsRoot);
@@ -60,6 +59,18 @@ const storageCerts = multer.diskStorage({
   },
 });
 
+const storageBackgroundChecks = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, backgroundChecksDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.pdf';
+    const base = path
+      .basename(file.originalname, ext)
+      .replace(/\s+/g, '_')
+      .replace(/[^A-Za-z0-9_-]/g, '');
+    cb(null, `${Date.now()}_${base}${ext}`);
+  },
+});
+
 /** Solo imágenes (JPEG/PNG/WebP) — KYC */
 const upload = multer({
   storage: storageKyc,
@@ -74,6 +85,18 @@ const upload = multer({
 /** Imágenes o PDF — Certificaciones */
 const uploadAny = multer({
   storage: storageCerts,
+  limits: { fileSize: 12 * 1024 * 1024 }, // 12MB
+  fileFilter: (_req, file, cb) => {
+    const isImg = /^image\/(jpe?g|png|webp)$/i.test(file.mimetype);
+    const isPdf = file.mimetype === 'application/pdf';
+    if (!isImg && !isPdf) return cb(new Error('unsupported_type'));
+    cb(null, true);
+  },
+});
+
+/** PDF o imagen — Antecedente penal */
+const uploadBackgroundCheck = multer({
+  storage: storageBackgroundChecks,
   limits: { fileSize: 12 * 1024 * 1024 }, // 12MB
   fileFilter: (_req, file, cb) => {
     const isImg = /^image\/(jpe?g|png|webp)$/i.test(file.mimetype);
@@ -246,6 +269,14 @@ async function syncSearchIndexForUser(userId: string) {
       badge: (spec.badge as any) ?? 'BRONZE',
     },
   });
+}
+
+async function hasApprovedBackgroundCheck(specialistId: string) {
+  const bg = await prisma.specialistBackgroundCheck.findUnique({
+    where: { specialistId },
+    select: { status: true },
+  });
+  return bg?.status === 'APPROVED';
 }
 
 /** ===== helper: stats de contrataciones ===== */
@@ -594,6 +625,125 @@ router.get('/by-category/:slug', async (req: Request, res: Response) => {
  * RUTAS PRIVADAS (auth)
  * ────────────────────────────────────────────────────────────────────*/
 
+/** POST /specialists/background-check/upload */
+router.post('/background-check/upload', auth, (req: Request, res: Response) => {
+  uploadBackgroundCheck.single('file')(req, res, async (err: any) => {
+    const maybe = multerErrorToResponse(err, res);
+    if (maybe) return;
+
+    const r = req as MulterReq;
+
+    try {
+      if (!r.file) {
+        return res.status(400).json({ ok: false, error: 'file_required' });
+      }
+
+      const relative = `/uploads/background-checks/${path.basename(r.file.path)}`;
+
+      return res.json({
+        ok: true,
+        url: relative,
+      });
+    } catch (e) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('POST /specialists/background-check/upload', e);
+      }
+      return res.status(500).json({ ok: false, error: 'server_error' });
+    }
+  });
+});
+
+/** POST /specialists/background-check (upsert 1 por especialista) */
+router.post('/background-check', auth, async (req: AuthReq, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' });
+
+    const schema = z.object({
+      fileUrl: urlLike, // viene del upload
+    });
+
+    const body = schema.parse(req.body);
+
+    const spec = await prisma.specialistProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!spec) return res.status(400).json({ ok: false, error: 'no_profile' });
+
+    const created = await prisma.specialistBackgroundCheck.upsert({
+      where: { specialistId: spec.id },
+      create: {
+        specialistId: spec.id,
+        fileUrl: body.fileUrl,
+        status: 'PENDING',
+      },
+      update: {
+        fileUrl: body.fileUrl,
+        status: 'PENDING',
+        rejectionReason: null,
+        reviewerId: null,
+        reviewedAt: null,
+      },
+      select: { id: true, status: true, fileUrl: true },
+    });
+
+    // opcional: refrescar search index (por si después lo usás para filtros)
+    await syncSearchIndexForUser(userId);
+
+    return res.json({
+      ok: true,
+      backgroundCheck: { ...created, fileUrl: toAbsoluteUrl(created.fileUrl) },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ ok: false, error: 'invalid_input', details: err.flatten() });
+    }
+    if (process.env.NODE_ENV !== 'production')
+      console.error('POST /specialists/background-check', err);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+/** GET /specialists/background-check (estado actual) */
+router.get('/background-check', auth, async (req: AuthReq, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' });
+
+    const spec = await prisma.specialistProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!spec) return res.json({ ok: true, backgroundCheck: null });
+
+    const bg = await prisma.specialistBackgroundCheck.findUnique({
+      where: { specialistId: spec.id },
+      select: {
+        id: true,
+        fileUrl: true,
+        status: true,
+        rejectionReason: true,
+        reviewedAt: true,
+      },
+    });
+
+    if (!bg) return res.json({ ok: true, backgroundCheck: null });
+
+    return res.json({
+      ok: true,
+      backgroundCheck: {
+        ...bg,
+        fileUrl: toAbsoluteUrl(bg.fileUrl),
+      },
+    });
+  } catch (e) {
+    if (process.env.NODE_ENV !== 'production')
+      console.error('GET /specialists/background-check', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
 /** POST /specialists/kyc/upload */
 router.post('/kyc/upload', auth, (req: Request, res: Response) => {
   upload.single('file')(req, res, async (err: any) => {
@@ -789,6 +939,16 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
       include: {
         user: { select: { name: true, surname: true } },
         specialties: { include: { category: { select: { slug: true } } } },
+
+        // ✅ NUEVO: antecedente penal (1 por especialista)
+        backgroundCheck: {
+          select: {
+            status: true,
+            reviewedAt: true,
+            rejectionReason: true,
+            fileUrl: true,
+          },
+        },
       },
     });
 
@@ -847,6 +1007,19 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
         ratingCount,
         badge,
         kycStatus: profile.kycStatus as any,
+        backgroundCheck: profile.backgroundCheck
+          ? {
+              status: profile.backgroundCheck.status,
+              reviewedAt: profile.backgroundCheck.reviewedAt
+                ? profile.backgroundCheck.reviewedAt.toISOString()
+                : null,
+              rejectionReason: profile.backgroundCheck.rejectionReason ?? null,
+              fileUrl: profile.backgroundCheck.fileUrl
+                ? toAbsoluteUrl(profile.backgroundCheck.fileUrl)
+                : null,
+            }
+          : null,
+
         specialties: profile.specialties.map((s) => s.category.slug),
         avatarUrl: profile.avatarUrl ?? null,
         stats: { done, canceled },
@@ -882,6 +1055,16 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
     if (data.available === true) {
       const kyc = current?.kycStatus ?? 'UNVERIFIED';
       if (kyc !== 'VERIFIED') return res.status(403).json({ ok: false, error: 'kyc_required' });
+
+      // ✅ NUEVO: antecedente penal aprobado
+      const spec = await prisma.specialistProfile.findUnique({
+        where: { userId },
+        select: { id: true },
+      });
+      if (!spec) return res.status(400).json({ ok: false, error: 'no_profile' });
+
+      const bgOk = await hasApprovedBackgroundCheck(spec.id);
+      if (!bgOk) return res.status(403).json({ ok: false, error: 'background_check_required' });
     }
 
     let nextAvail = currentAvail;

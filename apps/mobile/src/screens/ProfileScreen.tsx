@@ -1,6 +1,7 @@
 // apps/mobile/src/screens/ProfileScreen.tsx
 import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
@@ -118,6 +119,18 @@ export default function ProfileScreen() {
   // ✅ KYC status (solo specialist)
   const [kycStatus, setKycStatus] = useState<KycStatus | null>(null);
 
+  type BackgroundCheckStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+  type BackgroundCheckInfo = {
+    status: BackgroundCheckStatus;
+    reviewedAt?: string | null;
+    rejectionReason?: string | null;
+    fileUrl?: string | null;
+  } | null;
+
+  const [backgroundCheck, setBackgroundCheck] = useState<BackgroundCheckInfo>(null);
+  const [bgUploading, setBgUploading] = useState(false);
+
   // suscripción (solo specialist)
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
@@ -155,6 +168,7 @@ export default function ProfileScreen() {
 
       // reset
       setKycStatus(null);
+      setBackgroundCheck(null);
 
       // Avatar preload por ROLE real
       try {
@@ -167,6 +181,7 @@ export default function ProfileScreen() {
 
           // ✅ leemos KYC (si existe)
           setKycStatus((p?.kycStatus ?? null) as KycStatus | null);
+          setBackgroundCheck((p?.backgroundCheck ?? null) as BackgroundCheckInfo);
         } else if (r === 'CUSTOMER') {
           const rr = await api.get<any>('/customers/me', {
             headers: { 'Cache-Control': 'no-cache' },
@@ -385,6 +400,56 @@ export default function ProfileScreen() {
     );
   };
 
+  const uploadBackgroundCheck = async () => {
+    if (!isSpecialist) return;
+
+    try {
+      setBgUploading(true);
+
+      const doc = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/*'],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+
+      if (doc.canceled) return;
+      const asset = doc.assets?.[0];
+      if (!asset?.uri) return;
+
+      const form = new FormData();
+      form.append('file', {
+        uri: asset.uri,
+        name: asset.name ?? 'antecedente.pdf',
+        type: asset.mimeType ?? 'application/octet-stream',
+      } as any);
+
+      // 1) upload
+      const up = await api.post('/specialists/background-check/upload', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const urlRel: string | undefined = up?.data?.url;
+      if (!urlRel) throw new Error('upload_failed');
+
+      // 2) guardar/actualizar en DB
+      await api.post('/specialists/background-check', { fileUrl: urlRel });
+
+      // 3) refrescar estado
+      const rr = await api.get<any>('/specialists/me', {
+        headers: { 'Cache-Control': 'no-cache' },
+      });
+      const p = rr.data?.profile ?? rr.data;
+      setBackgroundCheck((p?.backgroundCheck ?? null) as BackgroundCheckInfo);
+
+      Alert.alert('Listo', 'Antecedente enviado a revisión.');
+    } catch (e: any) {
+      if (__DEV__) console.log('[Profile] uploadBackgroundCheck error', e?.response?.data ?? e);
+      Alert.alert('Ups', e?.response?.data?.error ?? 'No se pudo subir el antecedente.');
+    } finally {
+      setBgUploading(false);
+    }
+  };
+
   const roleLabel =
     role === 'SPECIALIST' ? 'Especialista' : role === 'CUSTOMER' ? 'Cliente' : 'Usuario';
 
@@ -542,6 +607,48 @@ export default function ProfileScreen() {
               <Text style={styles.muted}>
                 Verificá tu identidad para operar sin limitaciones y generar más confianza.
               </Text>
+            </View>
+          ) : null}
+
+          {isSpecialist ? (
+            <View style={styles.card}>
+              <View style={styles.sectionHeader}>
+                <MDI name="file-document-outline" size={18} color="#E9FEFF" />
+                <Text style={styles.sectionTitle}>Antecedentes penales</Text>
+              </View>
+
+              <Text style={styles.muted}>
+                Para activar tu disponibilidad, necesitás tener el antecedente aprobado.
+              </Text>
+
+              <View style={{ marginTop: 10 }}>
+                <Text style={{ color: '#E9FEFF', fontWeight: '800' }}>
+                  Estado:{' '}
+                  {backgroundCheck?.status === 'APPROVED'
+                    ? 'Aprobado ✅'
+                    : backgroundCheck?.status === 'PENDING'
+                      ? 'En revisión'
+                      : backgroundCheck?.status === 'REJECTED'
+                        ? 'Rechazado'
+                        : 'No cargado'}
+                </Text>
+
+                {backgroundCheck?.status === 'REJECTED' && backgroundCheck?.rejectionReason ? (
+                  <Text style={[styles.muted, { marginTop: 6 }]}>
+                    Motivo: {backgroundCheck.rejectionReason}
+                  </Text>
+                ) : null}
+              </View>
+
+              <Pressable
+                onPress={() => navigation.navigate('BackgroundCheck')}
+                style={[styles.saveBtn, bgUploading && { opacity: 0.7 }]}
+                disabled={bgUploading}
+              >
+                <Text style={styles.saveText}>
+                  {backgroundCheck ? 'Ver / actualizar antecedente' : 'Subir antecedente'}
+                </Text>
+              </Pressable>
             </View>
           ) : null}
 

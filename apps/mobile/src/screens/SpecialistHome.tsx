@@ -52,6 +52,12 @@ type SpecProfile = {
   ratingCount: number | null;
   badge: 'BRONZE' | 'SILVER' | 'GOLD' | null;
   kycStatus: 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'REJECTED';
+  backgroundCheck?: {
+    status: 'PENDING' | 'APPROVED' | 'REJECTED';
+    reviewedAt?: string | null;
+    rejectionReason?: string | null;
+    fileUrl?: string | null;
+  } | null;
   specialties: string[];
   avatarUrl?: string | null;
   name?: string | null;
@@ -493,7 +499,9 @@ export default function SpecialistHome() {
   const statsDone = profile?.stats?.done ?? 0;
   const statsCanceled = profile?.stats?.canceled ?? 0;
   const kycStatus = profile?.kycStatus ?? 'UNVERIFIED';
-  const canToggleAvailability = kycStatus === 'VERIFIED';
+  const bgStatus = profile?.backgroundCheck?.status ?? null;
+
+  const canToggleAvailability = kycStatus === 'VERIFIED' && bgStatus === 'APPROVED';
 
   // permisos para cámara / galería
   async function requestCamera() {
@@ -597,7 +605,7 @@ export default function SpecialistHome() {
     if (!canToggleAvailability) {
       Alert.alert(
         'Verificación en proceso',
-        'Para activar tu disponibilidad necesitás tener el KYC verificado.',
+        'Para activar tu disponibilidad necesitás KYC verificado y antecedentes penales aprobados.',
       );
       return;
     }
@@ -607,10 +615,20 @@ export default function SpecialistHome() {
       await api.patch('/specialists/me', { available: v });
     } catch (e: any) {
       const err = e?.response?.data?.error;
+
+      if (e?.response?.status === 403 && err === 'background_check_required') {
+        Alert.alert(
+          'Antecedentes requeridos',
+          'Para activar tu disponibilidad necesitás tener el antecedente penal aprobado.',
+        );
+        setAvailable(false);
+        return;
+      }
+
       if (e?.response?.status === 403 || err === 'kyc_required') {
         Alert.alert(
-          'KYC requerido',
-          'Para activar tu disponibilidad necesitás tener el KYC verificado.',
+          'Verificación requerida',
+          'Para activar tu disponibilidad necesitás KYC verificado y antecedentes aprobados.',
         );
         setAvailable(false);
         return;
@@ -995,9 +1013,47 @@ export default function SpecialistHome() {
             </View>
             {!canToggleAvailability ? (
               <Text style={[styles.muted, { marginTop: 6 }]}>
-                Tu disponibilidad se habilita cuando el KYC esté verificado.
+                Tu disponibilidad se habilita cuando el KYC esté verificado y tus antecedentes estén
+                aprobados.
               </Text>
             ) : null}
+
+            <View style={{ marginTop: 10 }}>
+              <Pressable
+                onPress={() => (navigation as any).navigate('BackgroundCheck')}
+                style={{
+                  padding: 12,
+                  borderRadius: 14,
+                  backgroundColor: 'rgba(255,255,255,0.10)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(233,254,255,0.18)',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                  <Ionicons name="document-text-outline" size={18} color="#E9FEFF" />
+                  <Text style={{ color: '#E9FEFF', fontWeight: '800', flex: 1 }}>
+                    Antecedentes:{' '}
+                    {bgStatus === 'APPROVED'
+                      ? 'Aprobado ✅'
+                      : bgStatus === 'PENDING'
+                        ? 'En revisión'
+                        : bgStatus === 'REJECTED'
+                          ? 'Rechazado'
+                          : 'No cargado'}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#E9FEFF" />
+              </Pressable>
+
+              {bgStatus === 'REJECTED' && profile?.backgroundCheck?.rejectionReason ? (
+                <Text style={[styles.muted, { marginTop: 8 }]}>
+                  Motivo: {profile.backgroundCheck.rejectionReason}
+                </Text>
+              ) : null}
+            </View>
           </View>
 
           {/* Contrataciones */}

@@ -125,6 +125,21 @@ export type AdminKycSubmission = {
   reviewedAt: string | null;
 };
 
+/* ─────────────────────────────────────────────────────────────
+ * Background Check (detalle)
+ * ───────────────────────────────────────────────────────────── */
+
+export type AdminBackgroundCheck = {
+  id: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | string;
+
+  fileUrl: string | null;
+
+  rejectionReason: string | null;
+  reviewedAt: string | null;
+  createdAt: string | null;
+};
+
 export type AdminSpecialistDetail = {
   userId: string;
   specialistId: string;
@@ -154,6 +169,8 @@ export type AdminSpecialistDetail = {
   subscription: (SubscriptionDTO & { daysLeft?: number | null }) | null;
 
   kyc: AdminKycSubmission | null;
+
+    backgroundCheck: AdminBackgroundCheck | null;
 
   certifications: AdminCertificationItem[];
 };
@@ -191,6 +208,23 @@ export async function approveCertification(certId: string) {
 
 export async function rejectCertification(certId: string, reason: string) {
   return apiFetch<{ ok: true }>(`/admin/certifications/${encodeURIComponent(certId)}/reject`, {
+    method: 'PATCH',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Background Check (acciones admin)
+ * ───────────────────────────────────────────────────────────── */
+
+export async function approveBackgroundCheck(bgId: string) {
+  return apiFetch<{ ok: true }>(`/admin/background-checks/${encodeURIComponent(bgId)}/approve`, {
+    method: 'PATCH',
+  });
+}
+
+export async function rejectBackgroundCheck(bgId: string, reason: string) {
+  return apiFetch<{ ok: true }>(`/admin/background-checks/${encodeURIComponent(bgId)}/reject`, {
     method: 'PATCH',
     body: JSON.stringify({ reason }),
   });

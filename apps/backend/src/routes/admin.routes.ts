@@ -98,6 +98,9 @@ adminRouter.post('/auth/login', async (req, res) => {
   return res.json({ token });
 });
 
+// ✅ A partir de acá, TODO requiere ADMIN token
+adminRouter.use(requireAdmin);
+
 /**
  * GET /admin/metrics
  */
@@ -318,6 +321,17 @@ adminRouter.get('/specialists/:id', async (req, res) => {
       },
     },
 
+    backgroundCheck: {
+      select: {
+        id: true,
+        status: true,
+        fileUrl: true,
+        rejectionReason: true,
+        reviewedAt: true,
+        createdAt: true,
+      },
+    },
+
     // ✅ LO QUE FALTABA: matrículas/certificaciones
     certifications: {
       orderBy: { createdAt: 'desc' as const },
@@ -436,6 +450,21 @@ adminRouter.get('/specialists/:id', async (req, res) => {
           rejectionReason: lastKyc.rejectionReason ?? null,
           createdAt: lastKyc.createdAt ? lastKyc.createdAt.toISOString() : null,
           reviewedAt: lastKyc.reviewedAt ? lastKyc.reviewedAt.toISOString() : null,
+        }
+      : null,
+
+    backgroundCheck: spec.backgroundCheck
+      ? {
+          id: spec.backgroundCheck.id,
+          status: spec.backgroundCheck.status,
+          fileUrl: toAbsoluteUrl(spec.backgroundCheck.fileUrl) ?? null,
+          rejectionReason: spec.backgroundCheck.rejectionReason ?? null,
+          reviewedAt: spec.backgroundCheck.reviewedAt
+            ? spec.backgroundCheck.reviewedAt.toISOString()
+            : null,
+          createdAt: spec.backgroundCheck.createdAt
+            ? spec.backgroundCheck.createdAt.toISOString()
+            : null,
         }
       : null,
 
@@ -656,6 +685,153 @@ const ApproveCertSchema = z.object({
 const RejectCertSchema = z.object({
   reason: z.string().min(2).max(500),
   reviewerId: z.string().optional().nullable(),
+});
+
+/**
+ * ✅ ANTECEDENTES (BACKGROUND CHECK) ADMIN
+ */
+
+const ApproveBgSchema = z.object({
+  reviewerId: z.string().optional().nullable(),
+});
+
+const RejectBgSchema = z.object({
+  reason: z.string().min(2).max(500),
+  reviewerId: z.string().optional().nullable(),
+});
+
+/** GET /admin/background-checks/pending */
+adminRouter.get('/background-checks/pending', async (_req, res) => {
+  const items = await prisma.specialistBackgroundCheck.findMany({
+    where: { status: 'PENDING' },
+    orderBy: { createdAt: 'asc' },
+    take: 200,
+    select: {
+      id: true,
+      status: true,
+      fileUrl: true,
+      createdAt: true,
+
+      reviewerId: true,
+      rejectionReason: true,
+      reviewedAt: true,
+
+      specialistId: true,
+      specialist: {
+        select: {
+          userId: true,
+          user: { select: { email: true, name: true, surname: true } },
+        },
+      },
+    },
+  });
+
+  return res.json({
+    ok: true,
+    count: items.length,
+    items: items.map((x) => ({
+      id: x.id,
+      status: x.status,
+      fileUrl: toAbsoluteUrl(x.fileUrl),
+      createdAt: x.createdAt.toISOString(),
+
+      reviewerId: x.reviewerId ?? null,
+      rejectionReason: x.rejectionReason ?? null,
+      reviewedAt: x.reviewedAt ? x.reviewedAt.toISOString() : null,
+
+      specialistId: x.specialistId,
+      userId: x.specialist?.userId ?? null,
+      email: x.specialist?.user?.email ?? null,
+      name: `${x.specialist?.user?.name ?? ''} ${x.specialist?.user?.surname ?? ''}`.trim() || null,
+    })),
+  });
+});
+
+/** PATCH /admin/background-checks/:id/approve */
+adminRouter.patch('/background-checks/:id/approve', async (req, res) => {
+  const id = String(req.params.id ?? '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'id_required' });
+
+  const parsed = ApproveBgSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res
+      .status(400)
+      .json({ ok: false, error: 'invalid_input', details: parsed.error.flatten() });
+  }
+
+  const bg = await prisma.specialistBackgroundCheck.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      status: true,
+      specialist: { select: { userId: true } },
+    },
+  });
+  if (!bg) return res.status(404).json({ ok: false, error: 'not_found' });
+
+  const userId = bg.specialist?.userId;
+  if (!userId) return res.status(400).json({ ok: false, error: 'user_not_found' });
+
+  // anti-duplicado: sólo si PENDING
+  const result = await prisma.specialistBackgroundCheck.updateMany({
+    where: { id, status: 'PENDING' },
+    data: {
+      status: 'APPROVED',
+      reviewerId: parsed.data.reviewerId ?? null,
+      rejectionReason: null,
+      reviewedAt: new Date(),
+    },
+  });
+
+  if (result.count === 0) {
+    return res.status(409).json({ ok: false, error: 'already_reviewed' });
+  }
+
+  // (opcional) notificación/push: lo metemos después si querés copiar patrón notifyKycStatus
+  return res.json({ ok: true, id, status: 'APPROVED' });
+});
+
+/** PATCH /admin/background-checks/:id/reject */
+adminRouter.patch('/background-checks/:id/reject', async (req, res) => {
+  const id = String(req.params.id ?? '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'id_required' });
+
+  const parsed = RejectBgSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res
+      .status(400)
+      .json({ ok: false, error: 'invalid_input', details: parsed.error.flatten() });
+  }
+
+  const bg = await prisma.specialistBackgroundCheck.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      status: true,
+      specialist: { select: { userId: true } },
+    },
+  });
+  if (!bg) return res.status(404).json({ ok: false, error: 'not_found' });
+
+  const userId = bg.specialist?.userId;
+  if (!userId) return res.status(400).json({ ok: false, error: 'user_not_found' });
+
+  // anti-duplicado: sólo si PENDING
+  const result = await prisma.specialistBackgroundCheck.updateMany({
+    where: { id, status: 'PENDING' },
+    data: {
+      status: 'REJECTED',
+      reviewerId: parsed.data.reviewerId ?? null,
+      rejectionReason: parsed.data.reason,
+      reviewedAt: new Date(),
+    },
+  });
+
+  if (result.count === 0) {
+    return res.status(409).json({ ok: false, error: 'already_reviewed' });
+  }
+
+  return res.json({ ok: true, id, status: 'REJECTED', rejectionReason: parsed.data.reason });
 });
 
 /** GET /admin/certifications/pending */

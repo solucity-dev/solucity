@@ -2,13 +2,16 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
+  approveBackgroundCheck,
   approveCertification,
   approveKyc,
   deleteAdminUser,
+  rejectBackgroundCheck,
   rejectCertification,
-  rejectKyc, // ✅ NUEVO
+  rejectKyc,
   type AdminSpecialistDetail,
 } from '../api/adminApi';
+
 import { useAdminSpecialistDetail } from '../hooks/useAdminSpecialistDetail';
 import { absoluteMediaUrl } from '../lib/media';
 import './specialistDetail.css';
@@ -87,9 +90,11 @@ export default function SpecialistDetail() {
   const { data, loading, error, reload } = useAdminSpecialistDetail(id);
 
   const typed = data as unknown as (AdminSpecialistDetail & {
-    subscription?: (SubscriptionDTO | null) & { daysLeft?: number | null };
-    kyc?: (NonNullable<AdminSpecialistDetail['kyc']> & { id?: string }) | null;
-  }) | null;
+  subscription?: (SubscriptionDTO | null) & { daysLeft?: number | null };
+  kyc?: (NonNullable<AdminSpecialistDetail['kyc']> & { id?: string }) | null;
+  backgroundCheck?: AdminSpecialistDetail['backgroundCheck'] | null;
+}) | null;
+
 
   const [avatarFailed, setAvatarFailed] = useState(false);
 
@@ -112,6 +117,13 @@ export default function SpecialistDetail() {
   const [certOk, setCertOk] = useState<string | null>(null);
   const [rejectCertId, setRejectCertId] = useState<string | null>(null);
   const [rejectCertReason, setRejectCertReason] = useState('');
+
+  // ✅ UI BACKGROUND CHECK actions
+const [bgActionLoading, setBgActionLoading] = useState(false);
+const [bgError, setBgError] = useState<string | null>(null);
+const [bgOk, setBgOk] = useState<string | null>(null);
+const [showRejectBg, setShowRejectBg] = useState(false);
+const [rejectBgReason, setRejectBgReason] = useState('');
 
   // ✅ Peligro / liberar email
   const [dangerLoading, setDangerLoading] = useState(false);
@@ -309,6 +321,50 @@ export default function SpecialistDetail() {
       setCertActionLoading(false);
     }
   }
+
+  async function handleApproveBackgroundCheck() {
+  if (!typed?.backgroundCheck?.id) return;
+
+  setBgError(null);
+  setBgOk(null);
+  setBgActionLoading(true);
+  try {
+    await approveBackgroundCheck(typed.backgroundCheck.id);
+    setBgOk('Antecedentes aprobados ✅');
+    setShowRejectBg(false);
+    setRejectBgReason('');
+    await reload();
+  } catch {
+    setBgError('No se pudo aprobar antecedentes.');
+  } finally {
+    setBgActionLoading(false);
+  }
+}
+
+async function handleRejectBackgroundCheck() {
+  if (!typed?.backgroundCheck?.id) return;
+
+  const reason = rejectBgReason.trim();
+  if (!reason) {
+    setBgError('Ingresá un motivo de rechazo.');
+    return;
+  }
+
+  setBgError(null);
+  setBgOk(null);
+  setBgActionLoading(true);
+  try {
+    await rejectBackgroundCheck(typed.backgroundCheck.id, reason);
+    setBgOk('Antecedentes rechazados ❌');
+    setShowRejectBg(false);
+    setRejectBgReason('');
+    await reload();
+  } catch {
+    setBgError('No se pudo rechazar antecedentes.');
+  } finally {
+    setBgActionLoading(false);
+  }
+}
 
   // ✅ liberar email (anonymize)
   async function handleFreeEmail() {
@@ -743,6 +799,128 @@ export default function SpecialistDetail() {
                 </div>
               )}
             </Card>
+
+            <Card title="Antecedentes (Background Check)">
+  {!typed.backgroundCheck ? (
+    <div className="sdMuted">Sin antecedentes subidos.</div>
+  ) : (
+    <div>
+      <div className="sdKV">
+        <div className="k">
+          <span>Estado</span>
+          <strong>{typed.backgroundCheck.status}</strong>
+        </div>
+
+        <div className="k">
+          <span>Subido</span>
+          <strong>{formatDateAR(typed.backgroundCheck.createdAt)}</strong>
+        </div>
+
+        <div className="k">
+          <span>Revisado</span>
+          <strong>{formatDateAR(typed.backgroundCheck.reviewedAt)}</strong>
+        </div>
+      </div>
+
+      {typed.backgroundCheck.rejectionReason ? (
+        <div className="sdMuted" style={{ marginTop: 8 }}>
+          Motivo: {typed.backgroundCheck.rejectionReason}
+        </div>
+      ) : null}
+
+      <div style={{ marginTop: 10 }}>
+        <a
+          className={`sdLink ${typed.backgroundCheck.fileUrl ? '' : 'disabled'}`}
+          href={absoluteMediaUrl(typed.backgroundCheck.fileUrl) ?? '#'}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => !typed.backgroundCheck?.fileUrl && e.preventDefault()}
+        >
+          Ver archivo
+        </a>
+      </div>
+
+      {/* Acciones sólo si está PENDING */}
+      {typed.backgroundCheck.status === 'PENDING' && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              className="sdBtn"
+              onClick={handleApproveBackgroundCheck}
+              disabled={bgActionLoading}
+            >
+              {bgActionLoading ? 'Procesando…' : '✅ Aprobar'}
+            </button>
+
+            <button
+              className="sdBtn"
+              onClick={() => {
+                setBgOk(null);
+                setBgError(null);
+                setShowRejectBg((v) => !v);
+              }}
+              disabled={bgActionLoading}
+              style={{ backgroundColor: '#ffe6e6', color: '#8b0000' }}
+            >
+              ❌ Rechazar
+            </button>
+          </div>
+
+          {showRejectBg && (
+            <div style={{ marginTop: 10 }}>
+              <textarea
+                className="sdInput"
+                placeholder="Motivo del rechazo (visible para el especialista)"
+                value={rejectBgReason}
+                onChange={(e) => setRejectBgReason(e.target.value)}
+                rows={3}
+                style={{ width: '100%' }}
+                disabled={bgActionLoading}
+              />
+
+              <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  className="sdBtn"
+                  onClick={handleRejectBackgroundCheck}
+                  disabled={bgActionLoading}
+                >
+                  {bgActionLoading ? 'Procesando…' : 'Confirmar rechazo'}
+                </button>
+
+                <button
+                  className="sdBtn"
+                  style={{ backgroundColor: '#eee', color: '#333' }}
+                  onClick={() => {
+                    setShowRejectBg(false);
+                    setRejectBgReason('');
+                    setBgError(null);
+                  }}
+                  disabled={bgActionLoading}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {bgOk && <div className="sdState" style={{ marginTop: 10 }}>{bgOk}</div>}
+          {bgError && (
+            <div className="sdState sdError" style={{ marginTop: 10 }}>
+              {bgError}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Si ya fue revisado, mostramos mensaje */}
+      {typed.backgroundCheck.status !== 'PENDING' && (
+        <div className="sdMuted" style={{ marginTop: 12 }}>
+          Este antecedente ya fue revisado.
+        </div>
+      )}
+    </div>
+  )}
+</Card>
 
             <Card title="Suscripción">
               {!sub ? (

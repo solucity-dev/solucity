@@ -112,7 +112,6 @@ export function getAuthToken() {
 api.interceptors.request.use(
   async (config: InternalAxiosRequestConfig): Promise<InternalAxiosRequestConfig> => {
     const url = String(config.url || '');
-
     const headers = {
       ...(config.headers || {}),
     } as AxiosRequestHeaders;

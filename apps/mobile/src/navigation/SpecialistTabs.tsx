@@ -7,10 +7,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ChatStack from './ChatStack';
 import AgendaScreen from '../screens/AgendaScreen';
+import BackgroundCheckScreen from '../screens/BackgroundCheckScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import OrderDetailScreen from '../screens/OrderDetailScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import SpecialistHome from '../screens/SpecialistHome';
+
 import type {
   AgendaStackParamList,
   SpecialistHomeStackParamList,
@@ -26,6 +28,7 @@ function SpecialistHomeStackNavigator() {
     <SpecialistHomeStack.Navigator screenOptions={{ headerShown: false }}>
       <SpecialistHomeStack.Screen name="SpecialistHome" component={SpecialistHome} />
       <SpecialistHomeStack.Screen name="Notifications" component={NotificationsScreen} />
+      <SpecialistHomeStack.Screen name="BackgroundCheck" component={BackgroundCheckScreen} />
     </SpecialistHomeStack.Navigator>
   );
 }

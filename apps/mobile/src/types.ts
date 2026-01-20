@@ -86,6 +86,7 @@ export type ChatStackParamList = {
 export type SpecialistHomeStackParamList = {
   SpecialistHome: undefined;
   Notifications: undefined;
+  BackgroundCheck: undefined;
 };
 
 /** ✅ NUEVO: Secciones válidas de Agenda */

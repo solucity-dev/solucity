@@ -6,9 +6,11 @@ import {
   approveCertification,
   approveKyc,
   deleteAdminUser,
+  expireBackgroundCheck,
   rejectBackgroundCheck,
   rejectCertification,
   rejectKyc,
+  requestBackgroundCheckUpdate,
   type AdminSpecialistDetail,
 } from '../api/adminApi';
 
@@ -361,6 +363,44 @@ async function handleRejectBackgroundCheck() {
     await reload();
   } catch {
     setBgError('No se pudo rechazar antecedentes.');
+  } finally {
+    setBgActionLoading(false);
+  }
+}
+
+async function handleRequestBgUpdate() {
+  if (!typed?.backgroundCheck?.id) return;
+
+  setBgError(null);
+  setBgOk(null);
+  setBgActionLoading(true);
+  try {
+    await requestBackgroundCheckUpdate(typed.backgroundCheck.id);
+    setBgOk('Se pidió actualización ✅ (se envió notificación al especialista)');
+  } catch {
+    setBgError('No se pudo pedir actualización.');
+  } finally {
+    setBgActionLoading(false);
+  }
+}
+
+async function handleExpireBg() {
+  if (!typed?.backgroundCheck?.id) return;
+
+  const ok = window.confirm(
+    '¿Marcar como VENCIDO?\n\nEsto va a rechazar el antecedente, bloquear disponibilidad y notificar.',
+  );
+  if (!ok) return;
+
+  setBgError(null);
+  setBgOk(null);
+  setBgActionLoading(true);
+  try {
+    await expireBackgroundCheck(typed.backgroundCheck.id);
+    setBgOk('Marcado como vencido ⛔ (bloqueado y notificado)');
+    await reload();
+  } catch {
+    setBgError('No se pudo marcar como vencido.');
   } finally {
     setBgActionLoading(false);
   }
@@ -839,6 +879,22 @@ async function handleRejectBackgroundCheck() {
           Ver archivo
         </a>
       </div>
+
+      {/* ✅ Acciones manuales (siempre que exista antecedente) */}
+<div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+  <button className="sdBtn" onClick={handleRequestBgUpdate} disabled={bgActionLoading}>
+    📩 Pedir actualización
+  </button>
+
+  <button
+    className="sdBtn"
+    onClick={handleExpireBg}
+    disabled={bgActionLoading}
+    style={{ backgroundColor: '#ffe6e6', color: '#8b0000' }}
+  >
+    ⛔ Marcar vencido
+  </button>
+</div>
 
       {/* Acciones sólo si está PENDING */}
       {typed.backgroundCheck.status === 'PENDING' && (

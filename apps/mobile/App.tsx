@@ -21,9 +21,13 @@ import { NotificationsProvider } from './src/notifications/NotificationsProvider
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    // ⚠️ tenías shouldShowAlert (deprecated). Igual no rompe, pero ya estás usando banner/list.
     shouldPlaySound: true,
     shouldSetBadge: true,
+
+    // ✅ compat (algunas versiones / plataformas)
+    shouldShowAlert: true,
+
+    // ✅ iOS moderno
     shouldShowBanner: true,
     shouldShowList: true,
   }),

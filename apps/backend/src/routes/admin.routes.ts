@@ -765,6 +765,7 @@ adminRouter.patch('/background-checks/:id/approve', async (req, res) => {
     select: {
       id: true,
       status: true,
+      fileUrl: true,
       specialist: { select: { userId: true } },
     },
   });
@@ -793,6 +794,7 @@ adminRouter.patch('/background-checks/:id/approve', async (req, res) => {
       userId, // ya lo tenés calculado arriba
       status: 'APPROVED',
       backgroundCheckId: id,
+      fileUrl: bg.fileUrl ?? null,
     });
   } catch (e) {
     console.warn('[admin] notifyBackgroundCheckStatus APPROVED failed', e);
@@ -818,6 +820,7 @@ adminRouter.patch('/background-checks/:id/reject', async (req, res) => {
     select: {
       id: true,
       status: true,
+      fileUrl: true,
       specialist: { select: { userId: true } },
     },
   });
@@ -847,6 +850,7 @@ adminRouter.patch('/background-checks/:id/reject', async (req, res) => {
       status: 'REJECTED',
       reason: parsed.data.reason,
       backgroundCheckId: id,
+      fileUrl: bg.fileUrl ?? null,
     });
   } catch (e) {
     console.warn('[admin] notifyBackgroundCheckStatus REJECTED failed', e);

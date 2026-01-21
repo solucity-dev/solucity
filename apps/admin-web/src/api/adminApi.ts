@@ -230,6 +230,21 @@ export async function rejectBackgroundCheck(bgId: string, reason: string) {
   });
 }
 
+// ✅ NUEVO: pedir actualización (solo notifica, no cambia status)
+export async function requestBackgroundCheckUpdate(bgId: string) {
+  return apiFetch<{ ok: true }>(
+    `/admin/background-checks/${encodeURIComponent(bgId)}/request-update`,
+    { method: 'POST' },
+  );
+}
+
+// ✅ NUEVO: marcar como vencido (rechaza + notifica + bloquea disponibilidad en backend)
+export async function expireBackgroundCheck(bgId: string) {
+  return apiFetch<{ ok: true }>(`/admin/background-checks/${encodeURIComponent(bgId)}/expire`, {
+    method: 'PATCH',
+  });
+}
+
 /* ─────────────────────────────────────────────────────────────
  * Grant days (admin)
  * ───────────────────────────────────────────────────────────── */

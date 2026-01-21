@@ -1,3 +1,4 @@
+//apps/backend/src/services/notificationService.ts
 import { Prisma } from '@prisma/client';
 
 import { prisma } from '../lib/prisma';

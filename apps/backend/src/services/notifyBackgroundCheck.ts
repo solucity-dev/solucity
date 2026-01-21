@@ -1,3 +1,4 @@
+// apps/backend/src/services/notifyBackgroundCheck.ts
 import { createNotification } from './notificationService';
 import { sendExpoPush } from './pushExpo';
 import { prisma } from '../lib/prisma';
@@ -5,15 +6,18 @@ import { prisma } from '../lib/prisma';
 import type { BackgroundCheckStatus } from '@prisma/client';
 
 export async function notifyBackgroundCheckStatus(params: {
-  userId: string; // especialista (dueño del antecedente)
+  userId: string;
   status: BackgroundCheckStatus; // PENDING | APPROVED | REJECTED
   reason?: string | null;
   backgroundCheckId?: string | null;
 
+  // ✅ NUEVO: clave para dedupe por “versión” (archivo)
+  fileUrl?: string | null;
+
   // extras
   alsoNotifyAdmins?: boolean; // para PENDING
 }) {
-  const { userId, status, reason, backgroundCheckId, alsoNotifyAdmins } = params;
+  const { userId, status, reason, backgroundCheckId, fileUrl, alsoNotifyAdmins } = params;
 
   console.log(
     '[notifyBackgroundCheckStatus]',
@@ -23,20 +27,31 @@ export async function notifyBackgroundCheckStatus(params: {
     status,
     'backgroundCheckId=',
     backgroundCheckId,
+    'fileUrl=',
+    fileUrl,
     'time=',
     new Date().toISOString(),
   );
 
-  // ✅ DEDUPE: no repetir misma combinación (backgroundCheckId + status)
+  // ✅ DEDUPE MEJORADO:
+  // No repetir misma combinación (backgroundCheckId + status + fileUrl)
+  // Así: si el especialista re-sube otro archivo, vuelve a notificar.
   if (backgroundCheckId) {
+    const and: any[] = [
+      { data: { path: ['backgroundCheckId'], equals: backgroundCheckId } },
+      { data: { path: ['bgStatus'], equals: status } },
+    ];
+
+    // si viene fileUrl, también es parte de la “versión”
+    if (fileUrl) {
+      and.push({ data: { path: ['fileUrl'], equals: fileUrl } });
+    }
+
     const existing = await prisma.notification.findFirst({
       where: {
         userId,
         type: 'BACKGROUND_CHECK_STATUS',
-        AND: [
-          { data: { path: ['backgroundCheckId'], equals: backgroundCheckId } },
-          { data: { path: ['bgStatus'], equals: status } },
-        ],
+        AND: and,
       },
       select: { id: true },
     });
@@ -66,7 +81,7 @@ export async function notifyBackgroundCheckStatus(params: {
           : 'Tu antecedente fue rechazado. Volvé a subirlo.'
         : 'Recibimos tu antecedente. Te avisaremos cuando esté aprobado.';
 
-  // 1) DB notification (al especialista) - IMPORTANTÍSIMO: devuelve ID real
+  // 1) DB notification (especialista)
   const notif = await createNotification({
     userId,
     type: 'BACKGROUND_CHECK_STATUS',
@@ -77,6 +92,7 @@ export async function notifyBackgroundCheckStatus(params: {
       bgStatus: status,
       reason: reason ?? null,
       backgroundCheckId: backgroundCheckId ?? null,
+      fileUrl: fileUrl ?? null, // ✅ guardar para dedupe correcto
     },
   });
 
@@ -95,10 +111,11 @@ export async function notifyBackgroundCheckStatus(params: {
         title,
         body,
         data: {
-          notificationId: notif.id, // ✅ ID real de DB
+          notificationId: notif.id,
           type: 'BACKGROUND_CHECK_STATUS',
           bgStatus: status,
           backgroundCheckId: backgroundCheckId ?? null,
+          fileUrl: fileUrl ?? null,
         },
         sound: 'default' as const,
         priority: 'high' as const,
@@ -112,8 +129,7 @@ export async function notifyBackgroundCheckStatus(params: {
     }
   }
 
-  // 3) (opcional) notificar admins cuando queda PENDING
-  // ✅ FIX: NO usar createMany si querés IDs para mark-as-read.
+  // 3) admins cuando queda PENDING
   if (alsoNotifyAdmins && status === 'PENDING') {
     try {
       const admins = await prisma.user.findMany({
@@ -122,7 +138,6 @@ export async function notifyBackgroundCheckStatus(params: {
       });
 
       for (const admin of admins) {
-        // 3.1) DB notif admin (con ID)
         const adminNotif = await createNotification({
           userId: admin.id,
           type: 'BACKGROUND_CHECK_REVIEW_REQUEST',
@@ -132,10 +147,10 @@ export async function notifyBackgroundCheckStatus(params: {
             type: 'BACKGROUND_CHECK_REVIEW_REQUEST',
             backgroundCheckId: backgroundCheckId ?? null,
             specialistUserId: userId,
+            fileUrl: fileUrl ?? null,
           },
         });
 
-        // 3.2) push tokens admin (con notificationId real)
         const adminTokens = await prisma.pushToken.findMany({
           where: { userId: admin.id, enabled: true },
           select: { token: true },
@@ -149,10 +164,11 @@ export async function notifyBackgroundCheckStatus(params: {
             title: 'Nuevo antecedente para revisar 🕵️',
             body: 'Un especialista subió su antecedente penal.',
             data: {
-              notificationId: adminNotif.id, // ✅ ID real
+              notificationId: adminNotif.id,
               type: 'BACKGROUND_CHECK_REVIEW_REQUEST',
               backgroundCheckId: backgroundCheckId ?? null,
               specialistUserId: userId,
+              fileUrl: fileUrl ?? null,
             },
             sound: 'default' as const,
             priority: 'high' as const,

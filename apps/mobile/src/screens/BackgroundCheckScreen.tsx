@@ -1,6 +1,7 @@
 // apps/mobile/src/screens/BackgroundCheckScreen.tsx
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -112,21 +113,63 @@ export default function BackgroundCheckScreen() {
       setUploading(true);
 
       const file = pick.assets[0];
+
+      // ✅ ANDROID FIX: DocumentPicker a veces devuelve content:// y FormData/axios falla intermitente
+      // Lo copiamos a cache y usamos file://
+      let uploadUri = file.uri;
+
+      if (uploadUri.startsWith('content://')) {
+        const ext =
+          (file.name?.includes('.') ? file.name.split('.').pop() : null) ||
+          (file.mimeType === 'application/pdf' ? 'pdf' : 'jpg');
+
+        const baseDir = (FileSystem as any).cacheDirectory || (FileSystem as any).documentDirectory;
+        if (!baseDir) throw new Error('no_cache_dir');
+
+        const target = `${baseDir}bg_${Date.now()}.${ext}`;
+
+        await FileSystem.copyAsync({ from: uploadUri, to: target });
+        uploadUri = target;
+      }
+
+      // Logs útiles
+      if (__DEV__) console.log('[BackgroundCheck] uri =', uploadUri);
+
+      // Tamaño (si no lo soporta el runtime, cae a 0 y no corta)
+      const info: any = await FileSystem.getInfoAsync(uploadUri);
+      const sizeBytes = typeof info?.size === 'number' ? info.size : 0;
+      const sizeMb = sizeBytes / (1024 * 1024);
+      if (__DEV__) console.log('[BackgroundCheck] sizeMB =', sizeMb.toFixed(2));
+
+      // (Opcional) corte por peso
+      if (sizeMb > 12) {
+        Alert.alert(
+          'Archivo muy pesado',
+          `El archivo pesa ${sizeMb.toFixed(1)} MB. Probá con uno más liviano (ideal < 10–12 MB).`,
+        );
+        return;
+      }
+
       const form = new FormData();
 
+      const fallbackType =
+        file.mimeType ??
+        (uploadUri.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
+
       form.append('file', {
-        uri: file.uri,
-        name: file.name ?? 'antecedente',
-        type: file.mimeType ?? 'application/octet-stream',
+        uri: uploadUri,
+        name: file.name ?? `antecedente_${Date.now()}`,
+        type: fallbackType,
       } as any);
 
-      // 2.a subir archivo
+      // 2.a subir archivo (axios)
       const uploadRes = await api.post('/specialists/background-check/upload', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60_000, // si Render está lento, evitamos cortar muy rápido
       });
 
       const url = uploadRes.data?.url;
-      if (!url) throw new Error('upload_failed');
+      if (!url) throw new Error('upload_failed_no_url');
 
       // 2.b guardar antecedente
       await api.post('/specialists/background-check', { fileUrl: url });
@@ -134,8 +177,20 @@ export default function BackgroundCheckScreen() {
       Alert.alert('Listo', 'Antecedente enviado para revisión');
       await loadStatus();
     } catch (e: any) {
-      if (__DEV__) console.log('[BackgroundCheck] handleUpload error', e?.response?.data ?? e);
-      Alert.alert('Error', e?.response?.data?.error ?? 'Error al subir archivo');
+      // Si es axios:
+      const isAxios = !!e?.isAxiosError;
+      if (__DEV__) {
+        console.log(
+          '[BackgroundCheck] handleUpload error',
+          isAxios ? (e?.response?.data ?? e?.message) : e,
+        );
+      }
+
+      const msg =
+        e?.response?.data?.error ||
+        e?.message ||
+        'Error al subir archivo. Verificá tu conexión e intentá nuevamente.';
+      Alert.alert('Error', msg);
     } finally {
       setUploading(false);
     }
@@ -155,7 +210,6 @@ export default function BackgroundCheckScreen() {
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1, paddingTop: insets.top + 6 }} edges={['top']}>
-        {/* Header simple */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Ionicons name="shield-checkmark-outline" size={22} color="#E9FEFF" />
@@ -175,7 +229,6 @@ export default function BackgroundCheckScreen() {
           contentContainerStyle={{ padding: 16, paddingBottom: 32 + insets.bottom + 70 }}
           showsVerticalScrollIndicator={false}
         >
-          {/* Card estado */}
           <View style={styles.card}>
             <View style={styles.rowBetween}>
               <Text style={styles.cardTitle}>Estado</Text>
@@ -205,7 +258,6 @@ export default function BackgroundCheckScreen() {
             ) : null}
           </View>
 
-          {/* Card instrucciones */}
           <View style={styles.card}>
             <View style={styles.sectionHeader}>
               <Ionicons name="document-text-outline" size={18} color="#E9FEFF" />
@@ -250,7 +302,6 @@ export default function BackgroundCheckScreen() {
             </View>
           </View>
 
-          {/* Nota / seguridad */}
           <View style={[styles.card, { backgroundColor: 'rgba(3, 55, 63, 0.85)' }]}>
             <View style={styles.sectionHeader}>
               <Ionicons name="lock-closed-outline" size={18} color="#E9FEFF" />

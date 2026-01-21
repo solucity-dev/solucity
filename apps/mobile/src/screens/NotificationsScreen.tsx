@@ -3,7 +3,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Notifications from 'expo-notifications';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -65,11 +64,6 @@ export default function NotificationsScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const unreadCount = useMemo(() => items.filter((n) => !n.readAt).length, [items]);
-
-  // ✅ Mantener badge del SO sincronizado con no leídas
-  useEffect(() => {
-    Notifications.setBadgeCountAsync(unreadCount).catch(() => {});
-  }, [unreadCount]);
 
   const loadNotifications = useCallback(async () => {
     if (!ready || !token) {

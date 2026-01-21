@@ -694,13 +694,12 @@ router.post('/background-check', auth, async (req: AuthReq, res: Response) => {
         userId,
         status: 'PENDING',
         backgroundCheckId: created.id,
+        fileUrl: created.fileUrl, // ✅ CLAVE
         alsoNotifyAdmins: true,
       });
     } catch (e) {
       console.warn('[specialists] notifyBackgroundCheckStatus PENDING failed', e);
     }
-
-    await syncSearchIndexForUser(userId);
 
     // opcional: refrescar search index (por si después lo usás para filtros)
     await syncSearchIndexForUser(userId);

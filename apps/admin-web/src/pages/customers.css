@@ -1,0 +1,190 @@
+/* apps/admin-web/src/pages/customers.css */
+
+.custShell {
+  min-height: calc(100vh - 48px);
+  padding: 24px;
+
+  background:
+    radial-gradient(1200px 700px at 10% 10%, rgba(0, 201, 167, 0.20), transparent 55%),
+    radial-gradient(900px 600px at 90% 20%, rgba(20, 120, 255, 0.16), transparent 55%),
+    linear-gradient(180deg, #f6fffd 0%, #f7fbff 100%);
+
+  color: #0b1220;
+}
+
+.custTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.custTitle {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 900;
+  color: #0b1b24;
+  letter-spacing: -0.02em;
+}
+
+.custSubtitle {
+  margin: 6px 0 0 0;
+  color: rgba(11, 27, 36, 0.72);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.custState {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.80);
+  border: 1px solid rgba(11, 27, 36, 0.12);
+  box-shadow: 0 12px 26px rgba(2, 6, 23, 0.10);
+  backdrop-filter: blur(10px);
+}
+
+/* Filtros */
+.custFilters {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1.4fr 0.6fr auto;
+  gap: 10px;
+  align-items: center;
+
+  border-radius: 16px;
+  padding: 10px;
+  border: 1px solid rgba(11, 27, 36, 0.10);
+  background: rgba(255, 255, 255, 0.60);
+  box-shadow: 0 12px 24px rgba(2, 6, 23, 0.10);
+  backdrop-filter: blur(10px);
+}
+
+.custInput,
+.custSelect {
+  border: 1px solid rgba(11, 27, 36, 0.12);
+  background: rgba(255, 255, 255, 0.90);
+  padding: 10px 12px;
+  border-radius: 12px;
+  outline: none;
+  font-weight: 800;
+  color: #0b1b24;
+}
+
+.custInput::placeholder {
+  color: rgba(11, 27, 36, 0.45);
+  font-weight: 700;
+}
+
+.custCount {
+  justify-self: end;
+  font-weight: 900;
+  color: rgba(11, 27, 36, 0.78);
+}
+
+/* Tabla */
+.custTableWrap {
+  margin-top: 12px;
+  border-radius: 18px;
+  overflow: hidden;
+
+  border: 1px solid rgba(11, 27, 36, 0.10);
+  background: rgba(255, 255, 255, 0.62);
+
+  box-shadow: 0 18px 40px rgba(2, 6, 23, 0.16);
+  backdrop-filter: blur(10px);
+}
+
+.custTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.custTable thead th {
+  text-align: left;
+  padding: 12px 14px;
+  font-size: 12px;
+  color: rgba(11, 27, 36, 0.72);
+  background: rgba(255, 255, 255, 0.70);
+  border-bottom: 1px solid rgba(11, 27, 36, 0.08);
+  font-weight: 900;
+}
+
+.custTable tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(11, 27, 36, 0.06);
+  vertical-align: middle;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.custTable tbody tr:hover td {
+  background: rgba(0, 201, 167, 0.06);
+}
+
+.custEmpty {
+  padding: 14px;
+  color: rgba(11, 27, 36, 0.72);
+  font-weight: 800;
+}
+
+/* Pills */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(11, 27, 36, 0.12);
+
+  background: rgba(255, 255, 255, 0.65);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.70);
+
+  font-weight: 900;
+  font-size: 12px;
+  color: rgba(11, 27, 36, 0.82);
+}
+
+/* Botón fila */
+.rowBtn {
+  border: 1px solid rgba(11, 27, 36, 0.12);
+  background: linear-gradient(
+    180deg,
+    rgba(11, 27, 36, 0.08),
+    rgba(11, 27, 36, 0.04)
+  );
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-weight: 950;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.rowBtn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px rgba(2, 6, 23, 0.12);
+}
+
+.rowBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.muted {
+  color: rgba(11, 27, 36, 0.60);
+  font-weight: 800;
+}
+
+@media (max-width: 900px) {
+  .custFilters {
+    grid-template-columns: 1fr;
+  }
+
+  .custCount {
+    justify-self: start;
+  }
+
+  .custTableWrap {
+    overflow-x: auto;
+  }
+}

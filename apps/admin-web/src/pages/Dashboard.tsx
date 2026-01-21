@@ -80,7 +80,13 @@ export default function Dashboard() {
           {/* 👤 Usuarios */}
           <Section title="Usuarios" subtitle="Conteos generales">
             <MetricCard label="Usuarios totales" value={data.users.total} tone="neutral" />
-            <MetricCard label="Clientes" value={data.users.customers} tone="good" />
+            <MetricCard
+              label="Clientes"
+              value={data.users.customers}
+              tone="good"
+              hint="Ver listado"
+              onClick={() => navigate('/app/customers')}
+            />
 
             <MetricCard
               label="Especialistas"

@@ -220,6 +220,7 @@ async function syncSearchIndexForUser(userId: string) {
       ratingAvg: true,
       ratingCount: true,
       badge: true,
+      user: { select: { status: true } },
       specialties: {
         include: {
           category: { select: { slug: true, group: { select: { slug: true } } } },
@@ -238,7 +239,10 @@ async function syncSearchIndexForUser(userId: string) {
   const radiusKm = spec.radiusKm ?? 20;
 
   // availableNow solo true si está VERIFIED
-  const safeAvailableNow = spec.kycStatus === 'VERIFIED' ? (spec.availableNow ?? false) : false;
+  const userOk = spec.user?.status !== 'BLOCKED';
+
+  const safeAvailableNow =
+    userOk && spec.kycStatus === 'VERIFIED' ? (spec.availableNow ?? false) : false;
 
   await prisma.specialistSearchIndex.upsert({
     where: { specialistId: spec.id },
@@ -1066,9 +1070,24 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
     };
 
     if (data.available === true) {
+      // TODO(subscription): activar cuando esté listo el flujo real de suscripción
+      // const sub = await prisma.subscription.findFirst({ where: { userId }, select: { status: true } });
+      // if (sub?.status === 'PAST_DUE' || sub?.status === 'CANCELLED') {
+      //   return res.status(403).json({ ok: false, error: 'subscription_required' });
+      // }
+
       const kyc = current?.kycStatus ?? 'UNVERIFIED';
       if (kyc !== 'VERIFIED') return res.status(403).json({ ok: false, error: 'kyc_required' });
 
+      // ✅ NUEVO: si el usuario está bloqueado, no puede ponerse disponible
+      const u = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { status: true },
+      });
+
+      if (u && (u as any).status === 'BLOCKED') {
+        return res.status(403).json({ ok: false, error: 'user_blocked' });
+      }
       // ✅ NUEVO: antecedente penal aprobado
       const spec = await prisma.specialistProfile.findUnique({
         where: { userId },
@@ -1325,6 +1344,7 @@ router.get('/:id', async (req, res) => {
       select: {
         id: true,
         userId: true,
+        user: { select: { status: true } },
         bio: true,
         visitPrice: true,
         pricingLabel: true, // ✅ NUEVO
@@ -1349,7 +1369,8 @@ router.get('/:id', async (req, res) => {
     });
     if (!spec) return res.status(404).json({ ok: false, error: 'Not found' });
 
-    const safeAvailableNow = spec.kycStatus === 'VERIFIED' ? !!spec.availableNow : false;
+    const userOk = spec.user?.status !== 'BLOCKED';
+    const safeAvailableNow = userOk && spec.kycStatus === 'VERIFIED' ? !!spec.availableNow : false;
 
     const user = await prisma.user.findUnique({
       where: { id: spec.userId },

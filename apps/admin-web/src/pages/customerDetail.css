@@ -1,0 +1,145 @@
+.cdShell {
+  min-height: calc(100vh - 48px);
+  padding: 24px;
+
+  background:
+    radial-gradient(1200px 700px at 10% 10%, rgba(0, 201, 167, 0.22), transparent 55%),
+    radial-gradient(900px 600px at 90% 20%, rgba(20, 120, 255, 0.22), transparent 55%),
+    linear-gradient(180deg, #062a36 0%, #083545 45%, #062a36 100%);
+
+  color: #eef6ff;
+}
+
+.cdTop {
+  margin-bottom: 16px;
+}
+
+.cdBack {
+  color: rgba(233, 254, 255, 0.9);
+  font-weight: 800;
+  font-size: 13px;
+  text-decoration: none;
+}
+.cdBack:hover {
+  text-decoration: underline;
+}
+
+.cdTitle {
+  margin: 8px 0 0;
+  font-size: 26px;
+  font-weight: 900;
+}
+
+.cdSubtitle {
+  margin-top: 6px;
+  color: rgba(233, 254, 255, 0.75);
+}
+
+.cdState {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+.cdError {
+  background: rgba(220, 38, 38, 0.12);
+  border-color: rgba(220, 38, 38, 0.4);
+}
+
+.cdHero {
+  display: flex;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.cdAvatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.cdHeroMain {
+  flex: 1;
+}
+
+.cdName {
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.cdMeta {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.cdMeta span {
+  display: block;
+  font-size: 12px;
+  color: rgba(233, 254, 255, 0.7);
+}
+.cdMeta strong {
+  display: block;
+  margin-top: 4px;
+  font-weight: 900;
+}
+
+.cdGrid {
+  margin-top: 14px;
+}
+
+.cdCard {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.cdCardHead {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cdCardTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.cdCardBody {
+  padding: 14px;
+}
+
+.cdActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cdBtn {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.12);
+  color: #eef6ff;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.cdBtn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+.cdBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.cdBtn.danger {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.4);
+}

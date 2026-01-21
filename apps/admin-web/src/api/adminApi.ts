@@ -299,6 +299,55 @@ export async function deleteAdminUser(userId: string, mode: DeleteAdminUserMode 
   );
 }
 
+/* ─────────────────────────────────────────────────────────────
+ * Customers (admin)
+ * ───────────────────────────────────────────────────────────── */
+
+export type AdminCustomerRow = {
+  userId: string;
+  email: string;
+  name: string | null;
+  status: UserStatus;
+  createdAt: string;
+};
+
+export type AdminCustomersResponse = {
+  ok: true;
+  count: number;
+  items: AdminCustomerRow[];
+};
+
+export type AdminCustomerDetail = {
+  ok: true;
+  userId: string;
+  email: string;
+  name: string | null;
+  status: UserStatus;
+  createdAt: string | null;
+};
+
+export async function getAdminCustomers(params?: { q?: string; status?: UserStatus | 'ALL' }) {
+  const qs = new URLSearchParams();
+  if (params?.q?.trim()) qs.set('q', params.q.trim());
+  if (params?.status && params.status !== 'ALL') qs.set('status', params.status);
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  return apiFetch<AdminCustomersResponse>(`/admin/customers${suffix}`);
+}
+
+export async function getAdminCustomerDetail(id: string) {
+  return apiFetch<AdminCustomerDetail>(`/admin/customers/${encodeURIComponent(id)}`);
+}
+
+export async function setAdminCustomerStatus(id: string, status: UserStatus) {
+  return apiFetch<{ ok: true; userId: string; status: UserStatus }>(
+    `/admin/customers/${encodeURIComponent(id)}/status`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    },
+  );
+}
+
 
 
 

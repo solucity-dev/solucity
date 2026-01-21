@@ -103,6 +103,120 @@ adminRouter.post('/auth/login', async (req, res) => {
 adminRouter.use(requireAdmin);
 
 /**
+ * ✅ CUSTOMERS ADMIN (MVP - User only)
+ * No depende de relaciones "customer" ni de CustomerProfile
+ */
+
+/** GET /admin/customers?status=ACTIVE|BLOCKED&q=... */
+adminRouter.get('/customers', async (req, res) => {
+  const q = String(req.query.q ?? '').trim();
+  const status = String(req.query.status ?? '')
+    .trim()
+    .toUpperCase();
+
+  const where: any = { role: 'CUSTOMER' };
+
+  if (status === 'ACTIVE' || status === 'BLOCKED') {
+    where.status = status;
+  }
+
+  if (q) {
+    where.OR = [
+      { email: { contains: q, mode: 'insensitive' } },
+      { name: { contains: q, mode: 'insensitive' } },
+      { surname: { contains: q, mode: 'insensitive' } },
+      { id: { contains: q, mode: 'insensitive' } },
+    ];
+  }
+
+  const users = await prisma.user.findMany({
+    where,
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      surname: true,
+      phone: true,
+      status: true,
+      createdAt: true,
+      customer: { select: { id: true, avatarUrl: true } },
+    },
+    take: 500,
+  });
+
+  return res.json({
+    ok: true,
+    count: users.length,
+    items: users.map((u) => ({
+      userId: u.id,
+      customerId: u.customer?.id ?? null,
+      email: u.email,
+      name: `${u.name ?? ''} ${u.surname ?? ''}`.trim() || null,
+      phone: u.phone ?? null,
+      status: u.status,
+      createdAt: u.createdAt.toISOString(),
+      avatarUrl: u.customer?.avatarUrl ?? null,
+    })),
+  });
+});
+
+/** GET /admin/customers/:id (id = userId) */
+adminRouter.get('/customers/:id', async (req, res) => {
+  const { id } = req.params;
+
+  const user = await prisma.user.findFirst({
+    where: { id, role: 'CUSTOMER' },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      surname: true,
+      status: true,
+      createdAt: true,
+    },
+  });
+
+  if (!user) return res.status(404).json({ ok: false, error: 'not_found' });
+
+  return res.json({
+    ok: true,
+    userId: user.id,
+    email: user.email,
+    name: `${user.name ?? ''} ${user.surname ?? ''}`.trim() || null,
+    status: user.status,
+    createdAt: user.createdAt ? user.createdAt.toISOString() : null,
+  });
+});
+
+/** PATCH /admin/customers/:id/status  Body: { status: ACTIVE|BLOCKED } */
+adminRouter.patch('/customers/:id/status', async (req, res) => {
+  const { id } = req.params;
+  const nextStatus = String(req.body?.status ?? '')
+    .trim()
+    .toUpperCase();
+
+  if (nextStatus !== 'ACTIVE' && nextStatus !== 'BLOCKED') {
+    return res.status(400).json({ ok: false, error: 'invalid_status' });
+  }
+
+  const user = await prisma.user.findFirst({
+    where: { id, role: 'CUSTOMER' },
+    select: { id: true },
+  });
+
+  if (!user) return res.status(404).json({ ok: false, error: 'not_found' });
+
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: { status: nextStatus },
+    select: { id: true, status: true },
+  });
+
+  return res.json({ ok: true, userId: updated.id, status: updated.status });
+});
+
+/**
  * GET /admin/metrics
  */
 adminRouter.get('/metrics', async (_req, res) => {
@@ -1358,7 +1472,6 @@ adminRouter.delete('/users/:userId', requireAdmin, async (req, res) => {
       role: true,
       status: true,
       specialist: { select: { id: true } },
-      customer: { select: { id: true } },
     },
   });
 
@@ -1366,7 +1479,6 @@ adminRouter.delete('/users/:userId', requireAdmin, async (req, res) => {
 
   const oldEmail = user.email;
   const specialistId = user.specialist?.id ?? null;
-  const customerId = user.customer?.id ?? null;
 
   // ✅ MODO SEGURO: libera el email y corta sesiones/tokens.
   if (mode === 'anonymize') {
@@ -1423,12 +1535,6 @@ adminRouter.delete('/users/:userId', requireAdmin, async (req, res) => {
           .catch(() => {});
 
         await tx.specialistProfile.delete({ where: { id: specialistId } }).catch(() => {});
-      }
-
-      // customer related (si existe en tu schema)
-      if (customerId) {
-        // si hay tablas dependientes (orders etc), acá se deberían borrar/actualizar
-        await tx.customerProfile?.delete?.({ where: { id: customerId } }).catch(() => {});
       }
 
       await tx.user.delete({ where: { id: userId } });

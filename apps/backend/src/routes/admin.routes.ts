@@ -404,7 +404,7 @@ adminRouter.get('/specialists/:id', async (req, res) => {
   const certifications = (spec.certifications ?? []).map((c) => ({
     id: c.id,
     status: c.status,
-    fileUrl: c.fileUrl ? c.fileUrl : null, // el admin-web usa absoluteMediaUrl() con VITE_API_URL
+    fileUrl: toAbsoluteUrl(c.fileUrl) ?? null, // el admin-web usa absoluteMediaUrl() con VITE_API_URL
     number: c.number ?? null,
     issuer: c.issuer ?? null,
     expiresAt: c.expiresAt ? c.expiresAt.toISOString() : null,
@@ -857,6 +857,133 @@ adminRouter.patch('/background-checks/:id/reject', async (req, res) => {
   }
 
   return res.json({ ok: true, id, status: 'REJECTED', rejectionReason: parsed.data.reason });
+});
+
+/** POST /admin/background-checks/:id/request-update
+ * Solo notifica al especialista para que suba un nuevo antecedente.
+ * NO cambia el status del background check.
+ */
+adminRouter.post('/background-checks/:id/request-update', async (req, res) => {
+  const id = String(req.params.id ?? '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'id_required' });
+
+  const bg = await prisma.specialistBackgroundCheck.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      specialistId: true,
+      specialist: { select: { userId: true } },
+      status: true,
+      fileUrl: true,
+    },
+  });
+
+  if (!bg) return res.status(404).json({ ok: false, error: 'not_found' });
+
+  const userId = bg.specialist?.userId;
+  if (!userId) return res.status(400).json({ ok: false, error: 'user_not_found' });
+
+  const title = 'Actualización de antecedentes';
+  const body =
+    'Necesitamos que actualices tu certificado de antecedentes. Subí uno nuevo desde la app.';
+
+  // ✅ Crear notification en DB + push (mismo patrón que grant-days)
+  const notif = await prisma.notification.create({
+    data: {
+      userId,
+      type: 'BACKGROUND_CHECK_REVIEW_REQUEST',
+      title,
+      body,
+      data: { backgroundCheckId: id } as any,
+    },
+    select: { id: true, title: true, body: true },
+  });
+
+  try {
+    await pushToUser({
+      userId,
+      title: notif.title ?? title,
+      body: notif.body ?? body,
+      data: {
+        notificationId: notif.id,
+        type: 'BACKGROUND_CHECK_REVIEW_REQUEST',
+        backgroundCheckId: id,
+      },
+    });
+  } catch (e) {
+    console.warn('[push] BACKGROUND_CHECK_REVIEW_REQUEST failed', e);
+  }
+
+  return res.json({ ok: true, id, notificationId: notif.id });
+});
+
+/** PATCH /admin/background-checks/:id/expire
+ * Marca como vencido:
+ * - cambia status a REJECTED (porque tu enum no tiene EXPIRED)
+ * - setea rejectionReason
+ * - reviewedAt ahora
+ * - apaga availableNow
+ * - notifica al especialista
+ */
+adminRouter.patch('/background-checks/:id/expire', async (req, res) => {
+  const id = String(req.params.id ?? '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'id_required' });
+
+  const bg = await prisma.specialistBackgroundCheck.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      status: true,
+      fileUrl: true,
+      specialistId: true,
+      specialist: { select: { userId: true } },
+    },
+  });
+
+  if (!bg) return res.status(404).json({ ok: false, error: 'not_found' });
+
+  const userId = bg.specialist?.userId;
+  if (!userId) return res.status(400).json({ ok: false, error: 'user_not_found' });
+
+  // ✅ 1) Marcar como "vencido" usando REJECTED + reason
+  const reason = 'Vencido: por favor subí un antecedente actualizado.';
+
+  const result = await prisma.specialistBackgroundCheck.update({
+    where: { id },
+    data: {
+      status: 'REJECTED',
+      rejectionReason: reason,
+      reviewedAt: new Date(),
+      reviewerId: (req as any).admin?.sub ?? null, // si querés guardar admin id
+    },
+    select: { id: true, status: true, rejectionReason: true, reviewedAt: true },
+  });
+
+  // ✅ 2) Bloquear disponibilidad (si estaba disponible)
+  await prisma.specialistProfile.update({
+    where: { id: bg.specialistId },
+    data: { availableNow: false },
+  });
+
+  // ✅ 3) Notificar (reutilizamos tu servicio existente)
+  try {
+    await notifyBackgroundCheckStatus({
+      userId,
+      status: 'REJECTED',
+      reason,
+      backgroundCheckId: id,
+      fileUrl: bg.fileUrl ?? null,
+    });
+  } catch (e) {
+    console.warn('[admin] notifyBackgroundCheckStatus EXPIRE failed', e);
+  }
+
+  return res.json({
+    ok: true,
+    id: result.id,
+    status: result.status,
+    rejectionReason: result.rejectionReason,
+  });
 });
 
 /** GET /admin/certifications/pending */

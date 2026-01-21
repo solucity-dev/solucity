@@ -11,6 +11,7 @@ import { signToken } from '../lib/jwt';
 import { prisma } from '../lib/prisma';
 import { ensureDir, uploadsRoot } from '../lib/uploads';
 import { auth } from '../middlewares/auth';
+import { notifyBackgroundCheckStatus } from '../services/notifyBackgroundCheck';
 import { notifyKycStatus } from '../services/notifyKyc';
 
 /** ========= Storage local (MVP) ========= **/
@@ -687,6 +688,19 @@ router.post('/background-check', auth, async (req: AuthReq, res: Response) => {
       },
       select: { id: true, status: true, fileUrl: true },
     });
+
+    try {
+      await notifyBackgroundCheckStatus({
+        userId,
+        status: 'PENDING',
+        backgroundCheckId: created.id,
+        alsoNotifyAdmins: true,
+      });
+    } catch (e) {
+      console.warn('[specialists] notifyBackgroundCheckStatus PENDING failed', e);
+    }
+
+    await syncSearchIndexForUser(userId);
 
     // opcional: refrescar search index (por si después lo usás para filtros)
     await syncSearchIndexForUser(userId);

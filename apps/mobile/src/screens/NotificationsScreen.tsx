@@ -143,6 +143,16 @@ export default function NotificationsScreen() {
     const title = item?.title ?? '';
     const body = item?.body ?? '';
 
+    // ✅ Antecedentes → Perfil > BackgroundCheck
+    if (type === 'BACKGROUND_CHECK_STATUS' || type === 'BACKGROUND_CHECK_REVIEW_REQUEST') {
+      if (parent?.navigate) {
+        parent.navigate('Perfil', { screen: 'BackgroundCheck' });
+      } else {
+        navigation.navigate('Perfil', { screen: 'BackgroundCheck' });
+      }
+      return;
+    }
+
     // Extraemos posibles IDs
     const orderId: string | null = data.orderId ?? data.order_id ?? data.order?.id ?? null;
 

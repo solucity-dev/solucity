@@ -89,6 +89,12 @@ export type SpecialistHomeStackParamList = {
   BackgroundCheck: undefined;
 };
 
+/** Stack interno del tab Perfil del especialista */
+export type SpecialistProfileStackParamList = {
+  ProfileMain: undefined;
+  BackgroundCheck: undefined;
+};
+
 /** ✅ NUEVO: Secciones válidas de Agenda */
 export type AgendaSection = 'PENDING' | 'CONFIRMED' | 'FINISHED' | 'CANCELLED';
 

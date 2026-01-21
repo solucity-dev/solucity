@@ -1020,7 +1020,15 @@ export default function SpecialistHome() {
 
             <View style={{ marginTop: 10 }}>
               <Pressable
-                onPress={() => (navigation as any).navigate('BackgroundCheck')}
+                onPress={() => {
+                  // 1) Primero aseguramos que el stack Perfil tenga ProfileMain
+                  (navigation as any).navigate('Perfil', { screen: 'ProfileMain' });
+
+                  // 2) Luego empujamos BackgroundCheck arriba (crea historial)
+                  setTimeout(() => {
+                    (navigation as any).navigate('Perfil', { screen: 'BackgroundCheck' });
+                  }, 0);
+                }}
                 style={{
                   padding: 12,
                   borderRadius: 14,

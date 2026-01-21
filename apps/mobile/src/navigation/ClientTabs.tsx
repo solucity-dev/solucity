@@ -5,6 +5,7 @@ import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import ChatStack from './ChatStack';
 import AgendaScreen from '../screens/AgendaScreen';
 import CategoryScreen from '../screens/CategoryScreen';
 import ClientHome from '../screens/ClientHome';
@@ -15,8 +16,8 @@ import OrdersScreen from '../screens/OrdersScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import SpecialistProfileScreen from '../screens/SpecialistProfileScreen';
 import SpecialistsListScreen from '../screens/SpecialistsListScreen';
+
 import type { AgendaStackParamList, ClientTabsParamList, HomeStackParamList } from '../types';
-import ChatStack from './ChatStack';
 
 const Tab = createBottomTabNavigator<ClientTabsParamList>();
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
@@ -159,9 +160,7 @@ export default function ClientTabs() {
       <Tab.Screen
         name="Perfil"
         component={ProfileScreen}
-        options={{
-          tabBarStyle: baseTabBarStyle,
-        }}
+        options={{ tabBarStyle: baseTabBarStyle }}
       />
     </Tab.Navigator>
   );

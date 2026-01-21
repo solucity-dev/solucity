@@ -9,6 +9,7 @@ let navRole: NavRole = null;
 type PendingNav =
   | { type: 'orderDetail'; orderId: string }
   | { type: 'chatThread'; threadId: string; orderId?: string | null }
+  | { type: 'backgroundCheck' }
   | null;
 
 let pendingNav: PendingNav = null;
@@ -29,6 +30,11 @@ export function queueChatThread(threadId: string, orderId?: string | null) {
   if (__DEV__) console.log('[NAV] queued chatThread =', threadId, 'orderId=', orderId);
 }
 
+export function queueBackgroundCheck() {
+  pendingNav = { type: 'backgroundCheck' };
+  if (__DEV__) console.log('[NAV] queued backgroundCheck');
+}
+
 export function flushPendingNav() {
   if (!pendingNav) return;
   if (!navigationRef.isReady()) return;
@@ -40,6 +46,8 @@ export function flushPendingNav() {
     navigateToOrderDetail(p.orderId);
   } else if (p.type === 'chatThread') {
     navigateToChatThread(p.threadId, p.orderId ?? null);
+  } else if (p.type === 'backgroundCheck') {
+    navigateToBackgroundCheck();
   }
 }
 
@@ -100,6 +108,23 @@ export function navigateToChatThread(threadId: string, orderId?: string | null) 
         threadId,
         orderId: orderId ?? undefined,
       },
+    },
+  });
+}
+
+export function navigateToBackgroundCheck() {
+  if (!navigationRef.isReady()) {
+    queueBackgroundCheck();
+    return;
+  }
+
+  // Solo existe en flujo specialist (según tu diseño)
+  const root = 'MainSpecialist';
+
+  navigationRef.navigate(root, {
+    screen: 'Perfil',
+    params: {
+      screen: 'BackgroundCheck',
     },
   });
 }

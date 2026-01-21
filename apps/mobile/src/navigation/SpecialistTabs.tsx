@@ -16,6 +16,7 @@ import SpecialistHome from '../screens/SpecialistHome';
 import type {
   AgendaStackParamList,
   SpecialistHomeStackParamList,
+  SpecialistProfileStackParamList,
   ClientTabsParamList as SpecialistTabsParamList,
 } from '../types';
 
@@ -28,7 +29,6 @@ function SpecialistHomeStackNavigator() {
     <SpecialistHomeStack.Navigator screenOptions={{ headerShown: false }}>
       <SpecialistHomeStack.Screen name="SpecialistHome" component={SpecialistHome} />
       <SpecialistHomeStack.Screen name="Notifications" component={NotificationsScreen} />
-      <SpecialistHomeStack.Screen name="BackgroundCheck" component={BackgroundCheckScreen} />
     </SpecialistHomeStack.Navigator>
   );
 }
@@ -40,6 +40,17 @@ function SpecialistAgendaStackNavigator() {
       <AgendaStack.Screen name="AgendaMain" component={AgendaScreen} />
       <AgendaStack.Screen name="OrderDetail" component={OrderDetailScreen} />
     </AgendaStack.Navigator>
+  );
+}
+
+const ProfileStack = createNativeStackNavigator<SpecialistProfileStackParamList>();
+
+function SpecialistProfileStackNavigator() {
+  return (
+    <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
+      <ProfileStack.Screen name="ProfileMain" component={ProfileScreen} />
+      <ProfileStack.Screen name="BackgroundCheck" component={BackgroundCheckScreen} />
+    </ProfileStack.Navigator>
   );
 }
 
@@ -165,7 +176,7 @@ export default function SpecialistTabs() {
 
       <Tab.Screen
         name="Perfil"
-        component={ProfileScreen}
+        component={SpecialistProfileStackNavigator}
         options={{
           tabBarStyle: baseTabBarStyle,
         }}

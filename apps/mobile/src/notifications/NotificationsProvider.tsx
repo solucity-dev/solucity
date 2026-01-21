@@ -14,7 +14,11 @@ import { Platform } from 'react-native';
 import { registerForPush } from './registerForPush';
 import { useAuth } from '../auth/AuthProvider';
 import { api } from '../lib/api';
-import { navigateToChatThread, navigateToOrderDetail } from '../navigation/navigationRef';
+import {
+  navigateToBackgroundCheck,
+  navigateToChatThread,
+  navigateToOrderDetail,
+} from '../navigation/navigationRef';
 
 type NotificationsContextValue = {
   unread: number;
@@ -330,6 +334,15 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         orderId: orderId ? String(orderId) : null,
         type: type ? String(type) : null,
       });
+
+      // ✅ BACKGROUND CHECK → Perfil > BackgroundCheck
+      if (
+        String(type) === 'BACKGROUND_CHECK_STATUS' ||
+        String(type) === 'BACKGROUND_CHECK_REVIEW_REQUEST'
+      ) {
+        navigateToBackgroundCheck();
+        return;
+      }
 
       // ✅ 2) navegar: CHAT_MESSAGE -> thread; fallback -> order
       if (String(type) === 'CHAT_MESSAGE' && threadId) {

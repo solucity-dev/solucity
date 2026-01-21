@@ -4,6 +4,7 @@ import jwt, { type Secret, type SignOptions } from 'jsonwebtoken';
 import { z } from 'zod';
 
 import { prisma } from '../lib/prisma';
+import { notifyBackgroundCheckStatus } from '../services/notifyBackgroundCheck';
 import { notifyCertificationStatus } from '../services/notifyCertification';
 import { notifyKycStatus } from '../services/notifyKyc';
 import { sendExpoPush } from '../services/pushExpo';
@@ -787,7 +788,16 @@ adminRouter.patch('/background-checks/:id/approve', async (req, res) => {
     return res.status(409).json({ ok: false, error: 'already_reviewed' });
   }
 
-  // (opcional) notificación/push: lo metemos después si querés copiar patrón notifyKycStatus
+  try {
+    await notifyBackgroundCheckStatus({
+      userId, // ya lo tenés calculado arriba
+      status: 'APPROVED',
+      backgroundCheckId: id,
+    });
+  } catch (e) {
+    console.warn('[admin] notifyBackgroundCheckStatus APPROVED failed', e);
+  }
+
   return res.json({ ok: true, id, status: 'APPROVED' });
 });
 
@@ -829,6 +839,17 @@ adminRouter.patch('/background-checks/:id/reject', async (req, res) => {
 
   if (result.count === 0) {
     return res.status(409).json({ ok: false, error: 'already_reviewed' });
+  }
+
+  try {
+    await notifyBackgroundCheckStatus({
+      userId,
+      status: 'REJECTED',
+      reason: parsed.data.reason,
+      backgroundCheckId: id,
+    });
+  } catch (e) {
+    console.warn('[admin] notifyBackgroundCheckStatus REJECTED failed', e);
   }
 
   return res.json({ ok: true, id, status: 'REJECTED', rejectionReason: parsed.data.reason });

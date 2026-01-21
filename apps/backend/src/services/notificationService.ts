@@ -14,7 +14,10 @@ export type NotificationType =
   | 'NEW_REVIEW_POSTED'
   | 'KYC_STATUS'
   | 'CERTIFICATION_APPROVED'
-  | 'CERTIFICATION_REJECTED';
+  | 'CERTIFICATION_REJECTED'
+  | 'BACKGROUND_CHECK_STATUS'
+  | 'BACKGROUND_CHECK_REVIEW_REQUEST'
+  | 'SUBSCRIPTION_DAYS_GRANTED';
 
 // Base común de data (se guarda como JSON)
 export interface BaseNotificationData extends Prisma.JsonObject {

@@ -307,14 +307,21 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
       const expoIdentifier = resp.notification?.request?.identifier ?? null;
 
-      if (expoIdentifier && lastHandledNotificationIdRef.current === expoIdentifier) {
-        if (__DEV__)
-          console.log('[NotificationsProvider] duplicated notif tap ignored', expoIdentifier);
+      const { orderId, threadId, type, data, notificationDbId } = extractDataFromResponse(resp);
+
+      // ✅ Dedupe robusto: si no hay expoIdentifier, usamos fallback estable
+      const dedupeKey =
+        expoIdentifier ??
+        (notificationDbId ? `db:${notificationDbId}` : null) ??
+        (threadId ? `thread:${threadId}` : null) ??
+        (orderId ? `order:${orderId}:${type ?? ''}` : null) ??
+        null;
+
+      if (dedupeKey && lastHandledNotificationIdRef.current === dedupeKey) {
+        if (__DEV__) console.log('[NotificationsProvider] duplicated notif tap ignored', dedupeKey);
         return;
       }
-      if (expoIdentifier) lastHandledNotificationIdRef.current = expoIdentifier;
-
-      const { orderId, threadId, type, data, notificationDbId } = extractDataFromResponse(resp);
+      if (dedupeKey) lastHandledNotificationIdRef.current = dedupeKey;
 
       if (__DEV__) {
         console.log('────────────────────────');

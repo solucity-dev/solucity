@@ -55,7 +55,7 @@ export function flushPendingNav() {
  * ✅ Navegación global al OrderDetail
  */
 export function navigateToOrderDetail(orderId: string) {
-  if (!navigationRef.isReady()) {
+  if (!navigationRef.isReady() || !navRole) {
     queueOrderDetail(orderId);
     return;
   }
@@ -81,7 +81,7 @@ export function navigateToOrderDetail(orderId: string) {
  * ✅ Navegación global al chat thread
  */
 export function navigateToChatThread(threadId: string, orderId?: string | null) {
-  if (!navigationRef.isReady()) {
+  if (!navigationRef.isReady() || !navRole) {
     queueChatThread(threadId, orderId ?? null);
     return;
   }
@@ -113,7 +113,7 @@ export function navigateToChatThread(threadId: string, orderId?: string | null) 
 }
 
 export function navigateToBackgroundCheck() {
-  if (!navigationRef.isReady()) {
+  if (!navigationRef.isReady() || navRole !== 'SPECIALIST') {
     queueBackgroundCheck();
     return;
   }

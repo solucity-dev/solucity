@@ -159,11 +159,12 @@ adminRouter.get('/customers', async (req, res) => {
   });
 });
 
-/** GET /admin/customers/:id (id = userId) */
+/** GET /admin/customers/:id (id = userId OR customerId) */
 adminRouter.get('/customers/:id', async (req, res) => {
   const { id } = req.params;
 
-  const user = await prisma.user.findFirst({
+  // 1) intento como userId
+  let user = await prisma.user.findFirst({
     where: { id, role: 'CUSTOMER' },
     select: {
       id: true,
@@ -172,46 +173,51 @@ adminRouter.get('/customers/:id', async (req, res) => {
       surname: true,
       status: true,
       createdAt: true,
+      customer: { select: { id: true, avatarUrl: true } },
     },
   });
+
+  // 2) si no existe, intento como customerId (CustomerProfile.id)
+  if (!user) {
+    const customer = await prisma.customerProfile.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        avatarUrl: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            surname: true,
+            status: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+
+    if (customer?.user) {
+      // armamos una "forma" compatible con el resto
+      user = {
+        ...customer.user,
+        customer: { id: customer.id, avatarUrl: customer.avatarUrl },
+      } as any;
+    }
+  }
 
   if (!user) return res.status(404).json({ ok: false, error: 'not_found' });
 
   return res.json({
     ok: true,
     userId: user.id,
+    customerId: (user as any).customer?.id ?? null,
     email: user.email,
     name: `${user.name ?? ''} ${user.surname ?? ''}`.trim() || null,
     status: user.status,
     createdAt: user.createdAt ? user.createdAt.toISOString() : null,
+    avatarUrl: (user as any).customer?.avatarUrl ?? null,
   });
-});
-
-/** PATCH /admin/customers/:id/status  Body: { status: ACTIVE|BLOCKED } */
-adminRouter.patch('/customers/:id/status', async (req, res) => {
-  const { id } = req.params;
-  const nextStatus = String(req.body?.status ?? '')
-    .trim()
-    .toUpperCase();
-
-  if (nextStatus !== 'ACTIVE' && nextStatus !== 'BLOCKED') {
-    return res.status(400).json({ ok: false, error: 'invalid_status' });
-  }
-
-  const user = await prisma.user.findFirst({
-    where: { id, role: 'CUSTOMER' },
-    select: { id: true },
-  });
-
-  if (!user) return res.status(404).json({ ok: false, error: 'not_found' });
-
-  const updated = await prisma.user.update({
-    where: { id: user.id },
-    data: { status: nextStatus },
-    select: { id: true, status: true },
-  });
-
-  return res.json({ ok: true, userId: updated.id, status: updated.status });
 });
 
 /**
@@ -340,8 +346,13 @@ adminRouter.get('/orders', async (req, res) => {
       preferredAt: true,
       scheduledAt: true,
 
+      // ✅ servicio + rubro
       service: {
-        select: { id: true, name: true },
+        select: {
+          id: true,
+          name: true,
+          category: { select: { id: true, name: true, slug: true } },
+        },
       },
 
       customer: {
@@ -393,6 +404,22 @@ adminRouter.get('/orders', async (req, res) => {
           }
         : null,
 
+      rubro: o.service?.category
+        ? {
+            id: o.service.category.id,
+            name: o.service.category.name,
+            slug: o.service.category.slug,
+          }
+        : null,
+
+      serviceCategory: o.service?.category
+        ? {
+            id: o.service.category.id,
+            name: o.service.category.name,
+            slug: o.service.category.slug,
+          }
+        : null,
+
       service: o.service ? { id: o.service.id, name: o.service.name } : null,
     })),
   });
@@ -418,7 +445,13 @@ adminRouter.get('/orders/:id', async (req, res) => {
 
       chatThread: { select: { id: true } },
 
-      service: { select: { id: true, name: true } },
+      service: {
+        select: {
+          id: true,
+          name: true,
+          category: { select: { id: true, name: true, slug: true } },
+        },
+      },
 
       customer: {
         select: {
@@ -470,6 +503,22 @@ adminRouter.get('/orders/:id', async (req, res) => {
             name:
               `${o.specialist.user.name ?? ''} ${o.specialist.user.surname ?? ''}`.trim() || null,
             email: o.specialist.user.email ?? null,
+          }
+        : null,
+
+      rubro: o.service?.category
+        ? {
+            id: o.service.category.id,
+            name: o.service.category.name,
+            slug: o.service.category.slug,
+          }
+        : null,
+
+      serviceCategory: o.service?.category
+        ? {
+            id: o.service.category.id,
+            name: o.service.category.name,
+            slug: o.service.category.slug,
           }
         : null,
 

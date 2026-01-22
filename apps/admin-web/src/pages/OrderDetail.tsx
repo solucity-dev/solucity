@@ -1,4 +1,3 @@
-// apps/admin-web/src/pages/OrderDetail.tsx
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -18,36 +17,34 @@ function formatDateAR(iso?: string | null) {
   });
 }
 
-type AdminOrderServiceLite = {
+/* =======================
+   Tipos alineados BACKEND
+   ======================= */
+
+type AdminOrderService = {
   id: string;
   name: string;
-  categoryName?: string | null;
-  categorySlug?: string | null;
 };
 
-type AdminOrderUserLite = {
-  id: string; // puede ser customerId / specialistId
-  userId?: string | null; // a veces viene, a veces no
+type AdminOrderServiceCategory = {
+  id: string;
+  name: string;
+  slug: string;
+};
+
+type AdminOrderUser = {
+  userId?: string | null;
+  customerId?: string | null;
+  specialistId?: string | null;
   email?: string | null;
   name?: string | null;
-};
-
-type AdminOrderEvent = {
-  id: string;
-  type: string;
-  createdAt: string;
-  payload?: unknown;
-};
-
-type AdminOrderRating = {
-  score: number;
-  comment: string | null;
 };
 
 type AdminOrderDetail = {
   id: string;
   status: string;
   createdAt: string;
+  updatedAt: string;
 
   description?: string | null;
 
@@ -55,12 +52,13 @@ type AdminOrderDetail = {
   preferredAt: string | null;
   scheduledAt: string | null;
 
-  service: AdminOrderServiceLite | null;
-  customer: AdminOrderUserLite | null;
-  specialist: AdminOrderUserLite | null;
+  service: AdminOrderService | null;
+  serviceCategory?: AdminOrderServiceCategory | null;
 
-  events?: AdminOrderEvent[];
-  rating?: AdminOrderRating | null;
+  customer: AdminOrderUser | null;
+  specialist: AdminOrderUser | null;
+
+  chatThreadId?: string | null;
 };
 
 type LoadState =
@@ -79,7 +77,6 @@ export default function OrderDetail() {
     setState({ kind: 'loading' });
     try {
       const r = await getAdminOrderDetail(orderId);
-      // r.order viene del backend; lo tipamos como AdminOrderDetail
       setOrder((r.order ?? null) as AdminOrderDetail | null);
       setState({ kind: 'ready' });
     } catch {
@@ -87,7 +84,7 @@ export default function OrderDetail() {
     }
   };
 
-  // Auto-load sin useEffect (evita la regla react-hooks/set-state-in-effect)
+  // Auto-load sin useEffect
   const [didAutoLoad, setDidAutoLoad] = useState(false);
   if (!didAutoLoad) {
     setDidAutoLoad(true);
@@ -100,16 +97,16 @@ export default function OrderDetail() {
   if (state.kind === 'error') return <div className="odState odError">{state.message}</div>;
   if (!order) return <div className="odState odError">Sin datos</div>;
 
-  const customerUserId = order.customer?.userId ?? order.customer?.id ?? null;
-  const specialistId = order.specialist?.id ?? order.specialist?.userId ?? null;
+  // ✅ IDs correctos (profiles, NO users)
+  const customerId = order.customer?.customerId ?? null;
+  const specialistId = order.specialist?.specialistId ?? null;
 
   return (
     <div className="odShell">
       <div className="odTop">
         <button className="odBack" onClick={() => nav(-1)}>
-  ← Volver a órdenes
-</button>
-
+          ← Volver a órdenes
+        </button>
 
         <div>
           <h1 className="odTitle">Detalle de orden</h1>
@@ -122,10 +119,11 @@ export default function OrderDetail() {
       </div>
 
       <div className="odCard">
+        {/* ===== Header ===== */}
         <div className="odRow">
           <div>
             <div className="odLabel">Orden</div>
-            <div className="odValue">
+            <div className="odValue mono">
               <strong>{order.id}</strong>
             </div>
           </div>
@@ -133,7 +131,7 @@ export default function OrderDetail() {
           <div>
             <div className="odLabel">Estado</div>
             <div className="odValue">
-              <span className="pill">{order.status}</span>
+              <span className={`pill status-${order.status}`}>{order.status}</span>
             </div>
           </div>
 
@@ -145,11 +143,12 @@ export default function OrderDetail() {
 
         <hr className="odHr" />
 
+        {/* ===== Servicio ===== */}
         <div className="odRow">
           <div>
             <div className="odLabel">Servicio</div>
             <div className="odValue">{order.service?.name ?? '—'}</div>
-            <div className="odMuted">{order.service?.categoryName ?? '—'}</div>
+            <div className="odMuted">{order.serviceCategory?.name ?? '—'}</div>
           </div>
 
           <div>
@@ -158,16 +157,17 @@ export default function OrderDetail() {
               {order.isUrgent
                 ? '⚡ Lo antes posible'
                 : order.scheduledAt
-                  ? formatDateAR(order.scheduledAt)
-                  : order.preferredAt
-                    ? formatDateAR(order.preferredAt)
-                    : 'Sin definir'}
+                ? formatDateAR(order.scheduledAt)
+                : order.preferredAt
+                ? formatDateAR(order.preferredAt)
+                : 'Sin definir'}
             </div>
           </div>
         </div>
 
         <hr className="odHr" />
 
+        {/* ===== Usuarios ===== */}
         <div className="odRow">
           <div>
             <div className="odLabel">Cliente</div>
@@ -176,8 +176,8 @@ export default function OrderDetail() {
 
             <button
               className="rowBtn"
-              disabled={!customerUserId}
-              onClick={() => customerUserId && nav(`/app/customers/${customerUserId}`)}
+              disabled={!customerId}
+              onClick={() => customerId && nav(`/app/customers/${customerId}`)}
             >
               Ver cliente
             </button>
@@ -198,6 +198,7 @@ export default function OrderDetail() {
           </div>
         </div>
 
+        {/* ===== Descripción ===== */}
         {order.description ? (
           <>
             <hr className="odHr" />
@@ -208,30 +209,13 @@ export default function OrderDetail() {
           </>
         ) : null}
 
-        {Array.isArray(order.events) && order.events.length ? (
+        {/* ===== Chat ===== */}
+        {order.chatThreadId ? (
           <>
             <hr className="odHr" />
             <div>
-              <div className="odLabel">Eventos</div>
-              <div className="odList">
-                {order.events.map((e) => (
-                  <div key={e.id} className="odListItem">
-                    <strong>{e.type}</strong>
-                    <span className="odMuted">{formatDateAR(e.createdAt)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </>
-        ) : null}
-
-        {order.rating ? (
-          <>
-            <hr className="odHr" />
-            <div>
-              <div className="odLabel">Rating</div>
-              <div className="odValue">⭐ {order.rating.score}/5</div>
-              <div className="odMuted">{order.rating.comment ?? 'Sin comentario'}</div>
+              <div className="odLabel">Chat</div>
+              <div className="odValue mono">{order.chatThreadId}</div>
             </div>
           </>
         ) : null}
@@ -239,3 +223,4 @@ export default function OrderDetail() {
     </div>
   );
 }
+

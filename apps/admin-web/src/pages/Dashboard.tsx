@@ -100,28 +100,48 @@ export default function Dashboard() {
           </Section>
 
           {/* 🧾 Órdenes */}
-          <Section title="Órdenes" subtitle="Estado del flujo operativo">
-            <MetricCard label="Órdenes totales" value={data.orders.total} tone="neutral" />
-            <MetricCard label="Pendientes" value={data.orders.pending} hint="Sin asignar" tone="warn" />
-            <MetricCard
-              label="En curso"
-              value={data.orders.active}
-              hint="Asignadas / en progreso"
-              tone="neutral"
-            />
-            <MetricCard
-              label="Finalizadas"
-              value={data.orders.finished}
-              hint="Confirmadas / cerradas"
-              tone="good"
-            />
-            <MetricCard
-              label="Canceladas"
-              value={data.orders.cancelled}
-              hint="Cancelación / rechazo"
-              tone="bad"
-            />
-          </Section>
+<Section title="Órdenes" subtitle="Estado del flujo operativo">
+  <MetricCard
+    label="Órdenes totales"
+    value={data.orders.total}
+    tone="neutral"
+    hint="Ver todas"
+    onClick={() => navigate('/app/orders')}
+  />
+
+  <MetricCard
+    label="Pendientes"
+    value={data.orders.pending}
+    hint="Sin asignar"
+    tone="warn"
+    onClick={() => navigate('/app/orders?status=PENDING')}
+  />
+
+  <MetricCard
+    label="En curso"
+    value={data.orders.active}
+    hint="Asignadas / en progreso"
+    tone="neutral"
+    onClick={() => navigate('/app/orders?status=ACTIVE')}
+  />
+
+  <MetricCard
+    label="Finalizadas"
+    value={data.orders.finished}
+    hint="Confirmadas / cerradas"
+    tone="good"
+    onClick={() => navigate('/app/orders?status=FINISHED')}
+  />
+
+  <MetricCard
+    label="Canceladas"
+    value={data.orders.cancelled}
+    hint="Cancelación / rechazo"
+    tone="bad"
+    onClick={() => navigate('/app/orders?status=CANCELLED')}
+  />
+</Section>
+
 
           {/* 👷 Especialistas */}
           <Section title="Especialistas" subtitle="KYC y suscripciones (resumen)">

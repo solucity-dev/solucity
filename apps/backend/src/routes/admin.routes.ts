@@ -37,7 +37,6 @@ function requireAdmin(req: any, res: any, next: any) {
       return res.status(403).json({ ok: false, error: 'admin_only' });
     }
 
-    // opcional: guardar sub/role si lo necesitás después
     (req as any).admin = payload;
 
     return next();
@@ -71,7 +70,6 @@ adminRouter.post('/auth/login', async (req, res) => {
     return res.status(401).json({ code: 'invalid_credentials' });
   }
 
-  // Nos aseguramos de tener (o crear) un usuario ADMIN en DB.
   const adminUser = await prisma.user.upsert({
     where: { email: envEmail },
     update: { role: 'ADMIN', status: 'ACTIVE' },
@@ -305,6 +303,10 @@ adminRouter.get('/metrics', async (_req, res) => {
 /**
  * ✅ ORDERS ADMIN
  * Listado + detalle (para admin-web)
+ *
+ * 🔥 FIX REAL:
+ * ServiceOrder.customerId = CustomerProfile.id (NO User.id)
+ * ServiceOrder.specialistId = SpecialistProfile.id (NO User.id)
  */
 
 // GET /admin/orders?q=&status=
@@ -314,11 +316,10 @@ adminRouter.get('/orders', async (req, res) => {
     .trim()
     .toUpperCase();
 
-  // Si tenés un enum OrderStatus, podés validar acá.
-  // Para no romper, lo dejamos “string” y solo lo aplicamos si viene.
   const where: any = {};
   if (statusRaw && statusRaw !== 'ALL') where.status = statusRaw;
 
+  // búsqueda simple: por id (si después querés sumar email, lo hacemos)
   if (q) {
     where.OR = [{ id: { contains: q, mode: 'insensitive' } }];
   }
@@ -335,83 +336,77 @@ adminRouter.get('/orders', async (req, res) => {
       isUrgent: true,
       preferredAt: true,
       scheduledAt: true,
-      customerId: true,
-      specialistId: true,
-      serviceId: true,
+
+      service: {
+        select: {
+          id: true,
+          name: true,
+          category: { select: { name: true, slug: true } },
+        },
+      },
+
+      customer: {
+        select: {
+          id: true, // customerProfileId
+          userId: true,
+          avatarUrl: true,
+          user: { select: { id: true, email: true, name: true, surname: true } },
+        },
+      },
+
+      specialist: {
+        select: {
+          id: true, // specialistProfileId
+          userId: true,
+          avatarUrl: true,
+          user: { select: { id: true, email: true, name: true, surname: true } },
+        },
+      },
     },
   });
-
-  // Lookup users (customer/specialist) por ID
-  const userIds = Array.from(
-    new Set(
-      orders.flatMap((o) => [o.customerId, o.specialistId]).filter((x): x is string => Boolean(x)),
-    ),
-  );
-
-  const users = await prisma.user.findMany({
-    where: { id: { in: userIds } },
-    select: { id: true, name: true, surname: true, email: true },
-  });
-
-  const userMap = new Map(users.map((u) => [u.id, u]));
-
-  // Service lookup (si tu modelo se llama "service")
-  // Si el modelo NO existe como prisma.service, cambiá por el nombre correcto (ej: prisma.categoryService, prisma.serviceCatalog, etc.)
-  const serviceIds = Array.from(new Set(orders.map((o) => o.serviceId).filter(Boolean)));
-
-  let serviceMap = new Map<string, { id: string; name: string }>();
-  try {
-    const services = await prisma.service.findMany({
-      where: { id: { in: serviceIds } },
-      select: { id: true, name: true },
-    });
-    serviceMap = new Map(services.map((s) => [s.id, s]));
-  } catch {
-    // si tu prisma no tiene "service", no rompemos build: devolvemos null
-    serviceMap = new Map();
-  }
 
   return res.json({
     ok: true,
     count: orders.length,
-    items: orders.map((o) => {
-      const customer = userMap.get(o.customerId) ?? null;
-      const specialist = o.specialistId ? (userMap.get(o.specialistId) ?? null) : null;
-      const service = serviceMap.get(o.serviceId) ?? null;
+    items: orders.map((o) => ({
+      id: o.id,
+      status: o.status,
+      createdAt: o.createdAt.toISOString(),
+      description: o.description ?? null,
+      isUrgent: Boolean(o.isUrgent),
+      preferredAt: o.preferredAt ? o.preferredAt.toISOString() : null,
+      scheduledAt: o.scheduledAt ? o.scheduledAt.toISOString() : null,
 
-      return {
-        id: o.id,
-        status: o.status,
-        createdAt: o.createdAt.toISOString(),
-        description: o.description ?? null,
-        isUrgent: Boolean(o.isUrgent),
-        preferredAt: o.preferredAt ? o.preferredAt.toISOString() : null,
-        scheduledAt: o.scheduledAt ? o.scheduledAt.toISOString() : null,
+      customer: o.customer
+        ? {
+            customerId: o.customer.id,
+            userId: o.customer.userId,
+            email: o.customer.user?.email ?? null,
+            name: `${o.customer.user?.name ?? ''} ${o.customer.user?.surname ?? ''}`.trim() || null,
+            avatarUrl: o.customer.avatarUrl ?? null,
+          }
+        : null,
 
-        customer: customer
-          ? {
-              id: customer.id,
-              name: `${customer.name ?? ''} ${customer.surname ?? ''}`.trim() || null,
-              email: customer.email ?? null,
-            }
-          : null,
+      specialist: o.specialist
+        ? {
+            specialistId: o.specialist.id,
+            userId: o.specialist.userId,
+            email: o.specialist.user?.email ?? null,
+            name:
+              `${o.specialist.user?.name ?? ''} ${o.specialist.user?.surname ?? ''}`.trim() || null,
+            avatarUrl: o.specialist.avatarUrl ?? null,
+          }
+        : null,
 
-        specialist: specialist
-          ? {
-              id: specialist.id,
-              name: `${specialist.name ?? ''} ${specialist.surname ?? ''}`.trim() || null,
-              email: specialist.email ?? null,
-            }
-          : null,
-
-        service: service
-          ? {
-              id: service.id,
-              name: service.name,
-            }
-          : null,
-      };
-    }),
+      service: o.service
+        ? {
+            id: o.service.id,
+            name: o.service.name,
+            categoryName: o.service.category?.name ?? null,
+            categorySlug: o.service.category?.slug ?? null,
+          }
+        : null,
+    })),
   });
 });
 
@@ -427,43 +422,77 @@ adminRouter.get('/orders/:id', async (req, res) => {
       status: true,
       createdAt: true,
       updatedAt: true,
+
       description: true,
       isUrgent: true,
       preferredAt: true,
       scheduledAt: true,
       attachments: true,
-      customerId: true,
-      specialistId: true,
-      serviceId: true,
 
-      // ✅ tu error dice que existe chatThread (relación)
+      addressText: true,
+      location: { select: { formatted: true, lat: true, lng: true } },
+
+      service: {
+        select: {
+          id: true,
+          name: true,
+          category: { select: { name: true, slug: true } },
+        },
+      },
+
+      customer: {
+        select: {
+          id: true, // customerProfileId
+          userId: true,
+          avatarUrl: true,
+          user: { select: { id: true, email: true, name: true, surname: true } },
+        },
+      },
+
+      specialist: {
+        select: {
+          id: true, // specialistProfileId
+          userId: true,
+          avatarUrl: true,
+          user: { select: { id: true, email: true, name: true, surname: true } },
+        },
+      },
+
+      events: {
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, type: true, payload: true, createdAt: true },
+      },
+
+      rating: {
+        select: { score: true, comment: true, createdAt: true },
+      },
+
       chatThread: { select: { id: true } },
     },
   });
 
   if (!o) return res.status(404).json({ ok: false, error: 'not_found' });
 
-  const userIds = [o.customerId, o.specialistId].filter((x): x is string => Boolean(x));
+  // adjuntos normalizados (igual que en orders.routes.ts)
+  const rawAttachments = Array.isArray(o.attachments) ? (o.attachments as any[]) : [];
+  const attachments = rawAttachments
+    .map((a) => {
+      if (!a) return null;
+      const url = a.url ?? a.uri ?? a.fileUrl ?? null;
+      if (!url || typeof url !== 'string') return null;
+      return {
+        type: a.type ?? 'image',
+        url,
+      };
+    })
+    .filter(Boolean);
 
-  const users = await prisma.user.findMany({
-    where: { id: { in: userIds } },
-    select: { id: true, name: true, surname: true, email: true },
-  });
-
-  const userMap = new Map(users.map((u) => [u.id, u]));
-
-  let service: { id: string; name: string } | null = null;
-  try {
-    service = await prisma.service.findUnique({
-      where: { id: o.serviceId },
-      select: { id: true, name: true },
-    });
-  } catch {
-    service = null;
-  }
-
-  const customer = userMap.get(o.customerId) ?? null;
-  const specialist = o.specialistId ? (userMap.get(o.specialistId) ?? null) : null;
+  const resolvedAddress =
+    typeof o.location?.formatted === 'string' && o.location.formatted.trim()
+      ? o.location.formatted.trim()
+      : typeof o.addressText === 'string' && o.addressText.trim()
+        ? o.addressText.trim()
+        : null;
 
   return res.json({
     ok: true,
@@ -472,31 +501,70 @@ adminRouter.get('/orders/:id', async (req, res) => {
       status: o.status,
       createdAt: o.createdAt.toISOString(),
       updatedAt: o.updatedAt.toISOString(),
+
       description: o.description ?? null,
       isUrgent: Boolean(o.isUrgent),
       preferredAt: o.preferredAt ? o.preferredAt.toISOString() : null,
       scheduledAt: o.scheduledAt ? o.scheduledAt.toISOString() : null,
-      attachments: (o.attachments as unknown[]) ?? [],
+
+      // compat admin-web:
+      address: resolvedAddress,
+      location: o.location
+        ? {
+            formatted: o.location.formatted,
+            lat: o.location.lat,
+            lng: o.location.lng,
+          }
+        : null,
+
+      attachments,
+
       chatThreadId: o.chatThread?.id ?? null,
 
-      customer: customer
+      service: o.service
         ? {
-            id: customer.id,
-            name: `${customer.name ?? ''} ${customer.surname ?? ''}`.trim() || null,
-            email: customer.email ?? null,
-            select: { id: true, name: true, surname: true, email: true },
+            id: o.service.id,
+            name: o.service.name,
+            categoryName: o.service.category?.name ?? null,
+            categorySlug: o.service.category?.slug ?? null,
           }
         : null,
 
-      specialist: specialist
+      customer: o.customer
         ? {
-            id: specialist.id,
-            name: `${specialist.name ?? ''} ${specialist.surname ?? ''}`.trim() || null,
-            email: specialist.email ?? null,
+            customerId: o.customer.id,
+            userId: o.customer.userId,
+            email: o.customer.user?.email ?? null,
+            name: `${o.customer.user?.name ?? ''} ${o.customer.user?.surname ?? ''}`.trim() || null,
+            avatarUrl: o.customer.avatarUrl ?? null,
           }
         : null,
 
-      service: service ? { id: service.id, name: service.name } : null,
+      specialist: o.specialist
+        ? {
+            specialistId: o.specialist.id,
+            userId: o.specialist.userId,
+            email: o.specialist.user?.email ?? null,
+            name:
+              `${o.specialist.user?.name ?? ''} ${o.specialist.user?.surname ?? ''}`.trim() || null,
+            avatarUrl: o.specialist.avatarUrl ?? null,
+          }
+        : null,
+
+      events: (o.events ?? []).map((e) => ({
+        id: e.id,
+        type: e.type,
+        payload: e.payload,
+        createdAt: e.createdAt.toISOString(),
+      })),
+
+      rating: o.rating
+        ? {
+            score: o.rating.score,
+            comment: o.rating.comment ?? null,
+            createdAt: o.rating.createdAt.toISOString(),
+          }
+        : null,
     },
   });
 });
@@ -539,6 +607,7 @@ adminRouter.get('/specialists', async (_req, res) => {
         },
       },
     },
+    take: 500,
   });
 
   const result = users.map((u) => {
@@ -582,7 +651,6 @@ adminRouter.get('/specialists', async (_req, res) => {
 
       daysLeft,
 
-      // ✅ NUEVO
       specialties,
       specialtySlugs,
     };
@@ -646,7 +714,6 @@ adminRouter.get('/specialists/:id', async (req, res) => {
       },
     },
 
-    // ✅ LO QUE FALTABA: matrículas/certificaciones
     certifications: {
       orderBy: { createdAt: 'desc' as const },
       select: {
@@ -664,7 +731,6 @@ adminRouter.get('/specialists/:id', async (req, res) => {
     },
   } as const;
 
-  // 1) intentar por specialistId
   let user = await prisma.user.findFirst({
     where: { role: 'SPECIALIST', specialist: { is: { id } } },
     select: {
@@ -678,7 +744,6 @@ adminRouter.get('/specialists/:id', async (req, res) => {
     },
   });
 
-  // 2) fallback por userId
   if (!user) {
     user = await prisma.user.findFirst({
       where: { id, role: 'SPECIALIST' },
@@ -717,7 +782,7 @@ adminRouter.get('/specialists/:id', async (req, res) => {
   const certifications = (spec.certifications ?? []).map((c) => ({
     id: c.id,
     status: c.status,
-    fileUrl: toAbsoluteUrl(c.fileUrl) ?? null, // el admin-web usa absoluteMediaUrl() con VITE_API_URL
+    fileUrl: toAbsoluteUrl(c.fileUrl) ?? null,
     number: c.number ?? null,
     issuer: c.issuer ?? null,
     expiresAt: c.expiresAt ? c.expiresAt.toISOString() : null,
@@ -791,7 +856,6 @@ adminRouter.get('/specialists/:id', async (req, res) => {
         }
       : null,
 
-    // ✅ CLAVE: ahora el admin-web puede listar/aprobar/rechazar
     certifications,
   });
 });
@@ -1087,7 +1151,6 @@ adminRouter.patch('/background-checks/:id/approve', async (req, res) => {
   const userId = bg.specialist?.userId;
   if (!userId) return res.status(400).json({ ok: false, error: 'user_not_found' });
 
-  // anti-duplicado: sólo si PENDING
   const result = await prisma.specialistBackgroundCheck.updateMany({
     where: { id, status: 'PENDING' },
     data: {
@@ -1104,7 +1167,7 @@ adminRouter.patch('/background-checks/:id/approve', async (req, res) => {
 
   try {
     await notifyBackgroundCheckStatus({
-      userId, // ya lo tenés calculado arriba
+      userId,
       status: 'APPROVED',
       backgroundCheckId: id,
       fileUrl: bg.fileUrl ?? null,
@@ -1142,7 +1205,6 @@ adminRouter.patch('/background-checks/:id/reject', async (req, res) => {
   const userId = bg.specialist?.userId;
   if (!userId) return res.status(400).json({ ok: false, error: 'user_not_found' });
 
-  // anti-duplicado: sólo si PENDING
   const result = await prisma.specialistBackgroundCheck.updateMany({
     where: { id, status: 'PENDING' },
     data: {
@@ -1172,10 +1234,7 @@ adminRouter.patch('/background-checks/:id/reject', async (req, res) => {
   return res.json({ ok: true, id, status: 'REJECTED', rejectionReason: parsed.data.reason });
 });
 
-/** POST /admin/background-checks/:id/request-update
- * Solo notifica al especialista para que suba un nuevo antecedente.
- * NO cambia el status del background check.
- */
+/** POST /admin/background-checks/:id/request-update */
 adminRouter.post('/background-checks/:id/request-update', async (req, res) => {
   const id = String(req.params.id ?? '').trim();
   if (!id) return res.status(400).json({ ok: false, error: 'id_required' });
@@ -1200,7 +1259,6 @@ adminRouter.post('/background-checks/:id/request-update', async (req, res) => {
   const body =
     'Necesitamos que actualices tu certificado de antecedentes. Subí uno nuevo desde la app.';
 
-  // ✅ Crear notification en DB + push (mismo patrón que grant-days)
   const notif = await prisma.notification.create({
     data: {
       userId,
@@ -1230,14 +1288,7 @@ adminRouter.post('/background-checks/:id/request-update', async (req, res) => {
   return res.json({ ok: true, id, notificationId: notif.id });
 });
 
-/** PATCH /admin/background-checks/:id/expire
- * Marca como vencido:
- * - cambia status a REJECTED (porque tu enum no tiene EXPIRED)
- * - setea rejectionReason
- * - reviewedAt ahora
- * - apaga availableNow
- * - notifica al especialista
- */
+/** PATCH /admin/background-checks/:id/expire */
 adminRouter.patch('/background-checks/:id/expire', async (req, res) => {
   const id = String(req.params.id ?? '').trim();
   if (!id) return res.status(400).json({ ok: false, error: 'id_required' });
@@ -1258,7 +1309,6 @@ adminRouter.patch('/background-checks/:id/expire', async (req, res) => {
   const userId = bg.specialist?.userId;
   if (!userId) return res.status(400).json({ ok: false, error: 'user_not_found' });
 
-  // ✅ 1) Marcar como "vencido" usando REJECTED + reason
   const reason = 'Vencido: por favor subí un antecedente actualizado.';
 
   const result = await prisma.specialistBackgroundCheck.update({
@@ -1267,18 +1317,16 @@ adminRouter.patch('/background-checks/:id/expire', async (req, res) => {
       status: 'REJECTED',
       rejectionReason: reason,
       reviewedAt: new Date(),
-      reviewerId: (req as any).admin?.sub ?? null, // si querés guardar admin id
+      reviewerId: (req as any).admin?.sub ?? null,
     },
     select: { id: true, status: true, rejectionReason: true, reviewedAt: true },
   });
 
-  // ✅ 2) Bloquear disponibilidad (si estaba disponible)
   await prisma.specialistProfile.update({
     where: { id: bg.specialistId },
     data: { availableNow: false },
   });
 
-  // ✅ 3) Notificar (reutilizamos tu servicio existente)
   try {
     await notifyBackgroundCheckStatus({
       userId,
@@ -1373,7 +1421,6 @@ adminRouter.patch('/certifications/:certId/approve', async (req, res) => {
       .json({ ok: false, error: 'invalid_input', details: parsed.error.flatten() });
   }
 
-  // leer para userId + category
   const cert = await prisma.specialistCertification.findUnique({
     where: { id: certId },
     select: {
@@ -1388,7 +1435,6 @@ adminRouter.patch('/certifications/:certId/approve', async (req, res) => {
   const userId = cert.specialist?.userId;
   if (!userId) return res.status(400).json({ ok: false, error: 'user_not_found' });
 
-  // ✅ anti-duplicado: solo si estaba PENDING
   const result = await prisma.specialistCertification.updateMany({
     where: { id: certId, status: 'PENDING' },
     data: {
@@ -1408,7 +1454,6 @@ adminRouter.patch('/certifications/:certId/approve', async (req, res) => {
     select: { id: true, status: true, reviewedAt: true },
   });
 
-  // ✅ notificación + push centralizado
   try {
     await notifyCertificationStatus({
       userId,
@@ -1441,7 +1486,6 @@ adminRouter.patch('/certifications/:certId/reject', async (req, res) => {
       .json({ ok: false, error: 'invalid_input', details: parsed.error.flatten() });
   }
 
-  // leer para userId + category
   const cert = await prisma.specialistCertification.findUnique({
     where: { id: certId },
     select: {
@@ -1456,7 +1500,6 @@ adminRouter.patch('/certifications/:certId/reject', async (req, res) => {
   const userId = cert.specialist?.userId;
   if (!userId) return res.status(400).json({ ok: false, error: 'user_not_found' });
 
-  // ✅ anti-duplicado: solo si estaba PENDING
   const result = await prisma.specialistCertification.updateMany({
     where: { id: certId, status: 'PENDING' },
     data: {
@@ -1476,7 +1519,6 @@ adminRouter.patch('/certifications/:certId/reject', async (req, res) => {
     select: { id: true, status: true, reviewedAt: true, rejectionReason: true },
   });
 
-  // ✅ notificación + push centralizado
   try {
     await notifyCertificationStatus({
       userId,
@@ -1502,8 +1544,6 @@ adminRouter.patch('/certifications/:certId/reject', async (req, res) => {
 /**
  * PATCH /admin/specialists/:specialistId/grant-days
  * Body: { days: number }
- *
- * ✅ Además de extender suscripción, crea Notification + Push.
  */
 adminRouter.patch('/specialists/:specialistId/grant-days', async (req, res) => {
   const { specialistId } = req.params;
@@ -1650,9 +1690,6 @@ adminRouter.patch('/specialists/:specialistId/grant-days', async (req, res) => {
 
 /**
  * DELETE /admin/users/:userId
- * Query:
- *  - mode=anonymize (default)  => libera email (recomendado para testing)
- *  - mode=hard                => hard delete (riesgoso si hay FKs)
  */
 adminRouter.delete('/users/:userId', requireAdmin, async (req, res) => {
   const userId = String(req.params.userId ?? '').trim();
@@ -1679,27 +1716,23 @@ adminRouter.delete('/users/:userId', requireAdmin, async (req, res) => {
   const oldEmail = user.email;
   const specialistId = user.specialist?.id ?? null;
 
-  // ✅ MODO SEGURO: libera el email y corta sesiones/tokens.
   if (mode === 'anonymize') {
     const newEmail = `deleted+${Date.now()}_${userId}@deleted.local`.toLowerCase();
 
     await prisma.$transaction(async (tx) => {
-      // cortar acceso/sesiones
       await tx.pushToken.deleteMany({ where: { userId } });
       await tx.notification.deleteMany({ where: { userId } });
 
-      // si querés bloquear para que no aparezca como activo
       await tx.user.update({
         where: { id: userId },
         data: {
           email: newEmail,
-          status: 'BLOCKED', // o el status que uses como inactivo
+          status: 'BLOCKED',
           name: user.role === 'ADMIN' ? 'Admin' : 'Deleted',
           surname: null,
         },
       });
 
-      // opcional: también podés “marcar” perfiles
       if (specialistId) {
         await tx.specialistProfile
           .update({
@@ -1713,22 +1746,16 @@ adminRouter.delete('/users/:userId', requireAdmin, async (req, res) => {
     return res.json({ ok: true, mode, userId, oldEmail, newEmail });
   }
 
-  // 🧨 MODO HARD: intenta borrar relaciones principales.
-  // Nota: si tenés FKs estrictas, puede fallar y te conviene el anonymize.
   try {
     await prisma.$transaction(async (tx) => {
-      // tokens / notifs
       await tx.pushToken.deleteMany({ where: { userId } });
       await tx.notification.deleteMany({ where: { userId } });
 
-      // specialist related
       if (specialistId) {
         await tx.kycSubmission.deleteMany({ where: { specialistId } }).catch(() => {});
         await tx.specialistCertification.deleteMany({ where: { specialistId } }).catch(() => {});
         await tx.subscription.deleteMany({ where: { specialistId } }).catch(() => {});
 
-        // join table de specialties (según tu schema real puede variar)
-        // si existe: specialistSpecialty / specialistCategory / etc.
         await (tx as any).specialistSpecialty
           ?.deleteMany?.({ where: { specialistId } })
           .catch(() => {});

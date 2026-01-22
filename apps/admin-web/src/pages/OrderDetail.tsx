@@ -1,6 +1,6 @@
 // apps/admin-web/src/pages/OrderDetail.tsx
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import { getAdminOrderDetail } from '../api/adminApi';
 import './orderDetail.css';
@@ -106,9 +106,10 @@ export default function OrderDetail() {
   return (
     <div className="odShell">
       <div className="odTop">
-        <Link to="/app/orders" className="odBack">
-          ← Volver a órdenes
-        </Link>
+        <button className="odBack" onClick={() => nav(-1)}>
+  ← Volver a órdenes
+</button>
+
 
         <div>
           <h1 className="odTitle">Detalle de orden</h1>

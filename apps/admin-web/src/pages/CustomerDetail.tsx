@@ -1,3 +1,4 @@
+//apps/admin-web/serc/pages/CustomerDetail.tsx
 import React, { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {

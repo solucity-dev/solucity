@@ -221,6 +221,7 @@ async function syncSearchIndexForUser(userId: string) {
       ratingCount: true,
       badge: true,
       user: { select: { status: true } },
+      backgroundCheck: { select: { status: true } }, // ✅ NUEVO
       specialties: {
         include: {
           category: { select: { slug: true, group: { select: { slug: true } } } },
@@ -241,8 +242,10 @@ async function syncSearchIndexForUser(userId: string) {
   // availableNow solo true si está VERIFIED
   const userOk = spec.user?.status !== 'BLOCKED';
 
+  const bgOk = spec.backgroundCheck?.status === 'APPROVED';
+
   const safeAvailableNow =
-    userOk && spec.kycStatus === 'VERIFIED' ? (spec.availableNow ?? false) : false;
+    userOk && spec.kycStatus === 'VERIFIED' && bgOk ? (spec.availableNow ?? false) : false;
 
   await prisma.specialistSearchIndex.upsert({
     where: { specialistId: spec.id },
@@ -282,6 +285,42 @@ async function hasApprovedBackgroundCheck(specialistId: string) {
     select: { status: true },
   });
   return bg?.status === 'APPROVED';
+}
+
+/** ===== helper: disponibilidad real (KYC + BG + horario + toggle + user ok) ===== */
+async function computeSafeAvailability(opts: {
+  userId: string;
+  specialistId: string;
+  kycStatus: 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'REJECTED' | string;
+  availableNow: boolean | null | undefined;
+  availability: any;
+}) {
+  const user = await prisma.user.findUnique({
+    where: { id: opts.userId },
+    select: { status: true },
+  });
+
+  const userOk = user?.status !== 'BLOCKED';
+  const kycOk = opts.kycStatus === 'VERIFIED';
+
+  const bg = await prisma.specialistBackgroundCheck.findUnique({
+    where: { specialistId: opts.specialistId },
+    select: { status: true },
+  });
+
+  const bgOk = bg?.status === 'APPROVED';
+  const toggleOk = !!opts.availableNow;
+  const scheduleOk = isWithinAvailability(opts.availability);
+
+  return {
+    userOk,
+    kycOk,
+    bgOk,
+    toggleOk,
+    scheduleOk,
+    canToggle: userOk && kycOk && bgOk,
+    visibleNow: userOk && kycOk && bgOk && toggleOk && scheduleOk,
+  };
 }
 
 /** ===== helper: stats de contrataciones ===== */
@@ -439,6 +478,8 @@ router.get('/search', async (req, res) => {
         availability: true,
         availableNow: true,
         pricingLabel: true, // ✅ NUEVO
+        backgroundCheck: { select: { status: true } },
+        user: { select: { status: true } },
       },
     });
 
@@ -500,17 +541,26 @@ router.get('/search', async (req, res) => {
     let enriched = withDist.map((x) => {
       const prof = profById.get(x.specialistId);
       const user = prof ? userById.get(prof.userId) : undefined;
-      const name = `${user?.name ?? 'Especialista'} ${user?.surname ?? ''}`.trim();
 
+      // ✅ 1) userOk viene del profile.user.status (ya lo traés en select)
+      const userOk = prof?.user?.status !== 'BLOCKED';
+
+      // ✅ 2) disponibilidad real
       const kycOk = prof?.kycStatus === 'VERIFIED';
-      const toggleAvailable = kycOk ? !!prof?.availableNow : false;
+      const bgOk = prof?.backgroundCheck?.status === 'APPROVED';
+      const toggleAvailable = kycOk && bgOk ? !!prof?.availableNow : false;
       const scheduleOk = isWithinAvailability(prof?.availability);
-      const visibleNow = kycOk && toggleAvailable && scheduleOk;
+
+      const visibleNow = userOk && kycOk && bgOk && toggleAvailable && scheduleOk;
+
+      const name = `${user?.name ?? 'Especialista'} ${user?.surname ?? ''}`.trim();
 
       const debugInfo = debug
         ? {
             _debug: {
+              userOk,
               kycOk,
+              bgOk,
               toggleAvailable,
               scheduleOk,
               availability: prof?.availability ?? null,
@@ -529,12 +579,14 @@ router.get('/search', async (req, res) => {
         : {};
 
       const certStatus = category ? (certStatusBySpecialistId.get(x.specialistId) ?? null) : null;
-
       const categoryEnabled = category ? enabledBySpecialistId.get(x.specialistId) === true : true;
 
       return {
         ...x,
         ...debugInfo,
+
+        // ✅ campo para filtrar
+        userOk,
 
         name,
 
@@ -543,8 +595,8 @@ router.get('/search', async (req, res) => {
 
         // 👇 nuevos campos para dejarlo perfecto
         requiresCertification: category ? requiresCertificationForCategory : false,
-        certStatus, // 'PENDING' | 'APPROVED' | 'REJECTED' | null
-        categoryEnabled, // boolean final por rubro
+        certStatus,
+        categoryEnabled,
 
         kycStatus: prof?.kycStatus ?? 'UNVERIFIED',
         avatarUrl: prof?.avatarUrl ?? null,
@@ -552,6 +604,8 @@ router.get('/search', async (req, res) => {
         pricingLabel: prof?.pricingLabel ?? null,
       };
     });
+
+    enriched = enriched.filter((x) => x.userOk !== false);
 
     if (onlyAvailable) enriched = enriched.filter((x) => x.availableNow === true);
     if (onlyEnabled) enriched = enriched.filter((x) => x.enabled === true);
@@ -994,15 +1048,18 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
     }
 
     const avail = (profile.availability as any) || null;
-    const isVerified = profile.kycStatus === 'VERIFIED';
 
-    const available = isVerified
-      ? typeof profile.availableNow === 'boolean'
-        ? profile.availableNow
-        : typeof avail?.enabled === 'boolean'
-          ? !!avail.enabled
-          : false
-      : false;
+    // ✅ disponibilidad real consistente (KYC + BG + horario + toggle + user ok)
+    const safe = await computeSafeAvailability({
+      userId,
+      specialistId: profile.id,
+      kycStatus: profile.kycStatus as any,
+      availableNow: profile.availableNow,
+      availability: avail,
+    });
+
+    // 👉 lo que el mobile usa para pintar el switch
+    const available = safe.visibleNow;
 
     const ratingAvg = profile.ratingAvg ?? null;
     const ratingCount = profile.ratingCount ?? null;
@@ -1359,6 +1416,7 @@ router.get('/:id', async (req, res) => {
         radiusKm: true,
         availability: true,
         avatarUrl: true,
+        backgroundCheck: { select: { status: true } }, // ✅ NUEVO
         specialties: {
           select: {
             categoryId: true,
@@ -1370,7 +1428,10 @@ router.get('/:id', async (req, res) => {
     if (!spec) return res.status(404).json({ ok: false, error: 'Not found' });
 
     const userOk = spec.user?.status !== 'BLOCKED';
-    const safeAvailableNow = userOk && spec.kycStatus === 'VERIFIED' ? !!spec.availableNow : false;
+    const bgOk = spec.backgroundCheck?.status === 'APPROVED';
+
+    const safeAvailableNow =
+      userOk && spec.kycStatus === 'VERIFIED' && bgOk ? !!spec.availableNow : false;
 
     const user = await prisma.user.findUnique({
       where: { id: spec.userId },

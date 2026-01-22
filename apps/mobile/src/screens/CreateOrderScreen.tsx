@@ -35,6 +35,7 @@ type MeResponse = {
     id: string;
     role: 'CUSTOMER' | 'SPECIALIST' | 'ADMIN';
     email?: string | null;
+    status?: 'ACTIVE' | 'BLOCKED' | string | null;
   };
   profiles: { customerId: string | null; specialistId: string | null };
   defaultAddress?: { id: string; formatted: string } | null;
@@ -331,6 +332,15 @@ export default function CreateOrderScreen() {
         return;
       }
 
+      // ✅ BLOQUEO CLIENTE (solo frontend): si está BLOCKED no puede crear órdenes
+      if (String(me?.user?.status ?? '').toUpperCase() === 'BLOCKED') {
+        Alert.alert(
+          'Cuenta bloqueada',
+          'Tu cuenta está bloqueada y no podés crear pedidos. Contactá soporte.',
+        );
+        return;
+      }
+
       const customerId = me?.profiles?.customerId;
       if (!customerId) {
         Alert.alert('Sesión requerida', 'No pudimos identificar el perfil de cliente (auth/me).');
@@ -495,7 +505,9 @@ export default function CreateOrderScreen() {
     }
   };
 
-  const canInteract = !(submitting || meLoading);
+  const isBlocked = String(me?.user?.status ?? '').toUpperCase() === 'BLOCKED';
+
+  const canInteract = !(submitting || meLoading || isBlocked);
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>

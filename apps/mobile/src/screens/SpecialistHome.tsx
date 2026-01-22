@@ -206,6 +206,14 @@ export default function SpecialistHome() {
   const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>([]);
   const categoriesLoadedOnceRef = useRef(false);
 
+  // ✅ Si ya cargó el catálogo real, limpiamos specialties inválidos que pudieron venir del fallback
+  useEffect(() => {
+    if (!categoryOptions.length) return;
+
+    const valid = new Set(categoryOptions.map((c) => c.slug));
+    setSpecialties((prev) => prev.filter((s) => valid.has(s)));
+  }, [categoryOptions]);
+
   // ⭐ reseñas
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
@@ -274,11 +282,14 @@ export default function SpecialistHome() {
     }
   }, []);
 
-  function requiresCert(slug: string) {
-    const fromApi = categoryOptions.find((c) => c.slug === slug)?.requiresCertification;
-    if (typeof fromApi === 'boolean') return fromApi;
-    return REQUIRES_CERT_FALLBACK.has(slug);
-  }
+  const requiresCert = useCallback(
+    (slug: string) => {
+      const fromApi = categoryOptions.find((c) => c.slug === slug)?.requiresCertification;
+      if (typeof fromApi === 'boolean') return fromApi;
+      return REQUIRES_CERT_FALLBACK.has(slug);
+    },
+    [categoryOptions],
+  );
 
   function catNameBySlug(slug: string) {
     return categoryOptions.find((c) => c.slug === slug)?.name ?? slug;
@@ -613,6 +624,9 @@ export default function SpecialistHome() {
     try {
       setAvailable(v);
       await api.patch('/specialists/me', { available: v });
+
+      // ✅ asegura coherencia contra reglas server-side
+      await reloadProfileAndSubscription({ silent: true });
     } catch (e: any) {
       const err = e?.response?.data?.error;
 
@@ -621,6 +635,12 @@ export default function SpecialistHome() {
           'Antecedentes requeridos',
           'Para activar tu disponibilidad necesitás tener el antecedente penal aprobado.',
         );
+        setAvailable(false);
+        return;
+      }
+
+      if (e?.response?.status === 403 && err === 'user_blocked') {
+        Alert.alert('Cuenta bloqueada', 'Tu cuenta está bloqueada. Contactá soporte.');
         setAvailable(false);
         return;
       }
@@ -634,7 +654,7 @@ export default function SpecialistHome() {
         return;
       }
 
-      setAvailable((prev) => !prev);
+      setAvailable(!v);
       Alert.alert('Ups', 'No se pudo actualizar el estado.');
     }
   }
@@ -826,7 +846,7 @@ export default function SpecialistHome() {
 
   const specialtiesRequiringCert = useMemo(
     () => specialties.filter((s) => requiresCert(s)),
-    [specialties, categoryOptions],
+    [specialties, requiresCert],
   );
 
   if (loading) {

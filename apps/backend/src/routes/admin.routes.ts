@@ -319,9 +319,12 @@ adminRouter.get('/orders', async (req, res) => {
   const where: any = {};
   if (statusRaw && statusRaw !== 'ALL') where.status = statusRaw;
 
-  // búsqueda simple: por id (si después querés sumar email, lo hacemos)
   if (q) {
-    where.OR = [{ id: { contains: q, mode: 'insensitive' } }];
+    where.OR = [
+      { id: { contains: q, mode: 'insensitive' } },
+      { customer: { user: { email: { contains: q, mode: 'insensitive' } } } },
+      { specialist: { user: { email: { contains: q, mode: 'insensitive' } } } },
+    ];
   }
 
   const orders = await prisma.serviceOrder.findMany({
@@ -338,28 +341,22 @@ adminRouter.get('/orders', async (req, res) => {
       scheduledAt: true,
 
       service: {
-        select: {
-          id: true,
-          name: true,
-          category: { select: { name: true, slug: true } },
-        },
+        select: { id: true, name: true },
       },
 
       customer: {
         select: {
-          id: true, // customerProfileId
-          userId: true,
-          avatarUrl: true,
-          user: { select: { id: true, email: true, name: true, surname: true } },
+          id: true, // CustomerProfile.id
+          userId: true, // User.id
+          user: { select: { id: true, name: true, surname: true, email: true } },
         },
       },
 
       specialist: {
         select: {
-          id: true, // specialistProfileId
-          userId: true,
-          avatarUrl: true,
-          user: { select: { id: true, email: true, name: true, surname: true } },
+          id: true, // SpecialistProfile.id
+          userId: true, // User.id
+          user: { select: { id: true, name: true, surname: true, email: true } },
         },
       },
     },
@@ -377,35 +374,26 @@ adminRouter.get('/orders', async (req, res) => {
       preferredAt: o.preferredAt ? o.preferredAt.toISOString() : null,
       scheduledAt: o.scheduledAt ? o.scheduledAt.toISOString() : null,
 
-      customer: o.customer
+      customer: o.customer?.user
         ? {
+            userId: o.customer.user.id,
             customerId: o.customer.id,
-            userId: o.customer.userId,
-            email: o.customer.user?.email ?? null,
-            name: `${o.customer.user?.name ?? ''} ${o.customer.user?.surname ?? ''}`.trim() || null,
-            avatarUrl: o.customer.avatarUrl ?? null,
+            name: `${o.customer.user.name ?? ''} ${o.customer.user.surname ?? ''}`.trim() || null,
+            email: o.customer.user.email ?? null,
           }
         : null,
 
-      specialist: o.specialist
+      specialist: o.specialist?.user
         ? {
+            userId: o.specialist.user.id,
             specialistId: o.specialist.id,
-            userId: o.specialist.userId,
-            email: o.specialist.user?.email ?? null,
             name:
-              `${o.specialist.user?.name ?? ''} ${o.specialist.user?.surname ?? ''}`.trim() || null,
-            avatarUrl: o.specialist.avatarUrl ?? null,
+              `${o.specialist.user.name ?? ''} ${o.specialist.user.surname ?? ''}`.trim() || null,
+            email: o.specialist.user.email ?? null,
           }
         : null,
 
-      service: o.service
-        ? {
-            id: o.service.id,
-            name: o.service.name,
-            categoryName: o.service.category?.name ?? null,
-            categorySlug: o.service.category?.slug ?? null,
-          }
-        : null,
+      service: o.service ? { id: o.service.id, name: o.service.name } : null,
     })),
   });
 });
@@ -422,77 +410,35 @@ adminRouter.get('/orders/:id', async (req, res) => {
       status: true,
       createdAt: true,
       updatedAt: true,
-
       description: true,
       isUrgent: true,
       preferredAt: true,
       scheduledAt: true,
       attachments: true,
 
-      addressText: true,
-      location: { select: { formatted: true, lat: true, lng: true } },
+      chatThread: { select: { id: true } },
 
-      service: {
-        select: {
-          id: true,
-          name: true,
-          category: { select: { name: true, slug: true } },
-        },
-      },
+      service: { select: { id: true, name: true } },
 
       customer: {
         select: {
-          id: true, // customerProfileId
+          id: true,
           userId: true,
-          avatarUrl: true,
-          user: { select: { id: true, email: true, name: true, surname: true } },
+          user: { select: { id: true, name: true, surname: true, email: true } },
         },
       },
 
       specialist: {
         select: {
-          id: true, // specialistProfileId
+          id: true,
           userId: true,
-          avatarUrl: true,
-          user: { select: { id: true, email: true, name: true, surname: true } },
+          user: { select: { id: true, name: true, surname: true, email: true } },
         },
       },
-
-      events: {
-        orderBy: { createdAt: 'asc' },
-        select: { id: true, type: true, payload: true, createdAt: true },
-      },
-
-      rating: {
-        select: { score: true, comment: true, createdAt: true },
-      },
-
-      chatThread: { select: { id: true } },
     },
   });
 
   if (!o) return res.status(404).json({ ok: false, error: 'not_found' });
-
-  // adjuntos normalizados (igual que en orders.routes.ts)
-  const rawAttachments = Array.isArray(o.attachments) ? (o.attachments as any[]) : [];
-  const attachments = rawAttachments
-    .map((a) => {
-      if (!a) return null;
-      const url = a.url ?? a.uri ?? a.fileUrl ?? null;
-      if (!url || typeof url !== 'string') return null;
-      return {
-        type: a.type ?? 'image',
-        url,
-      };
-    })
-    .filter(Boolean);
-
-  const resolvedAddress =
-    typeof o.location?.formatted === 'string' && o.location.formatted.trim()
-      ? o.location.formatted.trim()
-      : typeof o.addressText === 'string' && o.addressText.trim()
-        ? o.addressText.trim()
-        : null;
 
   return res.json({
     ok: true,
@@ -501,70 +447,33 @@ adminRouter.get('/orders/:id', async (req, res) => {
       status: o.status,
       createdAt: o.createdAt.toISOString(),
       updatedAt: o.updatedAt.toISOString(),
-
       description: o.description ?? null,
       isUrgent: Boolean(o.isUrgent),
       preferredAt: o.preferredAt ? o.preferredAt.toISOString() : null,
       scheduledAt: o.scheduledAt ? o.scheduledAt.toISOString() : null,
-
-      // compat admin-web:
-      address: resolvedAddress,
-      location: o.location
-        ? {
-            formatted: o.location.formatted,
-            lat: o.location.lat,
-            lng: o.location.lng,
-          }
-        : null,
-
-      attachments,
-
+      attachments: Array.isArray(o.attachments) ? (o.attachments as any[]) : [],
       chatThreadId: o.chatThread?.id ?? null,
 
-      service: o.service
+      customer: o.customer?.user
         ? {
-            id: o.service.id,
-            name: o.service.name,
-            categoryName: o.service.category?.name ?? null,
-            categorySlug: o.service.category?.slug ?? null,
-          }
-        : null,
-
-      customer: o.customer
-        ? {
+            userId: o.customer.user.id,
             customerId: o.customer.id,
-            userId: o.customer.userId,
-            email: o.customer.user?.email ?? null,
-            name: `${o.customer.user?.name ?? ''} ${o.customer.user?.surname ?? ''}`.trim() || null,
-            avatarUrl: o.customer.avatarUrl ?? null,
+            name: `${o.customer.user.name ?? ''} ${o.customer.user.surname ?? ''}`.trim() || null,
+            email: o.customer.user.email ?? null,
           }
         : null,
 
-      specialist: o.specialist
+      specialist: o.specialist?.user
         ? {
+            userId: o.specialist.user.id,
             specialistId: o.specialist.id,
-            userId: o.specialist.userId,
-            email: o.specialist.user?.email ?? null,
             name:
-              `${o.specialist.user?.name ?? ''} ${o.specialist.user?.surname ?? ''}`.trim() || null,
-            avatarUrl: o.specialist.avatarUrl ?? null,
+              `${o.specialist.user.name ?? ''} ${o.specialist.user.surname ?? ''}`.trim() || null,
+            email: o.specialist.user.email ?? null,
           }
         : null,
 
-      events: (o.events ?? []).map((e) => ({
-        id: e.id,
-        type: e.type,
-        payload: e.payload,
-        createdAt: e.createdAt.toISOString(),
-      })),
-
-      rating: o.rating
-        ? {
-            score: o.rating.score,
-            comment: o.rating.comment ?? null,
-            createdAt: o.rating.createdAt.toISOString(),
-          }
-        : null,
+      service: o.service ? { id: o.service.id, name: o.service.name } : null,
     },
   });
 });

@@ -27,8 +27,13 @@ export default function Orders() {
   const rows = useMemo(() => items ?? [], [items]);
 
   const goOrderDetail = (id: string) => nav(`/app/orders/${id}`);
-  const goCustomer = (id?: string | null) => (id ? nav(`/app/customers/${id}`) : null);
-  const goSpecialist = (id?: string | null) => (id ? nav(`/app/specialists/${id}`) : null);
+
+  // ✅ navegamos con profileId (CustomerProfile.id / SpecialistProfile.id)
+  const goCustomer = (customerId?: string | null) =>
+    customerId ? nav(`/app/customers/${customerId}`) : null;
+
+  const goSpecialist = (specialistId?: string | null) =>
+    specialistId ? nav(`/app/specialists/${specialistId}`) : null;
 
   const buildQs = (nextQ: string, nextStatus: string) => {
     const p = new URLSearchParams();
@@ -54,11 +59,8 @@ export default function Orders() {
   };
 
   const onApplyFilters = async () => {
-    // 1) actualizar URL
     const p = buildQs(q, status);
     setSearchParams(p, { replace: true });
-
-    // 2) cargar (sin useEffect → evita tu regla ESLint)
     await load(q, status);
   };
 
@@ -72,13 +74,10 @@ export default function Orders() {
     await load('', 'ALL');
   };
 
-  // Si querés que cargue al entrar a la pantalla automáticamente SIN useEffect:
-  // lo hacemos con un botón inicial "Cargar" o con auto-load en primer render.
-  // Elegí auto-load “seguro” con guard:
+  // Auto-load sin useEffect
   const [didAutoLoad, setDidAutoLoad] = useState(false);
   if (!didAutoLoad) {
     setDidAutoLoad(true);
-    // disparo async sin bloquear render
     void load(qParam, statusParam);
   }
 
@@ -142,11 +141,14 @@ export default function Orders() {
             <tbody>
               {rows.map((o) => (
                 <tr key={o.id}>
-                  <td className="mono">{o.id.slice(0, 8)}</td>
+                  {/* ✅ ID completa (con title por si tu CSS recorta) */}
+                  <td className="mono" title={o.id}>
+                    {o.id}
+                  </td>
 
                   <td>
-                    {o.customer?.id ? (
-                      <button className="linkBtn" onClick={() => goCustomer(o.customer?.id)}>
+                    {o.customer?.customerId ? (
+                      <button className="linkBtn" onClick={() => goCustomer(o.customer?.customerId)}>
                         {o.customer?.name ?? o.customer?.email ?? '—'}
                       </button>
                     ) : (
@@ -155,8 +157,11 @@ export default function Orders() {
                   </td>
 
                   <td>
-                    {o.specialist?.id ? (
-                      <button className="linkBtn" onClick={() => goSpecialist(o.specialist?.id)}>
+                    {o.specialist?.specialistId ? (
+                      <button
+                        className="linkBtn"
+                        onClick={() => goSpecialist(o.specialist?.specialistId)}
+                      >
                         {o.specialist?.name ?? o.specialist?.email ?? '—'}
                       </button>
                     ) : (
@@ -194,5 +199,4 @@ export default function Orders() {
     </div>
   );
 }
-
 

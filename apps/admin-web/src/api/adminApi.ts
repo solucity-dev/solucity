@@ -351,9 +351,14 @@ export async function setAdminCustomerStatus(id: string, status: UserStatus) {
  * ───────────────────────────────────────────────────────────── */
 
 export type AdminOrderUserLite = {
-  id: string;
-  name: string | null;
-  email: string | null;
+  // ✅ IDs para navegación
+  userId?: string | null;        // User.id (opcional)
+  customerId?: string | null;    // CustomerProfile.id (para /customers/:id)
+  specialistId?: string | null;  // SpecialistProfile.id (para /specialists/:id)
+
+  // ✅ lo que ya venías usando
+  name?: string | null;
+  email?: string | null;
 };
 
 export type AdminOrderServiceLite = {

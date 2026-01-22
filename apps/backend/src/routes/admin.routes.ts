@@ -303,6 +303,205 @@ adminRouter.get('/metrics', async (_req, res) => {
 });
 
 /**
+ * ✅ ORDERS ADMIN
+ * Listado + detalle (para admin-web)
+ */
+
+// GET /admin/orders?q=&status=
+adminRouter.get('/orders', async (req, res) => {
+  const q = String(req.query.q ?? '').trim();
+  const statusRaw = String(req.query.status ?? '')
+    .trim()
+    .toUpperCase();
+
+  // Si tenés un enum OrderStatus, podés validar acá.
+  // Para no romper, lo dejamos “string” y solo lo aplicamos si viene.
+  const where: any = {};
+  if (statusRaw && statusRaw !== 'ALL') where.status = statusRaw;
+
+  if (q) {
+    where.OR = [{ id: { contains: q, mode: 'insensitive' } }];
+  }
+
+  const orders = await prisma.serviceOrder.findMany({
+    where,
+    orderBy: { createdAt: 'desc' },
+    take: 500,
+    select: {
+      id: true,
+      status: true,
+      createdAt: true,
+      description: true,
+      isUrgent: true,
+      preferredAt: true,
+      scheduledAt: true,
+      customerId: true,
+      specialistId: true,
+      serviceId: true,
+    },
+  });
+
+  // Lookup users (customer/specialist) por ID
+  const userIds = Array.from(
+    new Set(
+      orders.flatMap((o) => [o.customerId, o.specialistId]).filter((x): x is string => Boolean(x)),
+    ),
+  );
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, name: true, surname: true, email: true },
+  });
+
+  const userMap = new Map(users.map((u) => [u.id, u]));
+
+  // Service lookup (si tu modelo se llama "service")
+  // Si el modelo NO existe como prisma.service, cambiá por el nombre correcto (ej: prisma.categoryService, prisma.serviceCatalog, etc.)
+  const serviceIds = Array.from(new Set(orders.map((o) => o.serviceId).filter(Boolean)));
+
+  let serviceMap = new Map<string, { id: string; name: string }>();
+  try {
+    const services = await prisma.service.findMany({
+      where: { id: { in: serviceIds } },
+      select: { id: true, name: true },
+    });
+    serviceMap = new Map(services.map((s) => [s.id, s]));
+  } catch {
+    // si tu prisma no tiene "service", no rompemos build: devolvemos null
+    serviceMap = new Map();
+  }
+
+  return res.json({
+    ok: true,
+    count: orders.length,
+    items: orders.map((o) => {
+      const customer = userMap.get(o.customerId) ?? null;
+      const specialist = o.specialistId ? (userMap.get(o.specialistId) ?? null) : null;
+      const service = serviceMap.get(o.serviceId) ?? null;
+
+      return {
+        id: o.id,
+        status: o.status,
+        createdAt: o.createdAt.toISOString(),
+        description: o.description ?? null,
+        isUrgent: Boolean(o.isUrgent),
+        preferredAt: o.preferredAt ? o.preferredAt.toISOString() : null,
+        scheduledAt: o.scheduledAt ? o.scheduledAt.toISOString() : null,
+
+        customer: customer
+          ? {
+              id: customer.id,
+              name: `${customer.name ?? ''} ${customer.surname ?? ''}`.trim() || null,
+              email: customer.email ?? null,
+            }
+          : null,
+
+        specialist: specialist
+          ? {
+              id: specialist.id,
+              name: `${specialist.name ?? ''} ${specialist.surname ?? ''}`.trim() || null,
+              email: specialist.email ?? null,
+            }
+          : null,
+
+        service: service
+          ? {
+              id: service.id,
+              name: service.name,
+            }
+          : null,
+      };
+    }),
+  });
+});
+
+// GET /admin/orders/:id
+adminRouter.get('/orders/:id', async (req, res) => {
+  const id = String(req.params.id ?? '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'id_required' });
+
+  const o = await prisma.serviceOrder.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
+      description: true,
+      isUrgent: true,
+      preferredAt: true,
+      scheduledAt: true,
+      attachments: true,
+      customerId: true,
+      specialistId: true,
+      serviceId: true,
+
+      // ✅ tu error dice que existe chatThread (relación)
+      chatThread: { select: { id: true } },
+    },
+  });
+
+  if (!o) return res.status(404).json({ ok: false, error: 'not_found' });
+
+  const userIds = [o.customerId, o.specialistId].filter((x): x is string => Boolean(x));
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, name: true, surname: true, email: true },
+  });
+
+  const userMap = new Map(users.map((u) => [u.id, u]));
+
+  let service: { id: string; name: string } | null = null;
+  try {
+    service = await prisma.service.findUnique({
+      where: { id: o.serviceId },
+      select: { id: true, name: true },
+    });
+  } catch {
+    service = null;
+  }
+
+  const customer = userMap.get(o.customerId) ?? null;
+  const specialist = o.specialistId ? (userMap.get(o.specialistId) ?? null) : null;
+
+  return res.json({
+    ok: true,
+    order: {
+      id: o.id,
+      status: o.status,
+      createdAt: o.createdAt.toISOString(),
+      updatedAt: o.updatedAt.toISOString(),
+      description: o.description ?? null,
+      isUrgent: Boolean(o.isUrgent),
+      preferredAt: o.preferredAt ? o.preferredAt.toISOString() : null,
+      scheduledAt: o.scheduledAt ? o.scheduledAt.toISOString() : null,
+      attachments: (o.attachments as unknown[]) ?? [],
+      chatThreadId: o.chatThread?.id ?? null,
+
+      customer: customer
+        ? {
+            id: customer.id,
+            name: `${customer.name ?? ''} ${customer.surname ?? ''}`.trim() || null,
+            email: customer.email ?? null,
+            select: { id: true, name: true, surname: true, email: true },
+          }
+        : null,
+
+      specialist: specialist
+        ? {
+            id: specialist.id,
+            name: `${specialist.name ?? ''} ${specialist.surname ?? ''}`.trim() || null,
+            email: specialist.email ?? null,
+          }
+        : null,
+
+      service: service ? { id: service.id, name: service.name } : null,
+    },
+  });
+});
+
+/**
  * GET /admin/specialists
  */
 adminRouter.get('/specialists', async (_req, res) => {

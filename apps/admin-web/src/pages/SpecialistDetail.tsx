@@ -1,6 +1,6 @@
 // apps/admin-web/src/pages/SpecialistDetail.tsx
 import React, { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   approveBackgroundCheck,
   approveCertification,
@@ -90,6 +90,8 @@ function certTone(status?: string): Tone {
 export default function SpecialistDetail() {
   const { id } = useParams<{ id: string }>();
   const { data, loading, error, reload } = useAdminSpecialistDetail(id);
+  const navigate = useNavigate();
+
 
   const typed = data as unknown as (AdminSpecialistDetail & {
   subscription?: (SubscriptionDTO | null) & { daysLeft?: number | null };
@@ -439,9 +441,14 @@ async function handleExpireBg() {
       <div className="sdTop">
         <div>
           <div className="sdBreadcrumb">
-            <Link to="/app/specialists" className="sdBack">
-              ← Volver a especialistas
-            </Link>
+            <button
+  className="sdBack"
+  onClick={() => navigate(-1)}
+  type="button"
+>
+  ← Volver a especialistas
+</button>
+
           </div>
 
           <h1 className="sdTitle">Detalle del especialista</h1>

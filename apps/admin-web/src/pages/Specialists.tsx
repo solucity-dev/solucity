@@ -31,6 +31,17 @@ function normalizeCat(v: string | null): SpecialtyFilter {
   return x || 'ALL';
 }
 
+function formatDateAR(iso?: string | null) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
 export default function Specialists() {
   const nav = useNavigate();
   const { data, loading, error, reload } = useAdminSpecialists();
@@ -158,6 +169,13 @@ export default function Specialists() {
   return (
     <div className="specShell">
       <div className="specTop">
+        <button
+  className="specBack"
+  onClick={() => nav('/app/dashboard', { replace: true })}
+>
+  ← Dashboard
+</button>
+
         <div>
           <h1 className="specTitle">Especialistas</h1>
           <p className="specSubtitle">Listado, búsqueda y filtros</p>
@@ -266,6 +284,11 @@ export default function Specialists() {
                       <div className="muted" style={{ marginTop: 2 }}>
                         <span style={{ opacity: 0.8 }}>ID:</span> {r.specialistId ?? r.userId}
                       </div>
+
+                      <div className="muted" style={{ marginTop: 2 }}>
+  <span style={{ opacity: 0.8 }}>Creado:</span> {formatDateAR(r.createdAt)}
+</div>
+
 
                       {r.specialties?.length ? (
                         <div className="muted" style={{ marginTop: 4 }}>

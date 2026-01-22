@@ -1,0 +1,160 @@
+.odShell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.odTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.odBack {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color: inherit;
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.odBack:hover {
+  background: rgba(255,255,255,0.09);
+}
+
+.odTitle {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.odSubtitle {
+  margin: 4px 0 0;
+  opacity: 0.75;
+  font-size: 13px;
+}
+
+.odBtn {
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.10);
+  color: inherit;
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.odCard {
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.04);
+  padding: 14px;
+}
+
+.odRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 860px) {
+  .odRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+.odLabel {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.75;
+  margin-bottom: 6px;
+}
+
+.odValue {
+  font-size: 14px;
+}
+
+.odMuted {
+  opacity: 0.72;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.odHr {
+  border: 0;
+  height: 1px;
+  background: rgba(255,255,255,0.10);
+  margin: 14px 0;
+}
+
+.odState {
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+}
+
+.odError {
+  background: rgba(255, 120, 120, 0.10);
+  border-color: rgba(255, 120, 120, 0.22);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.08);
+  font-weight: 800;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.rowBtn {
+  margin-top: 8px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.08);
+  color: inherit;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.rowBtn:hover {
+  background: rgba(255,255,255,0.10);
+}
+
+.rowBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.odList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.odListItem {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(0,0,0,0.18);
+}

@@ -10,6 +10,8 @@ import Customers from "../pages/Customers";
 import Dashboard from "../pages/Dashboard";
 import Login from "../pages/Login";
 import NotFound from "../pages/NotFound";
+import OrderDetail from "../pages/OrderDetail";
+import Orders from "../pages/Orders";
 import SpecialistDetail from "../pages/SpecialistDetail"; // ✅ NUEVO
 import Specialists from "../pages/Specialists"; // ✅ NUEVO
 
@@ -34,8 +36,11 @@ export const router = createBrowserRouter([
           { path: "customers", element: <Customers /> },
           { path: "customers/:id", element: <CustomerDetail /> },
 
-          { path: "specialists", element: <Specialists /> }, // ✅ NUEVO
-          { path: "specialists/:id", element: <SpecialistDetail /> }, // ✅ NUEVO
+          { path: "specialists", element: <Specialists /> },
+          { path: "specialists/:id", element: <SpecialistDetail /> },
+
+          { path: "orders", element: <Orders /> },
+          { path: "orders/:id", element: <OrderDetail /> },
 
         ],
       },

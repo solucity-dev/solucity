@@ -48,7 +48,7 @@ export type SubscriptionDTO = {
   status: SubscriptionStatus;
   trialEnd?: string | null;
   currentPeriodEnd?: string | null;
-  daysLeft?: number | null; // 👈 en detail puede venir
+  daysLeft?: number | null;
 };
 
 export type AdminSpecialtyChip = {
@@ -75,6 +75,8 @@ export type AdminSpecialistRow = {
   ratingAvg: number;
   ratingCount: number;
 
+  // ⚠️ si tu User no tiene avatarUrl, en specialist list probablemente tampoco.
+  // Dejá el campo por compatibilidad UI si ya lo usás, pero puede venir null siempre.
   avatarUrl: string | null;
 
   subscription: SubscriptionDTO | null;
@@ -125,10 +127,6 @@ export type AdminKycSubmission = {
   reviewedAt: string | null;
 };
 
-/* ─────────────────────────────────────────────────────────────
- * Background Check (detalle)
- * ───────────────────────────────────────────────────────────── */
-
 export type AdminBackgroundCheck = {
   id: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | string;
@@ -169,8 +167,7 @@ export type AdminSpecialistDetail = {
   subscription: (SubscriptionDTO & { daysLeft?: number | null }) | null;
 
   kyc: AdminKycSubmission | null;
-
-    backgroundCheck: AdminBackgroundCheck | null;
+  backgroundCheck: AdminBackgroundCheck | null;
 
   certifications: AdminCertificationItem[];
 };
@@ -230,7 +227,6 @@ export async function rejectBackgroundCheck(bgId: string, reason: string) {
   });
 }
 
-// ✅ NUEVO: pedir actualización (solo notifica, no cambia status)
 export async function requestBackgroundCheckUpdate(bgId: string) {
   return apiFetch<{ ok: true }>(
     `/admin/background-checks/${encodeURIComponent(bgId)}/request-update`,
@@ -238,7 +234,6 @@ export async function requestBackgroundCheckUpdate(bgId: string) {
   );
 }
 
-// ✅ NUEVO: marcar como vencido (rechaza + notifica + bloquea disponibilidad en backend)
 export async function expireBackgroundCheck(bgId: string) {
   return apiFetch<{ ok: true }>(`/admin/background-checks/${encodeURIComponent(bgId)}/expire`, {
     method: 'PATCH',
@@ -270,10 +265,13 @@ export type GrantDaysResponse = {
 };
 
 export async function grantDaysToSpecialist(specialistId: string, days: number) {
-  return apiFetch<GrantDaysResponse>(`/admin/specialists/${encodeURIComponent(specialistId)}/grant-days`, {
-    method: 'PATCH',
-    body: JSON.stringify({ days }),
-  });
+  return apiFetch<GrantDaysResponse>(
+    `/admin/specialists/${encodeURIComponent(specialistId)}/grant-days`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ days }),
+    },
+  );
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -346,6 +344,59 @@ export async function setAdminCustomerStatus(id: string, status: UserStatus) {
       body: JSON.stringify({ status }),
     },
   );
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Orders (admin) ✅ NUEVO
+ * ───────────────────────────────────────────────────────────── */
+
+export type AdminOrderUserLite = {
+  id: string;
+  name: string | null;
+  email: string | null;
+};
+
+export type AdminOrderServiceLite = {
+  id: string;
+  name: string;
+} | null;
+
+export type AdminOrderRow = {
+  id: string;
+  status: string;
+  createdAt: string;
+
+  description: string | null;
+  isUrgent: boolean;
+  preferredAt: string | null;
+  scheduledAt: string | null;
+
+  service: AdminOrderServiceLite;
+
+  customer: AdminOrderUserLite | null;
+  specialist: AdminOrderUserLite | null;
+};
+
+export type AdminOrdersResp = { ok: true; count: number; items: AdminOrderRow[] };
+
+export async function getAdminOrders(params?: { q?: string; status?: string }) {
+  const qs = new URLSearchParams();
+  if (params?.q?.trim()) qs.set('q', params.q.trim());
+  if (params?.status?.trim()) qs.set('status', params.status.trim());
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  return apiFetch<AdminOrdersResp>(`/admin/orders${suffix}`);
+}
+
+export type AdminOrderDetail = AdminOrderRow & {
+  updatedAt?: string;
+  attachments: unknown[];
+  chatThreadId: string | null;
+};
+
+export type AdminOrderDetailResp = { ok: true; order: AdminOrderDetail };
+
+export async function getAdminOrderDetail(id: string) {
+  return apiFetch<AdminOrderDetailResp>(`/admin/orders/${encodeURIComponent(id)}`);
 }
 
 

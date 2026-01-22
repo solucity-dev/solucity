@@ -1,0 +1,183 @@
+/* Orders page — mantiene estética "admin" sobria */
+
+.ordersShell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.ordersTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ordersBack {
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color: inherit;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.ordersBack:hover {
+  background: rgba(255,255,255,0.09);
+}
+
+.ordersTitle {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.ordersSubtitle {
+  margin: 4px 0 0;
+  opacity: 0.75;
+  font-size: 13px;
+}
+
+.ordersBtn {
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.10);
+  color: inherit;
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.ordersBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ordersFilters {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.10);
+}
+
+.ordersInput {
+  flex: 1;
+  min-width: 220px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(0,0,0,0.18);
+  color: inherit;
+  padding: 10px 12px;
+  border-radius: 12px;
+  outline: none;
+}
+
+.ordersInput::placeholder {
+  color: rgba(255,255,255,0.45);
+}
+
+.ordersSelect {
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(0,0,0,0.18);
+  color: inherit;
+  padding: 10px 12px;
+  border-radius: 12px;
+  outline: none;
+}
+
+.ordersCount {
+  margin-left: auto;
+  font-weight: 800;
+  opacity: 0.8;
+}
+
+.ordersState {
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+}
+
+.ordersTableWrap {
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.04);
+}
+
+.ordersTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ordersTable thead th {
+  text-align: left;
+  padding: 12px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.8;
+  background: rgba(0,0,0,0.18);
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+}
+
+.ordersTable tbody td {
+  padding: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  vertical-align: top;
+}
+
+.ordersTable tbody tr:hover {
+  background: rgba(255,255,255,0.04);
+}
+
+.muted {
+  opacity: 0.72;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.08);
+  font-weight: 800;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.rowBtn {
+  margin-top: 8px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.08);
+  color: inherit;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.rowBtn:hover {
+  background: rgba(255,255,255,0.10);
+}
+
+.rowBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ordersEmpty {
+  padding: 18px;
+  text-align: center;
+  opacity: 0.75;
+}

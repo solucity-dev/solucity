@@ -345,13 +345,14 @@ export async function setAdminCustomerStatus(userId: string, status: UserStatus,
 
 export async function setAdminSpecialistStatus(userId: string, status: UserStatus, reason?: string) {
   return apiFetch<{ ok: true; userId: string; status: UserStatus }>(
-    `/admin/specialists/${encodeURIComponent(userId)}/status`,
+    `/admin/users/${encodeURIComponent(userId)}/status`,
     {
       method: 'PATCH',
       body: JSON.stringify({ status, reason }),
     },
   );
 }
+
 
 
 /* ─────────────────────────────────────────────────────────────

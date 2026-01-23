@@ -9,8 +9,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "outDir": "dist",
-    "types": ["node"]
+    "types": ["node", "express"]
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts", "prisma/**/*.ts"]
 }
-

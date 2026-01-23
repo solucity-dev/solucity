@@ -9,6 +9,7 @@ import express, { type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import './config/env';
 
 import { prisma } from './lib/prisma';
 import { uploadsRoot } from './lib/uploads';

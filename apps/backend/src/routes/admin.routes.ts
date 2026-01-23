@@ -100,6 +100,138 @@ adminRouter.post('/auth/login', async (req, res) => {
 // ✅ A partir de acá, TODO requiere ADMIN token
 adminRouter.use(requireAdmin);
 
+// ✅ STATUS ADMIN (bloquear / activar usuarios)
+
+const SetUserStatusSchema = z.object({
+  status: z.enum(['ACTIVE', 'BLOCKED']),
+  reason: z.string().min(2).max(500).optional().nullable(),
+});
+
+async function notifyAccountStatusChange(params: {
+  userId: string;
+  status: 'ACTIVE' | 'BLOCKED';
+  reason?: string | null;
+  adminId?: string | null;
+}) {
+  const title = params.status === 'BLOCKED' ? 'Cuenta bloqueada' : 'Cuenta activada';
+  const body =
+    params.status === 'BLOCKED'
+      ? `Tu cuenta fue bloqueada.${params.reason ? ` Motivo: ${params.reason}` : ''}`
+      : 'Tu cuenta fue activada nuevamente.';
+
+  const notif = await prisma.notification.create({
+    data: {
+      userId: params.userId,
+      type: 'ACCOUNT_STATUS_CHANGED',
+      title,
+      body,
+      data: {
+        status: params.status,
+        reason: params.reason ?? null,
+        adminId: params.adminId ?? null,
+      } as any,
+    },
+    select: { id: true, title: true, body: true },
+  });
+
+  try {
+    await pushToUser({
+      userId: params.userId,
+      title: notif.title ?? title,
+      body: notif.body ?? body,
+      data: {
+        notificationId: notif.id,
+        type: 'ACCOUNT_STATUS_CHANGED',
+        status: params.status,
+      },
+    });
+  } catch (e) {
+    console.warn('[push] ACCOUNT_STATUS_CHANGED failed', e);
+  }
+
+  return notif.id;
+}
+
+/**
+ * PATCH /admin/users/:userId/status
+ * Body: { status: 'ACTIVE' | 'BLOCKED', reason?: string }
+ */
+adminRouter.patch('/users/:userId/status', async (req, res) => {
+  const userId = String(req.params.userId ?? '').trim();
+  if (!userId) return res.status(400).json({ ok: false, error: 'userId_required' });
+
+  const parsed = SetUserStatusSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res
+      .status(400)
+      .json({ ok: false, error: 'invalid_input', details: parsed.error.flatten() });
+  }
+
+  const { status, reason } = parsed.data;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      role: true,
+      status: true,
+      specialist: { select: { id: true } },
+    },
+  });
+
+  if (!user) return res.status(404).json({ ok: false, error: 'not_found' });
+
+  // Si ya está en ese estado, igual devolvemos ok (idempotente)
+  if (user.status === status) {
+    return res.json({ ok: true, userId, status, already: true });
+  }
+
+  const adminId = (req as any).admin?.sub ?? null;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: userId },
+      data: { status },
+    });
+
+    // Si bloqueamos especialista -> forzamos availableNow=false
+    if (user.role === 'SPECIALIST' && user.specialist?.id && status === 'BLOCKED') {
+      await tx.specialistProfile.update({
+        where: { id: user.specialist.id },
+        data: { availableNow: false },
+      });
+    }
+  });
+
+  // notificación al usuario (push + DB)
+  const notificationId = await notifyAccountStatusChange({
+    userId,
+    status,
+    reason: reason ?? null,
+    adminId,
+  }).catch((e) => {
+    console.warn('[admin] notifyAccountStatusChange failed', e);
+    return null;
+  });
+
+  return res.json({ ok: true, userId, status, notificationId });
+});
+
+/**
+ * ✅ Alias por si tu adminApi usa /admin/specialists/:userId/status
+ * PATCH /admin/specialists/:userId/status
+ */
+adminRouter.patch('/specialists/:userId/status', async (req, res, next) => {
+  // Reutilizamos el handler principal redirigiendo params.
+  // Express no “reinyecta” fácil, así que lo resolvemos llamando al mismo path interno:
+  (req as any).params.userId = String(req.params.userId ?? '').trim();
+  return (adminRouter as any).handle(
+    { ...req, url: `/users/${(req as any).params.userId}/status`, method: 'PATCH' },
+    res,
+    next,
+  );
+});
+
 /**
  * ✅ CUSTOMERS ADMIN (MVP - User only)
  * No depende de relaciones "customer" ni de CustomerProfile

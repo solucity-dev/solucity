@@ -336,15 +336,23 @@ export async function getAdminCustomerDetail(id: string) {
   return apiFetch<AdminCustomerDetail>(`/admin/customers/${encodeURIComponent(id)}`);
 }
 
-export async function setAdminCustomerStatus(id: string, status: UserStatus) {
+export async function setAdminCustomerStatus(userId: string, status: UserStatus, reason?: string) {
   return apiFetch<{ ok: true; userId: string; status: UserStatus }>(
-    `/admin/customers/${encodeURIComponent(id)}/status`,
+    `/admin/users/${encodeURIComponent(userId)}/status`,
+    { method: 'PATCH', body: JSON.stringify({ status, reason }) },
+  );
+}
+
+export async function setAdminSpecialistStatus(userId: string, status: UserStatus, reason?: string) {
+  return apiFetch<{ ok: true; userId: string; status: UserStatus }>(
+    `/admin/specialists/${encodeURIComponent(userId)}/status`,
     {
       method: 'PATCH',
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, reason }),
     },
   );
 }
+
 
 /* ─────────────────────────────────────────────────────────────
  * Orders (admin) ✅ NUEVO

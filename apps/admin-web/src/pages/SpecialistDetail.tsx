@@ -11,7 +11,9 @@ import {
   rejectCertification,
   rejectKyc,
   requestBackgroundCheckUpdate,
+  setAdminSpecialistStatus, // ✅ NUEVO
   type AdminSpecialistDetail,
+  type UserStatus, // ✅ NUEVO
 } from '../api/adminApi';
 
 import { useAdminSpecialistDetail } from '../hooks/useAdminSpecialistDetail';
@@ -92,13 +94,13 @@ export default function SpecialistDetail() {
   const { data, loading, error, reload } = useAdminSpecialistDetail(id);
   const navigate = useNavigate();
 
-
-  const typed = data as unknown as (AdminSpecialistDetail & {
-  subscription?: (SubscriptionDTO | null) & { daysLeft?: number | null };
-  kyc?: (NonNullable<AdminSpecialistDetail['kyc']> & { id?: string }) | null;
-  backgroundCheck?: AdminSpecialistDetail['backgroundCheck'] | null;
-}) | null;
-
+  const typed = data as unknown as
+    | (AdminSpecialistDetail & {
+        subscription?: (SubscriptionDTO | null) & { daysLeft?: number | null };
+        kyc?: (NonNullable<AdminSpecialistDetail['kyc']> & { id?: string }) | null;
+        backgroundCheck?: AdminSpecialistDetail['backgroundCheck'] | null;
+      })
+    | null;
 
   const [avatarFailed, setAvatarFailed] = useState(false);
 
@@ -123,16 +125,23 @@ export default function SpecialistDetail() {
   const [rejectCertReason, setRejectCertReason] = useState('');
 
   // ✅ UI BACKGROUND CHECK actions
-const [bgActionLoading, setBgActionLoading] = useState(false);
-const [bgError, setBgError] = useState<string | null>(null);
-const [bgOk, setBgOk] = useState<string | null>(null);
-const [showRejectBg, setShowRejectBg] = useState(false);
-const [rejectBgReason, setRejectBgReason] = useState('');
+  const [bgActionLoading, setBgActionLoading] = useState(false);
+  const [bgError, setBgError] = useState<string | null>(null);
+  const [bgOk, setBgOk] = useState<string | null>(null);
+  const [showRejectBg, setShowRejectBg] = useState(false);
+  const [rejectBgReason, setRejectBgReason] = useState('');
 
   // ✅ Peligro / liberar email
   const [dangerLoading, setDangerLoading] = useState(false);
   const [dangerErr, setDangerErr] = useState<string | null>(null);
   const [dangerOk, setDangerOk] = useState<string | null>(null);
+
+  // ✅ Bloqueo / Activación cuenta (Especialista)
+  const [acctLoading, setAcctLoading] = useState(false);
+  const [acctOk, setAcctOk] = useState<string | null>(null);
+  const [acctErr, setAcctErr] = useState<string | null>(null);
+  const [showBlockModal, setShowBlockModal] = useState(false);
+  const [blockReason, setBlockReason] = useState('');
 
   const initials = useMemo(() => {
     const n = typed?.name?.trim() || '';
@@ -219,9 +228,7 @@ const [rejectBgReason, setRejectBgReason] = useState('');
 
       if (!resp.ok || !json?.ok) {
         setGrantError(
-          json?.message ??
-            json?.error ??
-            `Error al agregar días (HTTP ${resp.status}). URL: ${url}`,
+          json?.message ?? json?.error ?? `Error al agregar días (HTTP ${resp.status}). URL: ${url}`,
         );
         return;
       }
@@ -327,86 +334,134 @@ const [rejectBgReason, setRejectBgReason] = useState('');
   }
 
   async function handleApproveBackgroundCheck() {
-  if (!typed?.backgroundCheck?.id) return;
+    if (!typed?.backgroundCheck?.id) return;
 
-  setBgError(null);
-  setBgOk(null);
-  setBgActionLoading(true);
-  try {
-    await approveBackgroundCheck(typed.backgroundCheck.id);
-    setBgOk('Antecedentes aprobados ✅');
-    setShowRejectBg(false);
-    setRejectBgReason('');
-    await reload();
-  } catch {
-    setBgError('No se pudo aprobar antecedentes.');
-  } finally {
-    setBgActionLoading(false);
-  }
-}
-
-async function handleRejectBackgroundCheck() {
-  if (!typed?.backgroundCheck?.id) return;
-
-  const reason = rejectBgReason.trim();
-  if (!reason) {
-    setBgError('Ingresá un motivo de rechazo.');
-    return;
+    setBgError(null);
+    setBgOk(null);
+    setBgActionLoading(true);
+    try {
+      await approveBackgroundCheck(typed.backgroundCheck.id);
+      setBgOk('Antecedentes aprobados ✅');
+      setShowRejectBg(false);
+      setRejectBgReason('');
+      await reload();
+    } catch {
+      setBgError('No se pudo aprobar antecedentes.');
+    } finally {
+      setBgActionLoading(false);
+    }
   }
 
-  setBgError(null);
-  setBgOk(null);
-  setBgActionLoading(true);
-  try {
-    await rejectBackgroundCheck(typed.backgroundCheck.id, reason);
-    setBgOk('Antecedentes rechazados ❌');
-    setShowRejectBg(false);
-    setRejectBgReason('');
-    await reload();
-  } catch {
-    setBgError('No se pudo rechazar antecedentes.');
-  } finally {
-    setBgActionLoading(false);
+  async function handleRejectBackgroundCheck() {
+    if (!typed?.backgroundCheck?.id) return;
+
+    const reason = rejectBgReason.trim();
+    if (!reason) {
+      setBgError('Ingresá un motivo de rechazo.');
+      return;
+    }
+
+    setBgError(null);
+    setBgOk(null);
+    setBgActionLoading(true);
+    try {
+      await rejectBackgroundCheck(typed.backgroundCheck.id, reason);
+      setBgOk('Antecedentes rechazados ❌');
+      setShowRejectBg(false);
+      setRejectBgReason('');
+      await reload();
+    } catch {
+      setBgError('No se pudo rechazar antecedentes.');
+    } finally {
+      setBgActionLoading(false);
+    }
   }
-}
 
-async function handleRequestBgUpdate() {
-  if (!typed?.backgroundCheck?.id) return;
+  async function handleRequestBgUpdate() {
+    if (!typed?.backgroundCheck?.id) return;
 
-  setBgError(null);
-  setBgOk(null);
-  setBgActionLoading(true);
-  try {
-    await requestBackgroundCheckUpdate(typed.backgroundCheck.id);
-    setBgOk('Se pidió actualización ✅ (se envió notificación al especialista)');
-  } catch {
-    setBgError('No se pudo pedir actualización.');
-  } finally {
-    setBgActionLoading(false);
+    setBgError(null);
+    setBgOk(null);
+    setBgActionLoading(true);
+    try {
+      await requestBackgroundCheckUpdate(typed.backgroundCheck.id);
+      setBgOk('Se pidió actualización ✅ (se envió notificación al especialista)');
+    } catch {
+      setBgError('No se pudo pedir actualización.');
+    } finally {
+      setBgActionLoading(false);
+    }
   }
-}
 
-async function handleExpireBg() {
-  if (!typed?.backgroundCheck?.id) return;
+  async function handleExpireBg() {
+    if (!typed?.backgroundCheck?.id) return;
 
-  const ok = window.confirm(
-    '¿Marcar como VENCIDO?\n\nEsto va a rechazar el antecedente, bloquear disponibilidad y notificar.',
-  );
-  if (!ok) return;
+    const ok = window.confirm(
+      '¿Marcar como VENCIDO?\n\nEsto va a rechazar el antecedente, bloquear disponibilidad y notificar.',
+    );
+    if (!ok) return;
 
-  setBgError(null);
-  setBgOk(null);
-  setBgActionLoading(true);
-  try {
-    await expireBackgroundCheck(typed.backgroundCheck.id);
-    setBgOk('Marcado como vencido ⛔ (bloqueado y notificado)');
-    await reload();
-  } catch {
-    setBgError('No se pudo marcar como vencido.');
-  } finally {
-    setBgActionLoading(false);
+    setBgError(null);
+    setBgOk(null);
+    setBgActionLoading(true);
+    try {
+      await expireBackgroundCheck(typed.backgroundCheck.id);
+      setBgOk('Marcado como vencido ⛔ (bloqueado y notificado)');
+      await reload();
+    } catch {
+      setBgError('No se pudo marcar como vencido.');
+    } finally {
+      setBgActionLoading(false);
+    }
   }
-}
+
+  // ✅ bloquear / activar especialista (con motivo)
+  async function handleConfirmBlock() {
+    if (!typed?.userId) return;
+
+    const reason = blockReason.trim();
+    if (!reason || reason.length < 3) {
+      setAcctErr('Ingresá un motivo (mínimo 3 caracteres).');
+      return;
+    }
+
+    setAcctErr(null);
+    setAcctOk(null);
+    setAcctLoading(true);
+
+    try {
+      await setAdminSpecialistStatus(typed.userId, 'BLOCKED' as UserStatus, reason);
+      setAcctOk('Usuario bloqueado ✅ (se notificará al especialista).');
+      setShowBlockModal(false);
+      setBlockReason('');
+      await reload();
+    } catch {
+      setAcctErr('No se pudo bloquear el usuario.');
+    } finally {
+      setAcctLoading(false);
+    }
+  }
+
+  async function handleActivate() {
+    if (!typed?.userId) return;
+
+    const ok = window.confirm('¿Activar nuevamente este usuario?');
+    if (!ok) return;
+
+    setAcctErr(null);
+    setAcctOk(null);
+    setAcctLoading(true);
+
+    try {
+      await setAdminSpecialistStatus(typed.userId, 'ACTIVE' as UserStatus);
+      setAcctOk('Usuario activado ✅');
+      await reload();
+    } catch {
+      setAcctErr('No se pudo activar el usuario.');
+    } finally {
+      setAcctLoading(false);
+    }
+  }
 
   // ✅ liberar email (anonymize)
   async function handleFreeEmail() {
@@ -426,12 +481,9 @@ async function handleExpireBg() {
       setDangerOk(`Listo ✅ Email liberado. Nuevo email: ${r.newEmail ?? '—'}`);
       await reload();
     } catch (e: unknown) {
-  const msg =
-    e instanceof Error ? e.message : typeof e === 'string' ? e : 'Error al liberar email';
-  setDangerErr(msg);
-}
-
-    finally {
+      const msg = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Error al liberar email';
+      setDangerErr(msg);
+    } finally {
       setDangerLoading(false);
     }
   }
@@ -441,14 +493,9 @@ async function handleExpireBg() {
       <div className="sdTop">
         <div>
           <div className="sdBreadcrumb">
-            <button
-  className="sdBack"
-  onClick={() => navigate(-1)}
-  type="button"
->
-  ← Volver a especialistas
-</button>
-
+            <button className="sdBack" onClick={() => navigate(-1)} type="button">
+              ← Volver a especialistas
+            </button>
           </div>
 
           <h1 className="sdTitle">Detalle del especialista</h1>
@@ -464,9 +511,7 @@ async function handleExpireBg() {
 
       {id && error && <div className="sdState sdError">Error: {error}</div>}
 
-      {id && !error && !typed && (
-        <div className="sdState">{loading ? 'Cargando…' : 'Sin datos'}</div>
-      )}
+      {id && !error && !typed && <div className="sdState">{loading ? 'Cargando…' : 'Sin datos'}</div>}
 
       {typed && (
         <>
@@ -490,11 +535,7 @@ async function handleExpireBg() {
 
                 <Chip tone={kycTone}>KYC: {typed.kycStatus}</Chip>
 
-                {sub ? (
-                  <Chip tone={subTone}>SUB: {sub.status}</Chip>
-                ) : (
-                  <Chip tone="neutral">Sin suscripción</Chip>
-                )}
+                {sub ? <Chip tone={subTone}>SUB: {sub.status}</Chip> : <Chip tone="neutral">Sin suscripción</Chip>}
               </div>
 
               <div className="sdMeta">
@@ -525,16 +566,88 @@ async function handleExpireBg() {
           </div>
 
           <div className="sdGrid">
+            {/* ✅ NUEVO: Cuenta / Bloqueo */}
+            <Card title="Cuenta (bloqueo)">
+              <div className="sdMuted" style={{ marginBottom: 10 }}>
+                Bloquear un especialista:
+                <br />• Deshabilita su disponibilidad (availableNow=false)
+                <br />• Le impide operar hasta reactivación
+                <br />• Envía notificación con el motivo
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {typed.status === 'ACTIVE' ? (
+                  <button
+                    className="sdBtn"
+                    onClick={() => {
+                      setAcctOk(null);
+                      setAcctErr(null);
+                      setShowBlockModal(true);
+                    }}
+                    disabled={acctLoading}
+                    style={{ backgroundColor: '#ffe6e6', color: '#8b0000' }}
+                  >
+                    🚫 Bloquear especialista
+                  </button>
+                ) : (
+                  <button className="sdBtn" onClick={handleActivate} disabled={acctLoading}>
+                    ✅ Activar especialista
+                  </button>
+                )}
+              </div>
+
+              {showBlockModal && (
+                <div style={{ marginTop: 12 }}>
+                  <textarea
+                    className="sdInput"
+                    placeholder="Motivo del bloqueo (visible para el usuario). Ej: Incumplimiento de políticas…"
+                    value={blockReason}
+                    onChange={(e) => setBlockReason(e.target.value)}
+                    rows={3}
+                    style={{ width: '100%' }}
+                    disabled={acctLoading}
+                  />
+
+                  <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <button
+                      className="sdBtn"
+                      onClick={handleConfirmBlock}
+                      disabled={acctLoading}
+                      style={{ backgroundColor: '#ffe6e6', color: '#8b0000' }}
+                    >
+                      {acctLoading ? 'Procesando…' : 'Confirmar bloqueo'}
+                    </button>
+
+                    <button
+                      className="sdBtn"
+                      onClick={() => {
+                        setShowBlockModal(false);
+                        setBlockReason('');
+                        setAcctErr(null);
+                      }}
+                      disabled={acctLoading}
+                      style={{ backgroundColor: '#eee', color: '#333' }}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {acctOk && <div className="sdState" style={{ marginTop: 12 }}>{acctOk}</div>}
+              {acctErr && (
+                <div className="sdState sdError" style={{ marginTop: 12 }}>
+                  {acctErr}
+                </div>
+              )}
+            </Card>
+
             <Card title="Perfil">
               <div className="sdKV">
                 <div className="k">
                   <span>Disponible ahora</span>
                   <strong>
-                    {typeof typed.availableNow === 'boolean'
-                      ? typed.availableNow
-                        ? 'Sí'
-                        : 'No'
-                      : '—'}
+                    {typeof typed.availableNow === 'boolean' ? (typed.availableNow ? 'Sí' : 'No') : '—'}
                   </strong>
                 </div>
 
@@ -579,9 +692,7 @@ async function handleExpireBg() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {typed.certifications
                     .slice()
-                    .sort((a, b) =>
-                      (a.category?.name ?? '').localeCompare(b.category?.name ?? '', 'es'),
-                    )
+                    .sort((a, b) => (a.category?.name ?? '').localeCompare(b.category?.name ?? '', 'es'))
                     .map((c) => {
                       const fileHref = absoluteMediaUrl(c.fileUrl) ?? '#';
                       const pending = c.status === 'PENDING';
@@ -599,32 +710,19 @@ async function handleExpireBg() {
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                             <div style={{ minWidth: 0 }}>
-                              <div
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 10,
-                                  flexWrap: 'wrap',
-                                }}
-                              >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                                 <strong>{c.category?.name ?? c.category?.slug ?? 'Rubro'}</strong>
                                 <Chip tone={certTone(c.status)}>DOC: {c.status}</Chip>
                               </div>
 
                               <div style={{ marginTop: 6, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                                {!!c.createdAt && (
-                                  <span className="sdMuted">Subido: {formatDateAR(c.createdAt)}</span>
-                                )}
+                                {!!c.createdAt && <span className="sdMuted">Subido: {formatDateAR(c.createdAt)}</span>}
                                 {!!c.reviewedAt && (
-                                  <span className="sdMuted">
-                                    Revisado: {formatDateAR(c.reviewedAt)}
-                                  </span>
+                                  <span className="sdMuted">Revisado: {formatDateAR(c.reviewedAt)}</span>
                                 )}
                                 {!!c.number && <span className="sdMuted">N°: {c.number}</span>}
                                 {!!c.issuer && <span className="sdMuted">Emisor: {c.issuer}</span>}
-                                {!!c.expiresAt && (
-                                  <span className="sdMuted">Vence: {formatDateAR(c.expiresAt)}</span>
-                                )}
+                                {!!c.expiresAt && <span className="sdMuted">Vence: {formatDateAR(c.expiresAt)}</span>}
                               </div>
 
                               {c.rejectionReason ? (
@@ -666,9 +764,7 @@ async function handleExpireBg() {
                                   setRejectCertReason('');
                                 }}
                                 disabled={certActionLoading || !pending}
-                                style={
-                                  !pending ? { opacity: 0.5 } : { backgroundColor: '#ffe6e6', color: '#8b0000' }
-                                }
+                                style={!pending ? { opacity: 0.5 } : { backgroundColor: '#ffe6e6', color: '#8b0000' }}
                                 title={!pending ? 'Sólo se puede rechazar si está PENDING' : 'Rechazar matrícula'}
                               >
                                 ❌ Rechazar
@@ -738,15 +834,9 @@ async function handleExpireBg() {
                   </div>
 
                   <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {!!typed.kyc.createdAt && (
-                      <span className="sdMuted">Enviado: {formatDateAR(typed.kyc.createdAt)}</span>
-                    )}
-                    {!!typed.kyc.reviewedAt && (
-                      <span className="sdMuted">Revisado: {formatDateAR(typed.kyc.reviewedAt)}</span>
-                    )}
-                    {!!typed.kyc.rejectionReason && (
-                      <span className="sdMuted">Motivo: {typed.kyc.rejectionReason}</span>
-                    )}
+                    {!!typed.kyc.createdAt && <span className="sdMuted">Enviado: {formatDateAR(typed.kyc.createdAt)}</span>}
+                    {!!typed.kyc.reviewedAt && <span className="sdMuted">Revisado: {formatDateAR(typed.kyc.reviewedAt)}</span>}
+                    {!!typed.kyc.rejectionReason && <span className="sdMuted">Motivo: {typed.kyc.rejectionReason}</span>}
                   </div>
 
                   <div className="sdKycLinks" style={{ marginTop: 10 }}>
@@ -836,11 +926,7 @@ async function handleExpireBg() {
                       )}
 
                       {kycOk && <div className="sdState" style={{ marginTop: 10 }}>{kycOk}</div>}
-                      {kycError && (
-                        <div className="sdState sdError" style={{ marginTop: 10 }}>
-                          {kycError}
-                        </div>
-                      )}
+                      {kycError && <div className="sdState sdError" style={{ marginTop: 10 }}>{kycError}</div>}
                     </div>
                   )}
                 </div>
@@ -848,142 +934,128 @@ async function handleExpireBg() {
             </Card>
 
             <Card title="Antecedentes (Background Check)">
-  {!typed.backgroundCheck ? (
-    <div className="sdMuted">Sin antecedentes subidos.</div>
-  ) : (
-    <div>
-      <div className="sdKV">
-        <div className="k">
-          <span>Estado</span>
-          <strong>{typed.backgroundCheck.status}</strong>
-        </div>
+              {!typed.backgroundCheck ? (
+                <div className="sdMuted">Sin antecedentes subidos.</div>
+              ) : (
+                <div>
+                  <div className="sdKV">
+                    <div className="k">
+                      <span>Estado</span>
+                      <strong>{typed.backgroundCheck.status}</strong>
+                    </div>
 
-        <div className="k">
-          <span>Subido</span>
-          <strong>{formatDateAR(typed.backgroundCheck.createdAt)}</strong>
-        </div>
+                    <div className="k">
+                      <span>Subido</span>
+                      <strong>{formatDateAR(typed.backgroundCheck.createdAt)}</strong>
+                    </div>
 
-        <div className="k">
-          <span>Revisado</span>
-          <strong>{formatDateAR(typed.backgroundCheck.reviewedAt)}</strong>
-        </div>
-      </div>
+                    <div className="k">
+                      <span>Revisado</span>
+                      <strong>{formatDateAR(typed.backgroundCheck.reviewedAt)}</strong>
+                    </div>
+                  </div>
 
-      {typed.backgroundCheck.rejectionReason ? (
-        <div className="sdMuted" style={{ marginTop: 8 }}>
-          Motivo: {typed.backgroundCheck.rejectionReason}
-        </div>
-      ) : null}
+                  {typed.backgroundCheck.rejectionReason ? (
+                    <div className="sdMuted" style={{ marginTop: 8 }}>
+                      Motivo: {typed.backgroundCheck.rejectionReason}
+                    </div>
+                  ) : null}
 
-      <div style={{ marginTop: 10 }}>
-        <a
-          className={`sdLink ${typed.backgroundCheck.fileUrl ? '' : 'disabled'}`}
-          href={absoluteMediaUrl(typed.backgroundCheck.fileUrl) ?? '#'}
-          target="_blank"
-          rel="noreferrer"
-          onClick={(e) => !typed.backgroundCheck?.fileUrl && e.preventDefault()}
-        >
-          Ver archivo
-        </a>
-      </div>
+                  <div style={{ marginTop: 10 }}>
+                    <a
+                      className={`sdLink ${typed.backgroundCheck.fileUrl ? '' : 'disabled'}`}
+                      href={absoluteMediaUrl(typed.backgroundCheck.fileUrl) ?? '#'}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => !typed.backgroundCheck?.fileUrl && e.preventDefault()}
+                    >
+                      Ver archivo
+                    </a>
+                  </div>
 
-      {/* ✅ Acciones manuales (siempre que exista antecedente) */}
-<div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-  <button className="sdBtn" onClick={handleRequestBgUpdate} disabled={bgActionLoading}>
-    📩 Pedir actualización
-  </button>
+                  {/* ✅ Acciones manuales */}
+                  <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <button className="sdBtn" onClick={handleRequestBgUpdate} disabled={bgActionLoading}>
+                      📩 Pedir actualización
+                    </button>
 
-  <button
-    className="sdBtn"
-    onClick={handleExpireBg}
-    disabled={bgActionLoading}
-    style={{ backgroundColor: '#ffe6e6', color: '#8b0000' }}
-  >
-    ⛔ Marcar vencido
-  </button>
-</div>
+                    <button
+                      className="sdBtn"
+                      onClick={handleExpireBg}
+                      disabled={bgActionLoading}
+                      style={{ backgroundColor: '#ffe6e6', color: '#8b0000' }}
+                    >
+                      ⛔ Marcar vencido
+                    </button>
+                  </div>
 
-      {/* Acciones sólo si está PENDING */}
-      {typed.backgroundCheck.status === 'PENDING' && (
-        <div style={{ marginTop: 14 }}>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button
-              className="sdBtn"
-              onClick={handleApproveBackgroundCheck}
-              disabled={bgActionLoading}
-            >
-              {bgActionLoading ? 'Procesando…' : '✅ Aprobar'}
-            </button>
+                  {typed.backgroundCheck.status === 'PENDING' && (
+                    <div style={{ marginTop: 14 }}>
+                      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                        <button className="sdBtn" onClick={handleApproveBackgroundCheck} disabled={bgActionLoading}>
+                          {bgActionLoading ? 'Procesando…' : '✅ Aprobar'}
+                        </button>
 
-            <button
-              className="sdBtn"
-              onClick={() => {
-                setBgOk(null);
-                setBgError(null);
-                setShowRejectBg((v) => !v);
-              }}
-              disabled={bgActionLoading}
-              style={{ backgroundColor: '#ffe6e6', color: '#8b0000' }}
-            >
-              ❌ Rechazar
-            </button>
-          </div>
+                        <button
+                          className="sdBtn"
+                          onClick={() => {
+                            setBgOk(null);
+                            setBgError(null);
+                            setShowRejectBg((v) => !v);
+                          }}
+                          disabled={bgActionLoading}
+                          style={{ backgroundColor: '#ffe6e6', color: '#8b0000' }}
+                        >
+                          ❌ Rechazar
+                        </button>
+                      </div>
 
-          {showRejectBg && (
-            <div style={{ marginTop: 10 }}>
-              <textarea
-                className="sdInput"
-                placeholder="Motivo del rechazo (visible para el especialista)"
-                value={rejectBgReason}
-                onChange={(e) => setRejectBgReason(e.target.value)}
-                rows={3}
-                style={{ width: '100%' }}
-                disabled={bgActionLoading}
-              />
+                      {showRejectBg && (
+                        <div style={{ marginTop: 10 }}>
+                          <textarea
+                            className="sdInput"
+                            placeholder="Motivo del rechazo (visible para el especialista)"
+                            value={rejectBgReason}
+                            onChange={(e) => setRejectBgReason(e.target.value)}
+                            rows={3}
+                            style={{ width: '100%' }}
+                            disabled={bgActionLoading}
+                          />
 
-              <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button
-                  className="sdBtn"
-                  onClick={handleRejectBackgroundCheck}
-                  disabled={bgActionLoading}
-                >
-                  {bgActionLoading ? 'Procesando…' : 'Confirmar rechazo'}
-                </button>
+                          <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <button className="sdBtn" onClick={handleRejectBackgroundCheck} disabled={bgActionLoading}>
+                              {bgActionLoading ? 'Procesando…' : 'Confirmar rechazo'}
+                            </button>
 
-                <button
-                  className="sdBtn"
-                  style={{ backgroundColor: '#eee', color: '#333' }}
-                  onClick={() => {
-                    setShowRejectBg(false);
-                    setRejectBgReason('');
-                    setBgError(null);
-                  }}
-                  disabled={bgActionLoading}
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          )}
+                            <button
+                              className="sdBtn"
+                              style={{ backgroundColor: '#eee', color: '#333' }}
+                              onClick={() => {
+                                setShowRejectBg(false);
+                                setRejectBgReason('');
+                                setBgError(null);
+                              }}
+                              disabled={bgActionLoading}
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
-          {bgOk && <div className="sdState" style={{ marginTop: 10 }}>{bgOk}</div>}
-          {bgError && (
-            <div className="sdState sdError" style={{ marginTop: 10 }}>
-              {bgError}
-            </div>
-          )}
-        </div>
-      )}
+                      {bgOk && <div className="sdState" style={{ marginTop: 10 }}>{bgOk}</div>}
+                      {bgError && <div className="sdState sdError" style={{ marginTop: 10 }}>{bgError}</div>}
+                    </div>
+                  )}
 
-      {/* Si ya fue revisado, mostramos mensaje */}
-      {typed.backgroundCheck.status !== 'PENDING' && (
-        <div className="sdMuted" style={{ marginTop: 12 }}>
-          Este antecedente ya fue revisado.
-        </div>
-      )}
-    </div>
-  )}
-</Card>
+                  {typed.backgroundCheck.status !== 'PENDING' && (
+                    <div className="sdMuted" style={{ marginTop: 12 }}>
+                      Este antecedente ya fue revisado.
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
 
             <Card title="Suscripción">
               {!sub ? (
@@ -1052,11 +1124,7 @@ async function handleExpireBg() {
               </button>
 
               {dangerOk && <div className="sdState" style={{ marginTop: 10 }}>{dangerOk}</div>}
-              {dangerErr && (
-                <div className="sdState sdError" style={{ marginTop: 10 }}>
-                  {dangerErr}
-                </div>
-              )}
+              {dangerErr && <div className="sdState sdError" style={{ marginTop: 10 }}>{dangerErr}</div>}
 
               <div className="sdMuted" style={{ marginTop: 12 }}>
                 Nota: “Hard delete” existe en backend pero puede fallar por FKs. Para testing usá anonymize.

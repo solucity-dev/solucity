@@ -40,6 +40,16 @@ export function setOnUnauthorizedHandler(fn: (() => void | Promise<void>) | null
 // Para no disparar 100 veces si hay muchos 401 seguidos
 let unauthorizedNotified = false;
 
+/** ── Handler global para user_blocked (403) ─────────────────────────────── */
+let onBlockedHandler: (() => void | Promise<void>) | null = null;
+
+export function setOnBlockedHandler(fn: (() => void | Promise<void>) | null) {
+  onBlockedHandler = fn;
+}
+
+// Para no disparar 100 veces si hay muchos 403 user_blocked seguidos
+let blockedNotified = false;
+
 /** ── Auth token en memoria ─────────────────────────────── */
 let AUTH_TOKEN: string | null = null;
 
@@ -88,6 +98,8 @@ export function setAuthToken(token: string | null) {
 
   if (token) {
     unauthorizedNotified = false;
+    blockedNotified = false; // ✅ reset también cuando se setea token
+
     api.defaults.headers.common.Authorization = `Bearer ${token}`;
     if (__DEV__)
       console.log('[API] Authorization set (Bearer ...)', { cachedUserId, baseURL: API_URL });
@@ -111,7 +123,6 @@ export function getAuthToken() {
  */
 api.interceptors.request.use(
   async (config: InternalAxiosRequestConfig): Promise<InternalAxiosRequestConfig> => {
-    const url = String(config.url || '');
     const headers = {
       ...(config.headers || {}),
     } as AxiosRequestHeaders;
@@ -138,7 +149,9 @@ api.interceptors.request.use(
 );
 
 /**
- * ── RESPONSE INTERCEPTOR → auto-logout si recibe 401 ─────────────────
+ * ── RESPONSE INTERCEPTOR ─────────────────────────────────────────────
+ * - 403 user_blocked => limpiar sesión + handler dedicado (una sola vez)
+ * - 401 con Authorization => token inválido => limpiar sesión + unauthorized handler (una sola vez)
  */
 api.interceptors.response.use(
   (res) => res,
@@ -156,6 +169,29 @@ api.interceptors.response.use(
         code: err?.code,
         message: err?.message,
       });
+    }
+
+    const apiError = err?.response?.data?.error;
+
+    // ✅ 403 user_blocked => logout + handler (una sola vez)
+    // Importante: NO logout por cualquier 403 (hay 403 válidos: kyc_required, background_check_required, etc.)
+    if (status === 403 && String(apiError) === 'user_blocked') {
+      if (__DEV__) console.log('[API] 403 user_blocked -> clearing token');
+
+      await AsyncStorage.removeItem('auth:token');
+      clearAuthToken();
+      cachedUserId = null;
+
+      if (!blockedNotified && onBlockedHandler) {
+        blockedNotified = true;
+        try {
+          await onBlockedHandler();
+        } catch (e) {
+          if (__DEV__) console.log('[API] onBlocked handler error', e);
+        }
+      }
+
+      return Promise.reject(err);
     }
 
     // Si el request NO tenía Authorization → no tocar sesión (evita loops)

@@ -795,12 +795,12 @@ export default function CreateOrderScreen() {
           ]}
         >
           <Pressable
-            style={[styles.confirmBtn, (submitting || meLoading) && styles.btnDisabled]}
+            style={[styles.confirmBtn, !canInteract && styles.btnDisabled]}
             onPress={() => {
-              if (submitting || meLoading) return;
+              if (!canInteract) return;
               onConfirm();
             }}
-            disabled={submitting || meLoading}
+            disabled={!canInteract}
           >
             {submitting ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>

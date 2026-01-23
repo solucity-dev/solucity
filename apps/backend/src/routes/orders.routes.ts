@@ -1,5 +1,5 @@
 // apps/backend/src/routes/orders.routes.ts
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import { z } from 'zod';
 
 import { prisma } from '../lib/prisma';
@@ -31,13 +31,21 @@ export const orders = Router();
 /* ───────────────────────── Helpers ───────────────────────── */
 const now = () => new Date();
 const addMinutes = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
-const headerUserId = (req: import('express').Request) =>
-  String(req.header('x-user-id') || '').trim() || null;
+const headerUserId = (req: Request): string | null => {
+  const v = req.get('x-user-id'); // ✅ Express: get()
+  return v ? String(v).trim() : null;
+};
 
-// Prioriza `auth`; si no hay user, intenta x-user-id (compat)
-function getActorUserId(req: any): string | null {
-  return (req.user?.id as string | undefined) ?? headerUserId(req);
-}
+const getActorUserId = (req: Request): string | null => {
+  if (req.user?.id) return req.user.id;
+
+  // compat SOLO en development (jamás prod)
+  if (process.env.NODE_ENV !== 'production') {
+    return headerUserId(req);
+  }
+
+  return null;
+};
 
 // ✅ Normaliza categorySlug (compat / alias)
 function normalizeCategorySlug(raw: any): string | null {
@@ -171,11 +179,10 @@ async function addEvent(
   const finalActorId = actorUserId && actorUserId !== 'system' ? actorUserId : SYSTEM_ACTOR_ID;
 
   if (!finalActorId) {
-    console.warn('[addEvent] SYSTEM_ACTOR_ID missing for system event', {
-      orderId,
-      type,
-    });
-    // evitamos romper producción:
+    if (process.env.NODE_ENV !== 'production') {
+      throw new Error('SYSTEM_ACTOR_ID missing');
+    }
+    console.error('[addEvent] SYSTEM_ACTOR_ID missing, dropping event', { orderId, type });
     return;
   }
 
@@ -206,12 +213,19 @@ async function autoCancelExpiredPendingOrders() {
 
   if (expired.length === 0) return;
 
-  await prisma.serviceOrder.updateMany({
-    where: { id: { in: expired.map((e) => e.id) } },
-    data: { status: 'CANCELLED_AUTO' },
-  });
-
   for (const o of expired) {
+    const changed = await prisma.serviceOrder.updateMany({
+      where: {
+        id: o.id,
+        status: 'PENDING',
+        acceptDeadlineAt: { lt: new Date() },
+      },
+      data: { status: 'CANCELLED_AUTO' },
+    });
+
+    // Si otro request ya la cambió, no duplicamos evento/notif
+    if (changed.count === 0) continue;
+
     await addEvent(o.id, 'system', 'CANCELLED_AUTO', {
       reason: 'accept_deadline_expired',
       deadlineAt: o.acceptDeadlineAt,
@@ -220,7 +234,7 @@ async function autoCancelExpiredPendingOrders() {
     // notificar cliente
     const customerUserId = await getCustomerUserId(o.customerId);
     if (customerUserId) {
-      await prisma.notification.create({
+      const notif = await prisma.notification.create({
         data: {
           userId: customerUserId,
           type: 'ORDER_CANCELLED_AUTO',
@@ -228,14 +242,30 @@ async function autoCancelExpiredPendingOrders() {
           body: 'La solicitud se canceló automáticamente porque venció el tiempo de aceptación.',
           data: { orderId: o.id } as any,
         },
+        select: { id: true, title: true, body: true },
       });
+
+      try {
+        await pushToUser({
+          userId: customerUserId,
+          title: notif.title ?? 'Solicitud vencida',
+          body: notif.body ?? 'La solicitud se canceló automáticamente.',
+          data: {
+            notificationId: notif.id,
+            type: 'ORDER_CANCELLED_AUTO',
+            orderId: o.id,
+          },
+        });
+      } catch (e) {
+        console.warn('[push] ORDER_CANCELLED_AUTO (customer) failed', e);
+      }
     }
 
     // notificar especialista si había uno preasignado
     if (o.specialistId) {
       const specialistUserId = await getSpecialistUserId(o.specialistId);
       if (specialistUserId) {
-        await prisma.notification.create({
+        const notif2 = await prisma.notification.create({
           data: {
             userId: specialistUserId,
             type: 'ORDER_CANCELLED_AUTO',
@@ -243,7 +273,23 @@ async function autoCancelExpiredPendingOrders() {
             body: 'Una solicitud pendiente fue cancelada automáticamente por falta de aceptación.',
             data: { orderId: o.id } as any,
           },
+          select: { id: true, title: true, body: true },
         });
+
+        try {
+          await pushToUser({
+            userId: specialistUserId,
+            title: notif2.title ?? 'Solicitud vencida',
+            body: notif2.body ?? 'Una solicitud fue cancelada automáticamente.',
+            data: {
+              notificationId: notif2.id,
+              type: 'ORDER_CANCELLED_AUTO',
+              orderId: o.id,
+            },
+          });
+        } catch (e) {
+          console.warn('[push] ORDER_CANCELLED_AUTO (specialist) failed', e);
+        }
       }
     }
   }
@@ -287,8 +333,14 @@ orders.post('/', auth, async (req, res) => {
   else {
     const simple = createOrderSimple.safeParse(req.body);
     if (!simple.success) {
-      return res.status(400).json({ ok: false, error: full.error.flatten() });
+      return res.status(400).json({
+        ok: false,
+        error: simple.error.flatten(),
+        // opcional para debug:
+        fullError: full.error.flatten(),
+      });
     }
+
     parsed = { mode: 'simple', data: simple.data };
   }
 
@@ -340,17 +392,32 @@ orders.post('/', auth, async (req, res) => {
               ? geo.formatted.trim()
               : addressText; // 👈 fallback: usamos lo que escribió el usuario
 
-          const newAddr = await prisma.address.create({
-            data: {
-              formatted,
-              lat: geo.lat,
-              lng: geo.lng,
-              placeId: geo.placeId ?? null,
-            },
-            select: { id: true },
-          });
+          // ✅ DEDUPE por placeId si existe (no rompe nada)
+          let addrId: string | null = null;
 
-          finalLocationId = newAddr.id;
+          if (geo.placeId) {
+            const existing = await prisma.address.findFirst({
+              where: { placeId: geo.placeId },
+              select: { id: true },
+            });
+            if (existing) addrId = existing.id;
+          }
+
+          if (!addrId) {
+            const newAddr = await prisma.address.create({
+              data: {
+                formatted,
+                lat: geo.lat,
+                lng: geo.lng,
+                placeId: geo.placeId ?? null,
+              },
+              select: { id: true },
+            });
+            addrId = newAddr.id;
+          }
+
+          finalLocationId = addrId;
+
           // ✅ NO borramos addressText: lo dejamos como respaldo
         }
       } catch (e) {
@@ -1466,78 +1533,86 @@ orders.get('/:id', auth, async (req, res) => {
       order.acceptDeadlineAt &&
       order.acceptDeadlineAt < new Date()
     ) {
-      await prisma.serviceOrder.update({
-        where: { id: order.id },
+      const changed = await prisma.serviceOrder.updateMany({
+        where: {
+          id: order.id,
+          status: 'PENDING',
+          acceptDeadlineAt: { lt: new Date() },
+        },
         data: { status: 'CANCELLED_AUTO' },
       });
 
-      await addEvent(order.id, 'system', 'CANCELLED_AUTO', {
-        reason: 'accept_deadline_expired',
-        deadlineAt: order.acceptDeadlineAt,
-      } as any);
+      // Solo si realmente cambió, creamos evento y notificaciones
+      if (changed.count > 0) {
+        await addEvent(order.id, 'system', 'CANCELLED_AUTO', {
+          reason: 'accept_deadline_expired',
+          deadlineAt: order.acceptDeadlineAt,
+        } as any);
 
-      // ✅ Notificar al cliente (DB + PUSH)
-      try {
-        const customerUserId = await getCustomerUserId(order.customerId);
-        if (customerUserId) {
-          const notif = await prisma.notification.create({
-            data: {
-              userId: customerUserId,
-              type: 'ORDER_CANCELLED_AUTO',
-              title: 'Solicitud vencida',
-              body: 'La solicitud se canceló automáticamente porque venció el tiempo de aceptación.',
-              data: { orderId: order.id } as any,
-            },
-            select: { id: true, title: true, body: true },
-          });
-
-          await pushToUser({
-            userId: customerUserId,
-            title: notif.title ?? 'Solicitud vencida',
-            body: notif.body ?? 'La solicitud se canceló automáticamente.',
-            data: {
-              notificationId: notif.id,
-              type: 'ORDER_CANCELLED_AUTO',
-              orderId: order.id,
-            },
-          });
-        }
-      } catch (e) {
-        console.warn('[CANCELLED_AUTO] notify customer failed', e);
-      }
-
-      // ✅ Notificar al especialista (DB + PUSH)
-      if (order.specialistId) {
+        // ✅ Notificar al cliente (DB + PUSH)
         try {
-          const specialistUserId = await getSpecialistUserId(order.specialistId);
-          if (specialistUserId) {
-            const notif2 = await prisma.notification.create({
+          const customerUserId = await getCustomerUserId(order.customerId);
+          if (customerUserId) {
+            const notif = await prisma.notification.create({
               data: {
-                userId: specialistUserId,
+                userId: customerUserId,
                 type: 'ORDER_CANCELLED_AUTO',
                 title: 'Solicitud vencida',
-                body: 'Una solicitud pendiente fue cancelada automáticamente por falta de aceptación.',
+                body: 'La solicitud se canceló automáticamente porque venció el tiempo de aceptación.',
                 data: { orderId: order.id } as any,
               },
               select: { id: true, title: true, body: true },
             });
 
             await pushToUser({
-              userId: specialistUserId,
-              title: notif2.title ?? 'Solicitud vencida',
-              body: notif2.body ?? 'Una solicitud fue cancelada automáticamente.',
+              userId: customerUserId,
+              title: notif.title ?? 'Solicitud vencida',
+              body: notif.body ?? 'La solicitud se canceló automáticamente.',
               data: {
-                notificationId: notif2.id,
+                notificationId: notif.id,
                 type: 'ORDER_CANCELLED_AUTO',
                 orderId: order.id,
               },
             });
           }
         } catch (e) {
-          console.warn('[CANCELLED_AUTO] notify specialist failed', e);
+          console.warn('[CANCELLED_AUTO] notify customer failed', e);
+        }
+
+        // ✅ Notificar al especialista (DB + PUSH)
+        if (order.specialistId) {
+          try {
+            const specialistUserId = await getSpecialistUserId(order.specialistId);
+            if (specialistUserId) {
+              const notif2 = await prisma.notification.create({
+                data: {
+                  userId: specialistUserId,
+                  type: 'ORDER_CANCELLED_AUTO',
+                  title: 'Solicitud vencida',
+                  body: 'Una solicitud pendiente fue cancelada automáticamente por falta de aceptación.',
+                  data: { orderId: order.id } as any,
+                },
+                select: { id: true, title: true, body: true },
+              });
+
+              await pushToUser({
+                userId: specialistUserId,
+                title: notif2.title ?? 'Solicitud vencida',
+                body: notif2.body ?? 'Una solicitud fue cancelada automáticamente.',
+                data: {
+                  notificationId: notif2.id,
+                  type: 'ORDER_CANCELLED_AUTO',
+                  orderId: order.id,
+                },
+              });
+            }
+          } catch (e) {
+            console.warn('[CANCELLED_AUTO] notify specialist failed', e);
+          }
         }
       }
 
+      // Reflejar en memoria para la respuesta (aunque ya estuviera cancelada)
       (order as any).status = 'CANCELLED_AUTO';
     }
 
@@ -1694,7 +1769,7 @@ orders.get('/:id', auth, async (req, res) => {
 
 // GET /orders (listado con meta de deadlines)
 orders.get('/', auth, async (req, res) => {
-  await autoCancelExpiredPendingOrders();
+  // ❌ NO autocancel acá (evitamos duplicación/carga)
 
   const role = String(req.query.role || '');
   const id = String(req.query.id || '');

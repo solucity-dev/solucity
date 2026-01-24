@@ -55,7 +55,7 @@ type SpecialistRow = {
 type SortBy = 'distance' | 'rating' | 'price';
 
 // ===== Config =====
-const RADIUS_KM_DEFAULT = 8;
+const RADIUS_KM_DEFAULT = 30;
 
 // Cache en memoria (categoría + coords redondeadas + flags) -> resultados
 const resultsCache = new Map<string, { at: number; items: SpecialistRow[] }>();
@@ -564,7 +564,10 @@ export default function SpecialistsListScreen() {
             }
             ListEmptyComponent={
               <View style={[styles.center, { paddingTop: 24 }]}>
-                <Text style={{ color: '#E9FEFF' }}>No encontramos especialistas en 8km.</Text>
+                <Text style={{ color: '#E9FEFF' }}>
+                  {' '}
+                  No encontramos especialistas disponibles en tu zona.
+                </Text>
               </View>
             }
           />

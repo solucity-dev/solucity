@@ -616,7 +616,7 @@ export default function SpecialistHome() {
     if (!canToggleAvailability) {
       Alert.alert(
         'Verificación en proceso',
-        'Para activar tu disponibilidad necesitás KYC verificado y antecedentes penales aprobados.',
+        'Para activar tu disponibilidad necesitás KYC verificado y el certificado de buena conducta aprobado.',
       );
       return;
     }
@@ -1033,8 +1033,8 @@ export default function SpecialistHome() {
             </View>
             {!canToggleAvailability ? (
               <Text style={[styles.muted, { marginTop: 6 }]}>
-                Tu disponibilidad se habilita cuando el KYC esté verificado y tus antecedentes estén
-                aprobados.
+                Tu disponibilidad se habilita cuando el KYC esté verificado y el certificado de
+                buena conducta esté aprobado.
               </Text>
             ) : null}
 
@@ -1063,7 +1063,7 @@ export default function SpecialistHome() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
                   <Ionicons name="document-text-outline" size={18} color="#E9FEFF" />
                   <Text style={{ color: '#E9FEFF', fontWeight: '800', flex: 1 }}>
-                    Antecedentes:{' '}
+                    Certificado de buena conducta:{' '}
                     {bgStatus === 'APPROVED'
                       ? 'Aprobado ✅'
                       : bgStatus === 'PENDING'

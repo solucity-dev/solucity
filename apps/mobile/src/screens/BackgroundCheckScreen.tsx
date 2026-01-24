@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -24,6 +25,8 @@ type BackgroundCheck = {
   fileUrl?: string | null;
 };
 
+const GOOD_CONDUCT_URL = 'https://www.argentina.gob.ar/justicia/reincidencia/antecedentespenales';
+
 function formatDate(dateStr?: string | null) {
   if (!dateStr) return '';
   const d = new Date(dateStr);
@@ -39,7 +42,7 @@ function statusMeta(status?: BackgroundCheck['status'] | null) {
         icon: 'checkmark-circle-outline' as const,
         chipBg: 'rgba(0,160,120,0.18)',
         chipTxt: '#8EF0CF',
-        hint: 'Tus antecedentes están aprobados. Ya podés mantener tu disponibilidad habilitada.',
+        hint: 'Tu Certificado está aprobados. Ya podés mantener tu disponibilidad habilitada.',
       };
     case 'PENDING':
       return {
@@ -63,7 +66,7 @@ function statusMeta(status?: BackgroundCheck['status'] | null) {
         icon: 'document-text-outline' as const,
         chipBg: 'rgba(255,255,255,0.10)',
         chipTxt: '#E9FEFF',
-        hint: 'Subí tu certificado de antecedentes penales para que podamos aprobar tu perfil.',
+        hint: 'Subí tu certificado de buena conducta para que podamos aprobar tu perfil.',
       };
   }
 }
@@ -158,7 +161,7 @@ export default function BackgroundCheckScreen() {
 
       form.append('file', {
         uri: uploadUri,
-        name: file.name ?? `antecedente_${Date.now()}`,
+        name: file.name ?? `certificado_buena_conducta_${Date.now()}`,
         type: fallbackType,
       } as any);
 
@@ -174,7 +177,7 @@ export default function BackgroundCheckScreen() {
       // 2.b guardar antecedente
       await api.post('/specialists/background-check', { fileUrl: url });
 
-      Alert.alert('Listo', 'Antecedente enviado para revisión');
+      Alert.alert('Listo', 'Certificado enviado para revisión');
       await loadStatus();
     } catch (e: any) {
       // Si es axios:
@@ -201,7 +204,7 @@ export default function BackgroundCheckScreen() {
       <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
         <SafeAreaView style={styles.center} edges={['top']}>
           <ActivityIndicator color="#E9FEFF" />
-          <Text style={styles.centerText}>Cargando antecedentes…</Text>
+          <Text style={styles.centerText}>Cargando certificado…</Text>
         </SafeAreaView>
       </LinearGradient>
     );
@@ -213,7 +216,7 @@ export default function BackgroundCheckScreen() {
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Ionicons name="shield-checkmark-outline" size={22} color="#E9FEFF" />
-            <Text style={styles.headerTitle}>Antecedentes penales</Text>
+            <Text style={styles.headerTitle}>Certificado de buena conducta</Text>
           </View>
 
           <Pressable
@@ -289,7 +292,7 @@ export default function BackgroundCheckScreen() {
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                     <Ionicons name="cloud-upload-outline" size={20} color="#0A5B63" />
                     <Text style={styles.primaryBtnText}>
-                      {backgroundCheck ? 'Actualizar antecedente' : 'Subir antecedente'}
+                      {backgroundCheck ? 'Actualizar certificado' : 'Subir certificado'}
                     </Text>
                   </View>
                 )}
@@ -300,6 +303,41 @@ export default function BackgroundCheckScreen() {
                 <Text style={styles.mutedStrong}>En revisión</Text>.
               </Text>
             </View>
+          </View>
+
+          <View style={styles.card}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="help-circle-outline" size={18} color="#E9FEFF" />
+              <Text style={styles.sectionTitle}>Cómo solicitarlo</Text>
+            </View>
+
+            <Text style={styles.muted}>
+              Podés pedir el <Text style={styles.mutedStrong}>Certificado de buena conducta</Text>{' '}
+              desde el sitio oficial. Luego descargás el PDF y lo subís acá.
+            </Text>
+
+            <Pressable
+              onPress={() => Linking.openURL(GOOD_CONDUCT_URL)}
+              style={({ pressed }) => [
+                styles.secondaryBtn,
+                pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
+              ]}
+            >
+              <Ionicons name="link-outline" size={18} color="#E9FEFF" />
+              <Text style={styles.secondaryBtnText}>Abrir link oficial</Text>
+            </Pressable>
+
+            <View style={{ marginTop: 10 }}>
+              <Text style={styles.step}>1) Entrá al link oficial.</Text>
+              <Text style={styles.step}>2) Iniciá el trámite y completá tus datos.</Text>
+              <Text style={styles.step}>3) Elegí la modalidad de pago/validación.</Text>
+              <Text style={styles.step}>4) Descargá el certificado en PDF cuando esté listo.</Text>
+              <Text style={styles.step}>5) Volvé a Solucity y subilo desde esta pantalla.</Text>
+            </View>
+
+            <Text style={[styles.muted, { marginTop: 10 }]}>
+              Tip: asegurate de que el archivo sea legible y completo (sin recortes).
+            </Text>
           </View>
 
           <View style={[styles.card, { backgroundColor: 'rgba(3, 55, 63, 0.85)' }]}>
@@ -390,4 +428,25 @@ const styles = StyleSheet.create({
   },
   rejectTitle: { color: '#FFC7CD', fontWeight: '900' },
   rejectText: { color: '#FFC7CD', marginTop: 6, lineHeight: 18 },
+
+  secondaryBtn: {
+    marginTop: 12,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(233,254,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  secondaryBtnText: { color: '#E9FEFF', fontWeight: '900', fontSize: 14 },
+
+  step: {
+    color: '#E9FEFF',
+    marginTop: 6,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
 });

@@ -1,8 +1,9 @@
 // apps/mobile/src/hooks/useChat.ts
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { ensureOrderChat, getMessages, sendMessage } from '@/api/chat';
 import type { ChatMessage, ChatThread } from '@/types/chat';
+
+import { ensureOrderChat, getMessages, sendMessage } from '@/api/chat';
 
 type UseChatArgs = { orderId: string; threadId?: never } | { orderId?: never; threadId: string };
 

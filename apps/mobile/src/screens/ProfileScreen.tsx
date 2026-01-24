@@ -99,7 +99,7 @@ function kycIcon(status?: KycStatus | null): keyof typeof Ionicons.glyphMap {
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation<any>(); // ✅ usamos navigation para evitar warning ESLint
+  const navigation = useNavigation<any>();
   const auth = useAuth() as any;
   const signOut = auth?.signOut ?? auth?.logout ?? auth?.signOutAsync;
 
@@ -238,10 +238,9 @@ export default function ProfileScreen() {
       setSaving(true);
       setError(null);
       await api.patch('/auth/profile', {
-        name: name.trim(),
-        surname: surname.trim(),
         phone: phone.trim() || undefined,
       });
+
       Alert.alert('Listo', 'Perfil actualizado correctamente');
     } catch (e: any) {
       if (__DEV__) console.log('[Profile] PATCH /auth/profile error', e?.response?.data ?? e);
@@ -535,10 +534,9 @@ export default function ProfileScreen() {
                 <Text style={styles.label}>Nombre</Text>
                 <TextInput
                   value={name}
-                  onChangeText={setName}
-                  placeholder="Nombre"
-                  placeholderTextColor="rgba(233,254,255,0.6)"
-                  style={styles.input}
+                  editable={false}
+                  selectTextOnFocus={false}
+                  style={[styles.input, { opacity: 0.8 }]}
                 />
               </View>
 
@@ -546,10 +544,9 @@ export default function ProfileScreen() {
                 <Text style={styles.label}>Apellido</Text>
                 <TextInput
                   value={surname}
-                  onChangeText={setSurname}
-                  placeholder="Apellido"
-                  placeholderTextColor="rgba(233,254,255,0.6)"
-                  style={styles.input}
+                  editable={false}
+                  selectTextOnFocus={false}
+                  style={[styles.input, { opacity: 0.8 }]}
                 />
               </View>
 
@@ -614,7 +611,7 @@ export default function ProfileScreen() {
             <View style={styles.card}>
               <View style={styles.sectionHeader}>
                 <MDI name="file-document-outline" size={18} color="#E9FEFF" />
-                <Text style={styles.sectionTitle}>Antecedentes penales</Text>
+                <Text style={styles.sectionTitle}>Certificado de buena conducta</Text>
               </View>
 
               <Text style={styles.muted}>
@@ -646,7 +643,7 @@ export default function ProfileScreen() {
                 disabled={bgUploading}
               >
                 <Text style={styles.saveText}>
-                  {backgroundCheck ? 'Ver / actualizar antecedente' : 'Subir antecedente'}
+                  {backgroundCheck ? 'Ver / actualizar certificado' : 'Subir certificado'}
                 </Text>
               </Pressable>
             </View>

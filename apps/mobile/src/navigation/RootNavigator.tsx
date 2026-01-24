@@ -21,6 +21,7 @@ import RegisterSpecialist from '../screens/RegisterSpecialist';
 import ResetPassword from '../screens/ResetPassword';
 import SpecialistWizard from '../screens/SpecialistWizard';
 import Splash from '../screens/Splash';
+import SubscriptionScreen from '../screens/SubscriptionScreen';
 import Welcome from '../screens/Welcome';
 
 const Stack = createNativeStackNavigator();
@@ -81,6 +82,7 @@ export default function RootNavigator() {
         <Stack.Screen name="Support" component={SupportScreen} />
         <Stack.Screen name="Terms" component={TermsScreen} />
         <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+        <Stack.Screen name="Subscription" component={SubscriptionScreen} />
       </Stack.Navigator>
     );
   }

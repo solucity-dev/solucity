@@ -1,7 +1,12 @@
+// apps/backend/src/routes/subscriptions.ts
 import { Router, type Request, type Response } from 'express';
 
 import { auth } from '../middlewares/auth';
-import { getOrCreateSubscriptionForSpecialist } from '../services/subscriptionService';
+import {
+  createSubscriptionPaymentLink,
+  getOrCreateSubscriptionForSpecialist,
+  handleMercadoPagoWebhook,
+} from '../services/subscriptionService';
 
 type AuthReq = Request & { user?: { id: string; role: string } };
 
@@ -21,7 +26,6 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
     const sub = await getOrCreateSubscriptionForSpecialist(userId);
 
     if (!sub) {
-      // Usuario logueado pero sin perfil de especialista
       return res.status(403).json({ ok: false, error: 'no_specialist_profile' });
     }
 
@@ -49,6 +53,55 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
       console.error('GET /subscriptions/me', e);
     }
     return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+/**
+ * POST /subscriptions/pay/link
+ * Crea un link de pago (cuando corresponde).
+ */
+router.post('/pay/link', auth, async (req: AuthReq, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' });
+
+    const result = await createSubscriptionPaymentLink(userId);
+    return res.json({ ok: true, ...result });
+  } catch (e: any) {
+    const msg = String(e?.message || '');
+
+    if (msg.includes('trial_active')) {
+      return res.status(400).json({ ok: false, error: 'trial_active' });
+    }
+    if (msg.includes('no_specialist_profile')) {
+      return res.status(403).json({ ok: false, error: 'no_specialist_profile' });
+    }
+    if (msg.includes('PUBLIC_BACKEND_URL missing')) {
+      return res.status(500).json({ ok: false, error: 'public_backend_url_missing' });
+    }
+
+    console.error('POST /subscriptions/pay/link', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+/**
+ * POST /subscriptions/mercadopago/webhook
+ * Webhook Mercado Pago (sin auth).
+ */
+router.post('/mercadopago/webhook', async (req: Request, res: Response) => {
+  try {
+    const paymentId =
+      (req.query as any)?.['data.id'] || (req.body as any)?.data?.id || (req.body as any)?.id;
+
+    if (!paymentId) return res.status(200).send('ok_no_payment_id');
+
+    await handleMercadoPagoWebhook(String(paymentId));
+    return res.status(200).send('ok');
+  } catch (e) {
+    console.error('POST /subscriptions/mercadopago/webhook', e);
+    // Mercado Pago espera 200 para no reintentar eternamente
+    return res.status(200).send('ok');
   }
 });
 

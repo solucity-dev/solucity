@@ -969,7 +969,10 @@ export default function SpecialistHome() {
 
           {/* Tarjeta suscripción */}
           {subscription ? (
-            <View style={[styles.card, styles.subCard]}>
+            <Pressable
+              onPress={() => (navigation as any).navigate('Subscription')}
+              style={[styles.card, styles.subCard]}
+            >
               <View style={styles.subHeaderRow}>
                 <View style={styles.subPill}>
                   <Text style={styles.subPillText}>
@@ -982,6 +985,7 @@ export default function SpecialistHome() {
                           : 'Suscripción inactiva'}
                   </Text>
                 </View>
+
                 <Ionicons
                   name={subscription.status === 'ACTIVE' ? 'checkmark-circle' : 'time-outline'}
                   size={20}
@@ -1009,7 +1013,35 @@ export default function SpecialistHome() {
                   Próxima renovación: {formatDate(subscription.currentPeriodEnd)}
                 </Text>
               ) : null}
-            </View>
+
+              {/* ✅ CTA cuando hace falta pagar / activar */}
+              {subscription.status !== 'ACTIVE' ? (
+                <View style={{ marginTop: 10 }}>
+                  <View
+                    style={{
+                      paddingVertical: 10,
+                      paddingHorizontal: 12,
+                      borderRadius: 14,
+                      backgroundColor: 'rgba(255, 226, 155, 0.12)',
+                      borderWidth: 1,
+                      borderColor: 'rgba(255, 226, 155, 0.25)',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <Text style={{ color: '#FFE29B', fontWeight: '900', flex: 1 }}>
+                      {subscription.status === 'TRIALING'
+                        ? 'Activá tu suscripción para seguir recibiendo trabajos.'
+                        : subscription.status === 'PAST_DUE'
+                          ? 'Tenés un pago pendiente. Tocá para regularizar.'
+                          : 'Tu suscripción está inactiva. Tocá para activarla.'}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={18} color="#FFE29B" />
+                  </View>
+                </View>
+              ) : null}
+            </Pressable>
           ) : null}
 
           {/* Estado */}

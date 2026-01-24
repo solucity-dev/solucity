@@ -4,10 +4,12 @@ import { api } from './api';
 export type SubscriptionStatus = 'TRIALING' | 'ACTIVE' | 'PAST_DUE' | 'CANCELLED';
 
 export type SubscriptionInfo = {
+  id: string;
   status: SubscriptionStatus;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  trialEnd: string | null;
   daysRemaining: number | null;
-  trialEndsAt: string | null;
-  currentPeriodEnd: string | null;
 };
 
 // 🔒 cache en memoria (vive mientras la app esté abierta)
@@ -19,24 +21,15 @@ export async function getMySubscription(options?: {
 }): Promise<SubscriptionInfo | null> {
   const force = options?.force === true;
 
-  // ✅ si ya la tenemos y no forzamos, devolvemos cache
-  if (cachedSubscription && !force) {
-    return cachedSubscription;
-  }
-
-  // ✅ si ya hay un request en curso, reutilizamos
-  if (inFlight && !force) {
-    return inFlight;
-  }
+  if (cachedSubscription && !force) return cachedSubscription;
+  if (inFlight && !force) return inFlight;
 
   inFlight = (async () => {
     const res = await api.get('/subscriptions/me');
 
-    if (!res.data?.ok) {
-      throw new Error('bad_response');
-    }
+    if (!res.data?.ok) throw new Error('bad_response');
 
-    cachedSubscription = res.data.subscription ?? null;
+    cachedSubscription = (res.data?.subscription ?? null) as SubscriptionInfo | null;
     return cachedSubscription;
   })();
 
@@ -47,7 +40,24 @@ export async function getMySubscription(options?: {
   }
 }
 
-// 🔁 helper opcional (cuando quieras refrescar)
 export function clearSubscriptionCache() {
   cachedSubscription = null;
+}
+
+export async function createSubscriptionPaymentLink(): Promise<{
+  subscriptionId: string;
+  mpPreferenceId: string;
+  initPoint: string;
+  sandboxInitPoint: string;
+}> {
+  const res = await api.post('/subscriptions/pay/link');
+
+  if (!res.data?.ok) throw new Error('bad_response');
+
+  return {
+    subscriptionId: String(res.data?.subscriptionId || ''),
+    mpPreferenceId: String(res.data?.mpPreferenceId || ''),
+    initPoint: String(res.data?.initPoint || ''),
+    sandboxInitPoint: String(res.data?.sandboxInitPoint || ''),
+  };
 }

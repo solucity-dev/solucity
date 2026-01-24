@@ -71,7 +71,6 @@ const config: ExpoConfig = {
   },
 
   extra: {
-    API_URL: 'http://192.168.0.103:3000',
     eas: {
       projectId: '7fab222f-080a-420e-a1eb-87e000e2f4c3',
     },

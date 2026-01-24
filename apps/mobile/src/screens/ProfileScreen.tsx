@@ -1,7 +1,6 @@
 // apps/mobile/src/screens/ProfileScreen.tsx
 import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
@@ -129,7 +128,7 @@ export default function ProfileScreen() {
   } | null;
 
   const [backgroundCheck, setBackgroundCheck] = useState<BackgroundCheckInfo>(null);
-  const [bgUploading, setBgUploading] = useState(false);
+  const [bgUploading] = useState(false);
 
   // suscripción (solo specialist)
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
@@ -399,56 +398,6 @@ export default function ProfileScreen() {
     );
   };
 
-  const uploadBackgroundCheck = async () => {
-    if (!isSpecialist) return;
-
-    try {
-      setBgUploading(true);
-
-      const doc = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'image/*'],
-        copyToCacheDirectory: true,
-        multiple: false,
-      });
-
-      if (doc.canceled) return;
-      const asset = doc.assets?.[0];
-      if (!asset?.uri) return;
-
-      const form = new FormData();
-      form.append('file', {
-        uri: asset.uri,
-        name: asset.name ?? 'antecedente.pdf',
-        type: asset.mimeType ?? 'application/octet-stream',
-      } as any);
-
-      // 1) upload
-      const up = await api.post('/specialists/background-check/upload', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-
-      const urlRel: string | undefined = up?.data?.url;
-      if (!urlRel) throw new Error('upload_failed');
-
-      // 2) guardar/actualizar en DB
-      await api.post('/specialists/background-check', { fileUrl: urlRel });
-
-      // 3) refrescar estado
-      const rr = await api.get<any>('/specialists/me', {
-        headers: { 'Cache-Control': 'no-cache' },
-      });
-      const p = rr.data?.profile ?? rr.data;
-      setBackgroundCheck((p?.backgroundCheck ?? null) as BackgroundCheckInfo);
-
-      Alert.alert('Listo', 'Antecedente enviado a revisión.');
-    } catch (e: any) {
-      if (__DEV__) console.log('[Profile] uploadBackgroundCheck error', e?.response?.data ?? e);
-      Alert.alert('Ups', e?.response?.data?.error ?? 'No se pudo subir el antecedente.');
-    } finally {
-      setBgUploading(false);
-    }
-  };
-
   const roleLabel =
     role === 'SPECIALIST' ? 'Especialista' : role === 'CUSTOMER' ? 'Cliente' : 'Usuario';
 
@@ -702,6 +651,12 @@ export default function ProfileScreen() {
                   No pudimos cargar tu suscripción. Probá de nuevo más tarde.
                 </Text>
               )}
+              <Pressable
+                onPress={() => navigation.navigate('Subscription')}
+                style={[styles.saveBtn, { marginTop: 12 }]}
+              >
+                <Text style={styles.saveText}>Ver suscripción</Text>
+              </Pressable>
             </View>
           ) : null}
 

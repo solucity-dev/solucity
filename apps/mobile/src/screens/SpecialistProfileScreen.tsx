@@ -57,13 +57,6 @@ type SpecialistDetails = {
 
 const DAY_LABELS = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
 
-const BADGE_LABEL: Record<NonNullable<SpecialistDetails['badge']>, string> = {
-  BRONZE: 'Bronce',
-  SILVER: 'Plata',
-  GOLD: 'Oro',
-  PLATINUM: 'Platino',
-};
-
 export default function SpecialistProfileScreen() {
   const { params } = useRoute<Route>();
   const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();

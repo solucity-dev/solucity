@@ -1,5 +1,6 @@
 // apps/backend/src/services/subscriptionService.ts
 import { mpCreatePaymentLink, mpGetPayment } from './mercadopago';
+import { notifyAdmins } from './notificationService';
 import { notifySubscription } from './notifySubscription';
 import { prisma } from '../lib/prisma';
 
@@ -199,6 +200,26 @@ export async function handleMercadoPagoWebhook(paymentId: string) {
       lastPaymentStatus: 'approved',
     },
   });
+
+  if (userId) {
+    const specialist = await prisma.specialistProfile.findUnique({
+      where: { userId },
+      select: { id: true, user: { select: { email: true, name: true, surname: true } } },
+    });
+
+    await notifyAdmins({
+      type: 'ADMIN_SPECIALIST_SUBSCRIBED',
+      title: 'Especialista suscripto ✅',
+      body: `${specialist?.user?.email ?? 'Especialista'} activó su suscripción`,
+      data: {
+        userId,
+        specialistId: specialist?.id ?? null,
+        subscriptionId: sub.id,
+        status: 'ACTIVE',
+        currentPeriodEnd: newEnd.toISOString(),
+      },
+    });
+  }
 
   // ✅ Notificación “suscripción activa”
   if (userId) {

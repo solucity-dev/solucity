@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { addMinutes, isAfter } from 'date-fns';
 
+import { notifyAdmins } from './notificationService';
 import { sendOtpEmail } from '../lib/mailer';
 import { generateOtp } from '../lib/otp';
 import { prisma } from '../lib/prisma';
@@ -142,6 +143,20 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
           : { customer: { create: {} } }),
       },
       select: { id: true, email: true, role: true, name: true, surname: true, phone: true },
+    });
+    await notifyAdmins({
+      type: 'ADMIN_NEW_USER_REGISTERED',
+      title: 'Nuevo usuario registrado',
+      body: `${user.role}: ${user.email}`,
+      data: {
+        userId: user.id,
+        role: user.role,
+        email: user.email,
+        name: user.name,
+        surname: user.surname,
+        phone: user.phone,
+        createdAt: new Date().toISOString(),
+      },
     });
 
     return user;

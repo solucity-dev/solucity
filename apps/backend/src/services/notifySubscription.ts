@@ -1,4 +1,6 @@
 // apps/backend/src/services/notifySubscription.ts
+import { createNotification, type NotificationType } from './notificationService';
+import { sendExpoPush } from './pushExpo';
 import { prisma } from '../lib/prisma';
 
 type NotifyArgs = {
@@ -33,15 +35,12 @@ export async function notifySubscription(args: NotifyArgs) {
 
   if (exists) return { ok: true, skipped: true };
 
-  const notif = await prisma.notification.create({
-    data: {
-      userId,
-      type,
-      title,
-      body,
-      data: data ?? {},
-    },
-    select: { id: true },
+  const notif = await createNotification({
+    userId,
+    type: type as NotificationType,
+    title,
+    body,
+    data: (data ?? {}) as any,
   });
 
   // ✅ Push: si tenés tokens, mandamos push (sin romper si falla)
@@ -72,11 +71,7 @@ export async function notifySubscription(args: NotifyArgs) {
         },
       }));
 
-      await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(messages),
-      });
+      await sendExpoPush(messages as any);
     }
 
     return { ok: true, id: notif.id, pushed: true };

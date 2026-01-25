@@ -13,6 +13,7 @@ import { ensureDir, uploadsRoot } from '../lib/uploads';
 import { auth } from '../middlewares/auth';
 import { notifyBackgroundCheckStatus } from '../services/notifyBackgroundCheck';
 import { notifyKycStatus } from '../services/notifyKyc';
+import { canSpecialistBeVisible } from '../services/subscriptionGate';
 
 /** ========= Storage local (MVP) ========= **/
 
@@ -309,6 +310,9 @@ async function computeSafeAvailability(opts: {
   });
 
   const bgOk = bg?.status === 'APPROVED';
+  const gate = await canSpecialistBeVisible(opts.userId);
+  const subOk = gate.ok; // ACTIVE o TRIALING válido
+
   const toggleOk = !!opts.availableNow;
   const scheduleOk = isWithinAvailability(opts.availability);
 
@@ -316,6 +320,7 @@ async function computeSafeAvailability(opts: {
     userOk,
     kycOk,
     bgOk,
+    subOk,
     toggleOk,
     scheduleOk,
     canToggle: userOk && kycOk && bgOk,
@@ -538,72 +543,79 @@ router.get('/search', async (req, res) => {
     }
 
     // 4) construir lista final + disponibilidad REAL (toggle + horario)
-    let enriched = withDist.map((x) => {
-      const prof = profById.get(x.specialistId);
-      const user = prof ? userById.get(prof.userId) : undefined;
+    let enriched = await Promise.all(
+      withDist.map(async (x) => {
+        const prof = profById.get(x.specialistId);
+        const user = prof ? userById.get(prof.userId) : undefined;
 
-      // ✅ 1) userOk viene del profile.user.status (ya lo traés en select)
-      const userOk = prof?.user?.status !== 'BLOCKED';
+        // ✅ 1) userOk viene del profile.user.status (ya lo traés en select)
+        const userOk = prof?.user?.status !== 'BLOCKED';
 
-      // ✅ 2) disponibilidad real
-      const kycOk = prof?.kycStatus === 'VERIFIED';
-      const bgOk = prof?.backgroundCheck?.status === 'APPROVED';
-      const toggleAvailable = kycOk && bgOk ? !!prof?.availableNow : false;
-      const scheduleOk = isWithinAvailability(prof?.availability);
+        // ✅ 2) disponibilidad real
+        const kycOk = prof?.kycStatus === 'VERIFIED';
+        const bgOk = prof?.backgroundCheck?.status === 'APPROVED';
+        const toggleAvailable = kycOk && bgOk ? !!prof?.availableNow : false;
+        const scheduleOk = isWithinAvailability(prof?.availability);
 
-      const visibleNow = userOk && kycOk && bgOk && toggleAvailable && scheduleOk;
+        const gate = await canSpecialistBeVisible(prof?.userId ?? '');
+        const subOk = gate.ok;
 
-      const name = `${user?.name ?? 'Especialista'} ${user?.surname ?? ''}`.trim();
+        const visibleNow = userOk && kycOk && bgOk && subOk && toggleAvailable && scheduleOk;
 
-      const debugInfo = debug
-        ? {
-            _debug: {
-              userOk,
-              kycOk,
-              bgOk,
-              toggleAvailable,
-              scheduleOk,
-              availability: prof?.availability ?? null,
-              serverNowISO: new Date().toISOString(),
-              serverNowLocal: new Intl.DateTimeFormat('es-AR', {
-                timeZone: 'America/Argentina/Cordoba',
-                weekday: 'short',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: false,
-              }).format(new Date()),
-              tz: 'America/Argentina/Cordoba',
-            },
-          }
-        : {};
+        const name = `${user?.name ?? 'Especialista'} ${user?.surname ?? ''}`.trim();
 
-      const certStatus = category ? (certStatusBySpecialistId.get(x.specialistId) ?? null) : null;
-      const categoryEnabled = category ? enabledBySpecialistId.get(x.specialistId) === true : true;
+        const debugInfo = debug
+          ? {
+              _debug: {
+                userOk,
+                kycOk,
+                bgOk,
+                toggleAvailable,
+                scheduleOk,
+                availability: prof?.availability ?? null,
+                serverNowISO: new Date().toISOString(),
+                serverNowLocal: new Intl.DateTimeFormat('es-AR', {
+                  timeZone: 'America/Argentina/Cordoba',
+                  weekday: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  hour12: false,
+                }).format(new Date()),
+                tz: 'America/Argentina/Cordoba',
+              },
+            }
+          : {};
 
-      return {
-        ...x,
-        ...debugInfo,
+        const certStatus = category ? (certStatusBySpecialistId.get(x.specialistId) ?? null) : null;
+        const categoryEnabled = category
+          ? enabledBySpecialistId.get(x.specialistId) === true
+          : true;
 
-        // ✅ campo para filtrar
-        userOk,
+        return {
+          ...x,
+          ...debugInfo,
 
-        name,
+          // ✅ campo para filtrar
+          userOk,
 
-        // 👇 compat (hasta que el mobile use categoryEnabled)
-        enabled: categoryEnabled,
+          name,
 
-        // 👇 nuevos campos para dejarlo perfecto
-        requiresCertification: category ? requiresCertificationForCategory : false,
-        certStatus,
-        categoryEnabled,
+          // 👇 compat (hasta que el mobile use categoryEnabled)
+          enabled: categoryEnabled,
 
-        kycStatus: prof?.kycStatus ?? 'UNVERIFIED',
-        avatarUrl: prof?.avatarUrl ?? null,
-        availableNow: visibleNow,
-        pricingLabel: prof?.pricingLabel ?? null,
-      };
-    });
+          // 👇 nuevos campos para dejarlo perfecto
+          requiresCertification: category ? requiresCertificationForCategory : false,
+          certStatus,
+          categoryEnabled,
+
+          kycStatus: prof?.kycStatus ?? 'UNVERIFIED',
+          avatarUrl: prof?.avatarUrl ?? null,
+          availableNow: visibleNow,
+          pricingLabel: prof?.pricingLabel ?? null,
+        };
+      }),
+    );
 
     enriched = enriched.filter((x) => x.userOk !== false);
 
@@ -1030,9 +1042,10 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
           name: null,
           bio: '',
           available: false,
+          availableNow: false,
           radiusKm: 10,
           visitPrice: 0,
-          pricingLabel: null, // ✅ NUEVO
+          pricingLabel: null,
           availability: { days: [1, 2, 3, 4, 5], start: '09:00', end: '18:00' },
           ratingAvg: null,
           ratingCount: null,
@@ -1058,8 +1071,12 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
       availability: avail,
     });
 
-    // 👉 lo que el mobile usa para pintar el switch
+    // 👉 visible real (para clientes)
     const available = safe.visibleNow;
+
+    // 👉 toggle real (intención del user)
+    // si no cumple requisitos (kyc/bg/user), lo mostramos false para evitar incoherencias
+    const availableNow = safe.canToggle ? !!profile.availableNow : false;
 
     const ratingAvg = profile.ratingAvg ?? null;
     const ratingCount = profile.ratingCount ?? null;
@@ -1073,6 +1090,7 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
         name: `${profile.user?.name ?? ''} ${profile.user?.surname ?? ''}`.trim(),
         bio: profile.bio ?? '',
         available,
+        availableNow,
         radiusKm: profile.radiusKm ?? 10,
         visitPrice: profile.visitPrice ?? 0,
         pricingLabel: (profile as any).pricingLabel ?? null, // ✅ NUEVO
@@ -1127,11 +1145,15 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
     };
 
     if (data.available === true) {
-      // TODO(subscription): activar cuando esté listo el flujo real de suscripción
-      // const sub = await prisma.subscription.findFirst({ where: { userId }, select: { status: true } });
-      // if (sub?.status === 'PAST_DUE' || sub?.status === 'CANCELLED') {
-      //   return res.status(403).json({ ok: false, error: 'subscription_required' });
-      // }
+      // ✅ SUSCRIPCIÓN: si no está OK, no puede ponerse disponible
+      const gate = await canSpecialistBeVisible(userId);
+      if (!gate.ok) {
+        return res.status(403).json({
+          ok: false,
+          error: 'subscription_required',
+          status: gate.status ?? null,
+        });
+      }
 
       const kyc = current?.kycStatus ?? 'UNVERIFIED';
       if (kyc !== 'VERIFIED') return res.status(403).json({ ok: false, error: 'kyc_required' });

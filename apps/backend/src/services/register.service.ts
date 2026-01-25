@@ -158,7 +158,6 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
         createdAt: new Date().toISOString(),
       },
     });
-
     return user;
   } catch (e: any) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {

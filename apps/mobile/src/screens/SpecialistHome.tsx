@@ -220,7 +220,8 @@ export default function SpecialistHome() {
 
   // form fields
   const [bio, setBio] = useState('');
-  const [available, setAvailable] = useState(true);
+  const [visibleNow, setVisibleNow] = useState(false); // lo que ve el cliente
+  const [availableNow, setAvailableNow] = useState(true); // switch (intención)
   const [start, setStart] = useState('09:00');
   const [end, setEnd] = useState('18:00');
   const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
@@ -367,7 +368,12 @@ export default function SpecialistHome() {
 
         setProfile(p);
         setBio(p.bio ?? '');
-        setAvailable(!!p.available);
+        setVisibleNow(!!p.available);
+
+        // si todavía no viene (backend viejo), fallback a p.available
+        setAvailableNow(
+          typeof (p as any).availableNow === 'boolean' ? (p as any).availableNow : !!p.available,
+        );
 
         const avail = p.availability ?? {
           days: [1, 2, 3, 4, 5],
@@ -509,10 +515,30 @@ export default function SpecialistHome() {
 
   const statsDone = profile?.stats?.done ?? 0;
   const statsCanceled = profile?.stats?.canceled ?? 0;
+
   const kycStatus = profile?.kycStatus ?? 'UNVERIFIED';
   const bgStatus = profile?.backgroundCheck?.status ?? null;
 
-  const canToggleAvailability = kycStatus === 'VERIFIED' && bgStatus === 'APPROVED';
+  // ✅ Suscripción OK: ACTIVE o TRIALING con días > 0
+  const subscriptionOk = useMemo(() => {
+    if (!subscription) return true; // fail-open (si no cargó aún, no bloqueamos)
+    if (subscription.status === 'ACTIVE') return true;
+
+    if (subscription.status === 'TRIALING') {
+      // si backend manda daysRemaining, lo respetamos
+      if (typeof subscription.daysRemaining === 'number') {
+        return subscription.daysRemaining > 0;
+      }
+      // si no viene daysRemaining, asumimos trial vigente
+      return true;
+    }
+
+    // PAST_DUE / CANCELLED / INACTIVE / etc.
+    return false;
+  }, [subscription]);
+
+  const canToggleAvailability =
+    kycStatus === 'VERIFIED' && bgStatus === 'APPROVED' && subscriptionOk;
 
   // permisos para cámara / galería
   async function requestCamera() {
@@ -613,16 +639,30 @@ export default function SpecialistHome() {
   }
 
   async function toggleAvailable(v: boolean) {
-    if (!canToggleAvailability) {
+    // 1) Si el problema es suscripción, lo mandamos directo a la pantalla de suscripción
+    if (!subscriptionOk) {
       Alert.alert(
-        'Verificación en proceso',
+        'Suscripción requerida',
+        'Para activarte y aparecer en búsquedas necesitás tener la suscripción activa.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Ver suscripción', onPress: () => (navigation as any).navigate('Subscription') },
+        ],
+      );
+      return;
+    }
+
+    // 2) Si el problema es KYC / antecedentes, mostramos el mensaje correspondiente
+    if (!(kycStatus === 'VERIFIED' && bgStatus === 'APPROVED')) {
+      Alert.alert(
+        'Verificación requerida',
         'Para activar tu disponibilidad necesitás KYC verificado y el certificado de buena conducta aprobado.',
       );
       return;
     }
 
     try {
-      setAvailable(v);
+      setAvailableNow(v);
       await api.patch('/specialists/me', { available: v });
 
       // ✅ asegura coherencia contra reglas server-side
@@ -635,13 +675,13 @@ export default function SpecialistHome() {
           'Antecedentes requeridos',
           'Para activar tu disponibilidad necesitás tener el antecedente penal aprobado.',
         );
-        setAvailable(false);
+        setAvailableNow(false);
         return;
       }
 
       if (e?.response?.status === 403 && err === 'user_blocked') {
         Alert.alert('Cuenta bloqueada', 'Tu cuenta está bloqueada. Contactá soporte.');
-        setAvailable(false);
+        setAvailableNow(false);
         return;
       }
 
@@ -650,11 +690,11 @@ export default function SpecialistHome() {
           'Verificación requerida',
           'Para activar tu disponibilidad necesitás KYC verificado y antecedentes aprobados.',
         );
-        setAvailable(false);
+        setAvailableNow(false);
         return;
       }
 
-      setAvailable(!v);
+      setAvailableNow(false);
       Alert.alert('Ups', 'No se pudo actualizar el estado.');
     }
   }
@@ -664,8 +704,8 @@ export default function SpecialistHome() {
       setSaving(true);
       await api.patch('/specialists/me', {
         availability: { days, start, end },
-        available,
       });
+
       Alert.alert('Listo', 'Disponibilidad actualizada.');
     } catch {
       Alert.alert('Ups', 'No se pudo guardar la disponibilidad.');
@@ -1048,26 +1088,44 @@ export default function SpecialistHome() {
           <View style={styles.card}>
             <View style={styles.cardHeaderRow}>
               <Text style={styles.cardTitle}>Estado</Text>
-              <View style={[styles.badge, available ? styles.badgeOn : styles.badgeOff]}>
-                <View style={[styles.dot, available ? styles.dotOn : styles.dotOff]} />
-                <Text style={[styles.badgeT, { color: available ? '#063A40' : '#6F8C90' }]}>
-                  {available ? 'Disponible' : 'No disponible'}
+              <View style={[styles.badge, visibleNow ? styles.badgeOn : styles.badgeOff]}>
+                <View style={[styles.dot, visibleNow ? styles.dotOn : styles.dotOff]} />
+                <Text style={[styles.badgeT, { color: visibleNow ? '#063A40' : '#6F8C90' }]}>
+                  {visibleNow ? 'Disponible' : 'No disponible'}
                 </Text>
               </View>
             </View>
             <View style={styles.stateRow}>
               <Text style={styles.label}>Habilitar disponibilidad</Text>
               <Switch
-                value={available}
+                value={availableNow}
                 onValueChange={toggleAvailable}
                 disabled={!canToggleAvailability}
               />
             </View>
             {!canToggleAvailability ? (
               <Text style={[styles.muted, { marginTop: 6 }]}>
-                Tu disponibilidad se habilita cuando el KYC esté verificado y el certificado de
-                buena conducta esté aprobado.
+                {!subscriptionOk
+                  ? 'Tu disponibilidad requiere suscripción activa. Tocá la tarjeta de Suscripción para activarla.'
+                  : 'Tu disponibilidad se habilita cuando el KYC esté verificado y el certificado de buena conducta esté aprobado.'}
               </Text>
+            ) : null}
+
+            {!subscriptionOk ? (
+              <Pressable
+                onPress={() => (navigation as any).navigate('Subscription')}
+                style={[
+                  styles.btn,
+                  {
+                    backgroundColor: 'transparent',
+                    borderWidth: 1,
+                    borderColor: '#FFE29B',
+                    marginTop: 10,
+                  },
+                ]}
+              >
+                <Text style={[styles.btnT, { color: '#FFE29B' }]}>Activar suscripción</Text>
+              </Pressable>
             ) : null}
 
             <View style={{ marginTop: 10 }}>

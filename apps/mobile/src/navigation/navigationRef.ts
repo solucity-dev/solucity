@@ -51,6 +51,11 @@ export function flushPendingNav() {
   }
 }
 
+export function navigateToSubscription() {
+  if (!navigationRef.isReady()) return;
+  navigationRef.navigate('Subscription' as never);
+}
+
 /**
  * ✅ Navegación global al OrderDetail
  */

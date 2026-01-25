@@ -18,6 +18,7 @@ import {
   navigateToBackgroundCheck,
   navigateToChatThread,
   navigateToOrderDetail,
+  navigateToSubscription,
 } from '../navigation/navigationRef';
 
 type NotificationsContextValue = {
@@ -348,6 +349,12 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         String(type) === 'BACKGROUND_CHECK_REVIEW_REQUEST'
       ) {
         navigateToBackgroundCheck();
+        return;
+      }
+
+      // ✅ SUSCRIPCIÓN → pantalla Subscription
+      if (String(type).startsWith('SUBSCRIPTION_')) {
+        navigateToSubscription();
         return;
       }
 

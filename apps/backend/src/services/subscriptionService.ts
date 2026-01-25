@@ -1,45 +1,47 @@
 // apps/backend/src/services/subscriptionService.ts
 import { mpCreatePaymentLink, mpGetPayment } from './mercadopago';
+import { notifySubscription } from './notifySubscription';
 import { prisma } from '../lib/prisma';
 
 const TRIAL_DAYS = 30;
 const SUBSCRIPTION_PRICE_ARS = 15000;
 
-/**
- * Mensual calendario (aniversario):
- * - 15 feb -> 15 mar
- * - 31 ene -> 28/29 feb (último día del mes)
- */
 function addOneCalendarMonth(date: Date) {
   const d = new Date(date);
   const day = d.getDate();
 
-  // ir al 1 del mes siguiente
   const next = new Date(d.getFullYear(), d.getMonth() + 1, 1);
-
-  // último día del mes siguiente
   const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
 
-  // mantener el mismo día o “clamp” al último
   next.setDate(Math.min(day, lastDay));
   return next;
 }
 
-/**
- * Construye URL pública del backend para webhooks/back_urls.
- * IMPORTANTE: en Render seteá PUBLIC_BACKEND_URL=https://solucity-backend.onrender.com
- * (o tu dominio final cuando exista)
- */
 function getPublicBackendUrl() {
   const url = process.env.PUBLIC_BACKEND_URL || process.env.RENDER_EXTERNAL_URL || '';
-  if (!url) {
-    throw new Error('PUBLIC_BACKEND_URL missing');
-  }
+  if (!url) throw new Error('PUBLIC_BACKEND_URL missing');
   return url.replace(/\/+$/, '');
 }
 
+async function getUserIdFromSubscription(subId: string) {
+  const sub = await prisma.subscription.findUnique({
+    where: { id: subId },
+    select: {
+      id: true,
+      specialistId: true,
+
+      // ✅ campos que después usamos en handleMercadoPagoWebhook
+      currentPeriodEnd: true,
+
+      specialist: { select: { userId: true } },
+    },
+  });
+
+  const userId = sub?.specialist?.userId ?? null;
+  return { sub, userId };
+}
+
 export async function getOrCreateSubscriptionForSpecialist(userId: string) {
-  // 1) Buscar el perfil de especialista de ese usuario
   const specialist = await prisma.specialistProfile.findUnique({
     where: { userId },
     select: { id: true },
@@ -49,12 +51,10 @@ export async function getOrCreateSubscriptionForSpecialist(userId: string) {
 
   const now = new Date();
 
-  // 2) Traer suscripción si existe
   const existing = await prisma.subscription.findUnique({
     where: { specialistId: specialist.id },
   });
 
-  // 3) Si no existe → crear TRIAL (idempotente / anti-race)
   if (!existing) {
     const end = new Date(now);
     end.setDate(end.getDate() + TRIAL_DAYS);
@@ -68,28 +68,50 @@ export async function getOrCreateSubscriptionForSpecialist(userId: string) {
         currentPeriodEnd: end,
         trialEnd: end,
       },
-      update: {}, // ✅ si otra request ganó la carrera, no tocamos nada
+      update: {},
     });
   }
 
-  // 4) Si existe y estaba en TRIAL y se venció → marcar como PAST_DUE
+  // ⛔ Trial vencido → PAST_DUE + notificación
   if (existing.status === 'TRIALING' && existing.trialEnd && existing.trialEnd < now) {
-    return prisma.subscription.update({
+    const updated = await prisma.subscription.update({
       where: { id: existing.id },
       data: { status: 'PAST_DUE' },
     });
+
+    await notifySubscription({
+      userId,
+      type: 'SUBSCRIPTION_TRIAL_ENDED',
+      title: 'Terminó tu prueba gratuita',
+      body: 'Para seguir apareciendo en búsquedas y recibir trabajos, activá tu suscripción.',
+      data: { screen: 'Subscription' },
+    });
+
+    return updated;
   }
 
-  // 5) Para todos los demás casos, devolver tal cual
+  // 🔔 Avisos (3 y 1 día)
+  if (existing.status === 'TRIALING' && existing.trialEnd && existing.trialEnd > now) {
+    const diffMs = existing.trialEnd.getTime() - now.getTime();
+    const daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+    if (daysRemaining === 3 || daysRemaining === 1) {
+      await notifySubscription({
+        userId,
+        type: 'SUBSCRIPTION_TRIAL_ENDING',
+        title: 'Tu prueba gratuita está por terminar',
+        body:
+          daysRemaining === 1
+            ? 'Te queda 1 día gratis. Podés activar la suscripción cuando quieras.'
+            : `Te quedan ${daysRemaining} días gratis. Podés activar la suscripción cuando quieras.`,
+        data: { daysRemaining, screen: 'Subscription' },
+      });
+    }
+  }
+
   return existing;
 }
 
-/**
- * Crea un link de pago (Checkout Preference) para 1 mes.
- * Reglas:
- * - Si está en trial y NO venció => error "trial_active"
- * - Si no tiene perfil especialista => error "no_specialist_profile"
- */
 export async function createSubscriptionPaymentLink(userId: string) {
   const specialist = await prisma.specialistProfile.findUnique({
     where: { userId },
@@ -101,20 +123,17 @@ export async function createSubscriptionPaymentLink(userId: string) {
 
   if (!specialist) throw new Error('no_specialist_profile');
 
-  // asegura trial / status correcto
   const sub = await getOrCreateSubscriptionForSpecialist(userId);
   if (!sub) throw new Error('no_specialist_profile');
 
   const now = new Date();
 
-  // Trial activo: NO corresponde pagar aún
   if (sub.status === 'TRIALING' && sub.trialEnd && sub.trialEnd > now) {
     throw new Error('trial_active');
   }
 
   const publicBackend = getPublicBackendUrl();
 
-  // Creamos preference, external_reference = subscription.id
   const preference = await mpCreatePaymentLink({
     amount: SUBSCRIPTION_PRICE_ARS,
     email: specialist.user.email,
@@ -125,12 +144,11 @@ export async function createSubscriptionPaymentLink(userId: string) {
     failureUrl: `${publicBackend}/subscriptions/return/failure`,
   });
 
-  // ✅ Guardamos metadata MP en tu modelo actual
   await prisma.subscription.update({
     where: { id: sub.id },
     data: {
       provider: 'MERCADOPAGO',
-      providerSubId: String(preference?.id || ''), // guardamos preferenceId
+      providerSubId: String(preference?.id || ''),
       lastPaymentStatus: 'pending',
     },
   });
@@ -143,13 +161,6 @@ export async function createSubscriptionPaymentLink(userId: string) {
   };
 }
 
-/**
- * Webhook handler:
- * - Lee paymentId
- * - Consulta MP /v1/payments/:id
- * - Guarda lastPaymentStatus siempre
- * - Si approved => activa / renueva 1 mes calendario
- */
 export async function handleMercadoPagoWebhook(paymentId: string) {
   const payment = await mpGetPayment(paymentId);
 
@@ -158,11 +169,12 @@ export async function handleMercadoPagoWebhook(paymentId: string) {
 
   if (!externalRef) return;
 
-  // external_reference = subscriptionId
-  const sub = await prisma.subscription.findUnique({ where: { id: externalRef } });
+  const found = await getUserIdFromSubscription(externalRef);
+  const sub = found.sub;
+  const userId = found.userId;
+
   if (!sub) return;
 
-  // ✅ Guardamos último estado aunque NO sea approved (para debug real)
   await prisma.subscription.update({
     where: { id: sub.id },
     data: {
@@ -171,24 +183,31 @@ export async function handleMercadoPagoWebhook(paymentId: string) {
     },
   });
 
-  // Solo renovamos si approved
   if (status !== 'approved') return;
 
   const now = new Date();
-
-  // Renovación desde el vencimiento si sigue activo, si no desde ahora
   const base = sub.currentPeriodEnd && sub.currentPeriodEnd > now ? sub.currentPeriodEnd : now;
-  const newStart = base;
   const newEnd = addOneCalendarMonth(base);
 
   await prisma.subscription.update({
     where: { id: sub.id },
     data: {
       status: 'ACTIVE',
-      currentPeriodStart: newStart,
+      currentPeriodStart: base,
       currentPeriodEnd: newEnd,
       trialEnd: null,
       lastPaymentStatus: 'approved',
     },
   });
+
+  // ✅ Notificación “suscripción activa”
+  if (userId) {
+    await notifySubscription({
+      userId,
+      type: 'SUBSCRIPTION_ACTIVE',
+      title: 'Suscripción activa ✅',
+      body: 'Tu suscripción está activa. Ya podés recibir nuevos trabajos.',
+      data: { screen: 'Subscription' },
+    });
+  }
 }

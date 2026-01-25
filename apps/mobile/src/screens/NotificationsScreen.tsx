@@ -147,6 +147,13 @@ export default function NotificationsScreen() {
       return;
     }
 
+    // ✅ Suscripción → SubscriptionScreen
+    if (type.startsWith('SUBSCRIPTION_')) {
+      if (parent?.navigate) parent.navigate('Subscription');
+      else navigation.navigate('Subscription');
+      return;
+    }
+
     // Extraemos posibles IDs
     const orderId: string | null = data.orderId ?? data.order_id ?? data.order?.id ?? null;
 
@@ -319,7 +326,10 @@ export default function NotificationsScreen() {
             color="#E9FEFF"
             onPress={() => navigation.goBack()}
           />
-          <Text style={styles.headerTitle}>Notificaciones</Text>
+          <Text style={styles.headerTitle}>
+            Notificaciones{unreadCount > 0 ? ` (${unreadCount})` : ''}
+          </Text>
+
           <View style={{ width: 26 }} />
         </View>
 

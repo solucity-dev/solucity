@@ -13,9 +13,9 @@ router.use((req, res, next) => {
 });
 
 // ✅ ping rápido (solo si está habilitado por el guard anterior)
-router.get('/seed', (_req, res) => res.json({ ok: true, route: '/admin/seed' }));
+router.get('/', (_req, res) => res.json({ ok: true, route: '/admin/seed' }));
 
-router.post('/seed', async (req, res) => {
+router.post('/', async (req, res) => {
   const token = String(req.header('x-seed-token') ?? '').trim();
   const expected = String(process.env.SEED_TOKEN ?? '').trim();
 

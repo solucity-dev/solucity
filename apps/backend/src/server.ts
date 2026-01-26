@@ -173,7 +173,7 @@ app.use('/notifications', notificationsRouter);
 app.use('/subscriptions', subscriptionsRouter);
 app.use('/customers', customerLocationRoutes);
 app.use('/customers', customersMeRoutes);
-app.use('/admin', seedRoutes);
+app.use('/admin/seed', seedRoutes);
 app.use('/admin', adminRoutes);
 app.use('/auth', passwordRoutes);
 

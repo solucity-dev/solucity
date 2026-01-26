@@ -1,4 +1,5 @@
 // apps/backend/src/config/env.ts
+
 function mustGet(name: string): string {
   const v = process.env[name];
   if (!v || !v.trim()) throw new Error(`Missing env var: ${name}`);
@@ -17,9 +18,16 @@ function assertStrongSecret(name: string, value: string) {
   }
 }
 
+// 🔒 PORT validado (evita NaN / valores inválidos)
+const portRaw = get('PORT', '3000')!;
+const port = Number(portRaw);
+if (!Number.isFinite(port) || port <= 0) {
+  throw new Error(`Invalid PORT value: ${portRaw}`);
+}
+
 export const ENV = {
   NODE_ENV: get('NODE_ENV', 'development')!,
-  PORT: Number(get('PORT', '3000')),
+  PORT: port,
   JWT_SECRET: '',
   JWT_SECRET_OLD: get('JWT_SECRET_OLD'),
   JWT_REFRESH_SECRET: get('JWT_REFRESH_SECRET'),

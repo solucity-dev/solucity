@@ -16,66 +16,93 @@ type NotifyArgs = {
 };
 
 /**
- * ✅ Crea notificación en DB con dedupe simple para no spamear:
- * no crea otra igual si ya existe una del mismo type en las últimas 24h.
+ * ✅ Crea notificación en DB con dedupe simple (24h)
+ * ✅ Push con notificationId (tap → mark-as-read / deep link)
+ * ✅ Sin duplicar lógica de batching (lo hace pushExpo.ts)
  */
 export async function notifySubscription(args: NotifyArgs) {
   const { userId, type, title, body, data } = args;
 
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[notifySubscription]', { userId, type, time: new Date().toISOString() });
+  }
+
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
+  // ✅ DEDUPE: misma combinación (type + subscriptionEvent) en últimas 24h
   const exists = await prisma.notification.findFirst({
     where: {
       userId,
-      type,
+      type: type as any,
       createdAt: { gte: since },
+      AND: [
+        {
+          data: {
+            path: ['subscriptionEvent'],
+            equals: type,
+          },
+        },
+      ],
     },
     select: { id: true },
   });
 
-  if (exists) return { ok: true, skipped: true };
+  if (exists) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[notifySubscription] deduped -> notificationId=', exists.id);
+    }
+    return { ok: true, skipped: true, notificationId: exists.id };
+  }
 
+  // 1) DB notification
   const notif = await createNotification({
     userId,
     type: type as NotificationType,
     title,
     body,
-    data: (data ?? {}) as any,
+    data: {
+      ...(data ?? {}),
+      subscriptionEvent: type, // ✅ clave dedupe
+    } as any,
   });
 
-  // ✅ Push: si tenés tokens, mandamos push (sin romper si falla)
+  // 2) tokens
+  const tokens = await prisma.pushToken.findMany({
+    where: { userId, enabled: true },
+    select: { token: true },
+  });
+
+  const toList = tokens.map((t) => t.token).filter(Boolean);
+
+  if (!toList.length) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[notifySubscription] no tokens -> dbOnly notificationId=', notif.id);
+    }
+    return { ok: true, notificationId: notif.id, pushed: false };
+  }
+
+  // 3) push (no rompe si falla)
   try {
-    const tokens = await prisma.pushToken.findMany({
-      where: { userId, enabled: true },
-      select: { token: true },
-    });
-
-    const expoTokens = tokens.map((t) => t.token).filter(Boolean);
-    if (!expoTokens.length) return { ok: true, id: notif.id, pushed: false };
-
-    // Expo push endpoint
-    // OJO: Expo recomienda batches (100)
-    const chunks: string[][] = [];
-    for (let i = 0; i < expoTokens.length; i += 100) chunks.push(expoTokens.slice(i, i + 100));
-
-    for (const chunk of chunks) {
-      const messages = chunk.map((to) => ({
+    await sendExpoPush(
+      toList.map((to) => ({
         to,
-        sound: 'default',
+        sound: 'default' as const,
+        priority: 'high' as const,
+        channelId: 'default',
         title,
         body,
         data: {
           ...(data ?? {}),
+          subscriptionEvent: type,
           type,
-          notificationId: notif.id, // ✅ para mark-as-read directo
+          notificationId: notif.id,
         },
-      }));
-
-      await sendExpoPush(messages as any);
-    }
-
-    return { ok: true, id: notif.id, pushed: true };
-  } catch {
-    return { ok: true, id: notif.id, pushed: false };
+      })),
+    );
+  } catch (e) {
+    console.warn('[notifySubscription] sendExpoPush failed', e);
+    return { ok: true, notificationId: notif.id, pushed: false };
   }
+
+  return { ok: true, notificationId: notif.id, pushed: true };
 }

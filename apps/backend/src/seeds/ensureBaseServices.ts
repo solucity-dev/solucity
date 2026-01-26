@@ -14,7 +14,7 @@ const CATEGORIES: { slug: string; serviceName: string; description?: string }[] 
   { slug: 'pintura', serviceName: 'Visita técnica' },
   { slug: 'jardineria', serviceName: 'Visita técnica' },
   { slug: 'piscinas', serviceName: 'Visita técnica' },
-  { slug: 'aire-acondicionado', serviceName: 'Visita técnica' },
+  { slug: 'climatizacion', serviceName: 'Visita técnica' },
   { slug: 'servicio-tecnico-electronica', serviceName: 'Visita técnica' },
   { slug: 'servicio-tecnico-electrodomesticos', serviceName: 'Visita técnica' },
   { slug: 'servicio-tecnico-informatica', serviceName: 'Visita técnica' },

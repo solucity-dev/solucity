@@ -392,6 +392,7 @@ model Subscription {
   provider           String?   // "MERCADOPAGO"
   providerSubId      String?   // id de la suscripción en MP
   lastPaymentStatus  String?   // approved | pending | rejected
+  lastPaymentId String? //
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt

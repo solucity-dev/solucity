@@ -1,4 +1,4 @@
-import { useMemo, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { getAdminCustomers, type AdminCustomerRow, type UserStatus } from '../api/adminApi';
 
 type Params = { status?: UserStatus; q?: string };
@@ -89,10 +89,13 @@ export function useAdminCustomers(params?: Params) {
     [params?.status, params?.q],
   );
 
+  useEffect(() => {
+  void store.ensureFetch(key, params);
+}, [key, params]);
+
   // dispara fetch (idempotente) cuando cambia el key
   // NOTE: esto corre durante render, pero ensureFetch está dedupeado y solo muta el store.
   // Si tu lint también prohíbe "side effects in render", te doy alternativa abajo.
-  void store.ensureFetch(key, params);
 
   const snap = useSyncExternalStore(
     (cb) => store.subscribe(key, cb),
@@ -100,7 +103,12 @@ export function useAdminCustomers(params?: Params) {
     () => store.getSnapshot(key),
   );
 
-  return snap;
+  const reload = useCallback(async () => {
+  await store.ensureFetch(key, params);
+}, [key, params]);
+
+  return { ...snap, reload };
+
 }
 
 

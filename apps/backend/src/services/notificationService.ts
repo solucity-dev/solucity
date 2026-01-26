@@ -5,7 +5,6 @@ import { sendExpoPush } from './pushExpo';
 import { prisma } from '../lib/prisma';
 
 // 🔐 Tipos de notificación soportados
-// 🔐 Tipos de notificación soportados
 export type NotificationType =
   | 'ORDER_NEW_REQUEST'
   | 'ORDER_ACCEPTED_BY_SPECIALIST'
@@ -21,7 +20,13 @@ export type NotificationType =
   | 'BACKGROUND_CHECK_STATUS'
   | 'BACKGROUND_CHECK_REVIEW_REQUEST'
   | 'SUBSCRIPTION_DAYS_GRANTED'
+  | 'SUBSCRIPTION_TRIAL_ENDING'
+  | 'SUBSCRIPTION_TRIAL_ENDED'
+  | 'SUBSCRIPTION_ACTIVE'
+  | 'SUBSCRIPTION_PAST_DUE'
+
   // ✅ ADMIN
+  | 'ACCOUNT_STATUS_CHANGED'
   | 'ADMIN_NEW_USER_REGISTERED'
   | 'ADMIN_SPECIALIST_SUBSCRIBED';
 
@@ -81,7 +86,7 @@ export async function notifyAdmins(params: {
   data?: Prisma.JsonValue;
 }) {
   const admins = await prisma.user.findMany({
-    where: { role: 'ADMIN' },
+    where: { role: 'ADMIN', status: 'ACTIVE' },
     select: { id: true },
   });
 

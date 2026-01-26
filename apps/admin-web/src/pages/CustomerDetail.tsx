@@ -100,8 +100,12 @@ export default function CustomerDetail() {
 
     try {
       const r = await deleteAdminUser(data.userId, 'anonymize');
-      if (!r.ok) throw new Error();
-      setOkMsg('Email liberado correctamente');
+if (!r.ok) throw new Error();
+
+// reflejar en UI
+setData({ ...data, email: r.newEmail ?? data.email, status: 'BLOCKED' });
+setOkMsg(`Email liberado correctamente → ${r.newEmail ?? 'deleted+...@deleted.local'}`);
+
     } catch {
       setErrMsg('No se pudo liberar el email');
     } finally {

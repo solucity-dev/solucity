@@ -1,5 +1,6 @@
+// apps/admin-web/src/pages/OrderDetail.tsx
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLoaderData, useNavigate, useParams } from 'react-router-dom';
 
 import { getAdminOrderDetail } from '../api/adminApi';
 import './orderDetail.css';
@@ -59,38 +60,40 @@ type AdminOrderDetail = {
   specialist: AdminOrderUser | null;
 
   chatThreadId?: string | null;
+  attachments?: unknown[]; // backend puede devolverlo, no lo mostramos por ahora
 };
 
 type LoadState =
+  | { kind: 'ready' }
   | { kind: 'loading' }
-  | { kind: 'error'; message: string }
-  | { kind: 'ready' };
+  | { kind: 'error'; message: string };
 
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>();
   const nav = useNavigate();
 
-  const [state, setState] = useState<LoadState>({ kind: 'loading' });
-  const [order, setOrder] = useState<AdminOrderDetail | null>(null);
+  // ✅ viene del loader del router (getAdminOrderDetail)
+  const loaded = useLoaderData() as { ok: true; order: AdminOrderDetail };
 
-  const load = async (orderId: string) => {
+  const [order, setOrder] = useState<AdminOrderDetail | null>(loaded?.order ?? null);
+  const [state, setState] = useState<LoadState>({ kind: 'ready' } as LoadState);
+
+  // ✅ refresh por evento (no useEffect => no dispara regla eslint)
+  const refresh = async () => {
+    if (!id) {
+      setState({ kind: 'error', message: 'Falta ID en la URL' });
+      return;
+    }
+
     setState({ kind: 'loading' });
     try {
-      const r = await getAdminOrderDetail(orderId);
+      const r = await getAdminOrderDetail(id);
       setOrder((r.order ?? null) as AdminOrderDetail | null);
       setState({ kind: 'ready' });
     } catch {
       setState({ kind: 'error', message: 'No se pudo cargar la orden' });
     }
   };
-
-  // Auto-load sin useEffect
-  const [didAutoLoad, setDidAutoLoad] = useState(false);
-  if (!didAutoLoad) {
-    setDidAutoLoad(true);
-    if (id) void load(id);
-    else setState({ kind: 'error', message: 'Falta ID en la URL' });
-  }
 
   if (!id) return <div className="odState odError">Falta ID en la URL</div>;
   if (state.kind === 'loading') return <div className="odState">Cargando…</div>;
@@ -100,6 +103,7 @@ export default function OrderDetail() {
   // ✅ IDs correctos (profiles, NO users)
   const customerId = order.customer?.customerId ?? null;
   const specialistId = order.specialist?.specialistId ?? null;
+  const isLoading = (state as LoadState).kind === 'loading';
 
   return (
     <div className="odShell">
@@ -113,9 +117,10 @@ export default function OrderDetail() {
           <p className="odSubtitle">Vista admin (resumen + datos completos)</p>
         </div>
 
-        <button className="odBtn" onClick={() => void load(id)}>
-          Refrescar
-        </button>
+        <button className="odBtn" onClick={refresh} disabled={!id || isLoading}>
+  Refrescar
+</button>
+
       </div>
 
       <div className="odCard">
@@ -123,7 +128,7 @@ export default function OrderDetail() {
         <div className="odRow">
           <div>
             <div className="odLabel">Orden</div>
-            <div className="odValue mono">
+            <div className="odValue mono" title={order.id}>
               <strong>{order.id}</strong>
             </div>
           </div>
@@ -223,4 +228,3 @@ export default function OrderDetail() {
     </div>
   );
 }
-

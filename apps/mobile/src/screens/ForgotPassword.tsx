@@ -1,3 +1,4 @@
+//apps/mobile/src/screens/ForgotPassword.tsx
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity } from 'react-native';
@@ -5,11 +6,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { passwordStart } from '../api/password';
 
-export default function ForgotPassword({ navigation }: any) {
-  const [email, setEmail] = useState('');
+export default function ForgotPassword({ navigation, route }: any) {
+  const prefillEmail = (route?.params?.email ?? '').toString();
+  const [email, setEmail] = useState(prefillEmail);
+
   const [loading, setLoading] = useState(false);
 
   const onSend = async () => {
+    if (loading) return;
+
     const e = email.trim().toLowerCase();
     if (!e.includes('@')) return Alert.alert('Error', 'Ingresá un email válido');
 
@@ -19,7 +24,14 @@ export default function ForgotPassword({ navigation }: any) {
       Alert.alert('Listo', 'Te enviamos un código de verificación.');
       navigation.navigate('ResetPassword', { email: e });
     } catch (err: any) {
-      const msg = err?.response?.data?.error ?? 'No se pudo enviar el código.';
+      const code = err?.response?.data?.error;
+      const msg =
+        code === 'user_not_found'
+          ? 'No encontramos una cuenta con ese email.'
+          : code === 'too_many_requests'
+            ? 'Demasiados intentos. Probá de nuevo en unos minutos.'
+            : 'No se pudo enviar el código.';
+
       Alert.alert('Error', msg);
     } finally {
       setLoading(false);
@@ -41,6 +53,11 @@ export default function ForgotPassword({ navigation }: any) {
           keyboardType="email-address"
           placeholder="tunombre@correo.com"
           placeholderTextColor="rgba(255,255,255,0.6)"
+          textContentType="username"
+          autoComplete="email"
+          returnKeyType="go"
+          onSubmitEditing={onSend}
+          editable={!loading}
         />
 
         <TouchableOpacity style={styles.btn} onPress={onSend} disabled={loading}>

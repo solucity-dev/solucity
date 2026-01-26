@@ -1,4 +1,5 @@
 // apps/backend/src/services/mercadopago.ts
+import fetch from 'node-fetch';
 
 type MpPreferenceResponse = {
   id: string;

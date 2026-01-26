@@ -1,6 +1,12 @@
 // apps/admin-web/src/lib/api.ts
 const API_URL = String(import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
+if (!API_URL) {
+  // Error explícito para evitar que fetch use URLs relativas ("/admin/...") por accidente
+  throw new Error('VITE_API_URL no está configurada. Creá apps/admin-web/.env con VITE_API_URL=https://... y reiniciá vite.');
+}
+
+
 function getAdminToken(): string {
   return String(localStorage.getItem('admin_token') ?? '').trim();
 }

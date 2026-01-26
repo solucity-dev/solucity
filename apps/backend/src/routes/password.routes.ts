@@ -46,7 +46,12 @@ router.post(
       const schema = z.object({
         email: z.string().email(),
         code: z.string().min(4).max(8),
-        newPassword: z.string().min(8),
+        newPassword: z
+          .string()
+          .min(8)
+          .refine((v) => /[A-Za-z]/.test(v) && /\d/.test(v), {
+            message: 'weak_password',
+          }),
       });
       const data = schema.parse(req.body);
 

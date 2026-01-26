@@ -1,3 +1,4 @@
+//apps/admin-web/src/hooks/useAdminOrders.ts
 import React from 'react';
 import { getAdminOrders, type AdminOrderRow } from '../api/adminApi';
 
@@ -23,8 +24,8 @@ export function useAdminOrders(params: { q?: string; status?: string }) {
   }, [q, status]);
 
   React.useEffect(() => {
-    reload();
-  }, [reload]);
+  void reload();
+}, [reload]);
 
   return { data, loading, error, reload };
 }

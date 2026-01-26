@@ -1,3 +1,4 @@
+//apps/admin-web/src/app/Login.tsx
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { setToken } from "../auth/auth";
@@ -23,9 +24,11 @@ export default function Login() {
       const res = await loginAdmin({ email, password });
       setToken(res.token);
       navigate(from, { replace: true });
-    } catch {
-      setError("Credenciales inválidas");
+        } catch (e: unknown) {
+      if (e instanceof Error) setError(e.message);
+      else setError("Error al iniciar sesión");
     } finally {
+
       setLoading(false);
     }
   };

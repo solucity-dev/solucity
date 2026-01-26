@@ -9,7 +9,7 @@ import { passwordVerify } from '../api/password';
 import { useAuth } from '../auth/AuthProvider';
 
 export default function ResetPassword({ route, navigation }: any) {
-  const email = route?.params?.email as string;
+  const email = (route?.params?.email ?? '').toString().trim().toLowerCase();
   const { login } = useAuth();
 
   const [code, setCode] = useState('');
@@ -18,6 +18,9 @@ export default function ResetPassword({ route, navigation }: any) {
   const [loading, setLoading] = useState(false);
 
   const onConfirm = async () => {
+    if (loading) return;
+    if (!email.includes('@'))
+      return Alert.alert('Error', 'Falta el email. Volvé e ingresalo de nuevo.');
     const c = code.trim();
     if (c.length < 4) return Alert.alert('Error', 'Ingresá el código (OTP)');
     if (newPassword.trim().length < 8) {
@@ -40,7 +43,14 @@ export default function ResetPassword({ route, navigation }: any) {
       // RootNavigator debería llevarte solo a Main si detecta token
       // navigation.reset({ index: 0, routes: [{ name: 'Main' }] }); // opcional si lo necesitás
     } catch (err: any) {
-      const msg = err?.response?.data?.error ?? 'No se pudo actualizar.';
+      const code = err?.response?.data?.error;
+      const msg =
+        code === 'invalid_code'
+          ? 'El código es inválido o venció.'
+          : code === 'too_many_requests'
+            ? 'Demasiados intentos. Probá de nuevo en unos minutos.'
+            : 'No se pudo actualizar.';
+
       Alert.alert('Error', msg);
     } finally {
       setLoading(false);
@@ -61,6 +71,9 @@ export default function ResetPassword({ route, navigation }: any) {
           keyboardType="number-pad"
           placeholder="Ej: 123456"
           placeholderTextColor="rgba(255,255,255,0.6)"
+          textContentType="oneTimeCode"
+          returnKeyType="next"
+          editable={!loading}
         />
 
         <Text style={styles.label}>Nueva contraseña</Text>
@@ -75,6 +88,11 @@ export default function ResetPassword({ route, navigation }: any) {
             placeholderTextColor="rgba(255,255,255,0.6)"
             autoCapitalize="none"
             autoCorrect={false}
+            textContentType="newPassword"
+            autoComplete="new-password"
+            returnKeyType="go"
+            onSubmitEditing={onConfirm}
+            editable={!loading}
           />
 
           <TouchableOpacity

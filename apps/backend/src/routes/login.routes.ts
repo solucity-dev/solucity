@@ -19,13 +19,45 @@ router.post('/login', async (req, res) => {
 
     const user = await prisma.user.findUnique({
       where: { email: normalized },
-      select: { id: true, email: true, role: true, status: true, passwordHash: true },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+        passwordHash: true,
+        failedLoginCount: true,
+      },
     });
+
+    // ✅ respuesta genérica
     if (!user) return res.status(401).json({ ok: false, error: 'invalid_credentials' });
-    if (user.status === 'BLOCKED') return res.status(403).json({ ok: false, error: 'blocked' });
+
+    if (user.status === 'BLOCKED') {
+      return res.status(403).json({ ok: false, error: 'blocked' });
+    }
+
+    // ✅ lockout simple por usuario (configurable)
+    const maxFails = Number(process.env.LOGIN_MAX_FAILS ?? 10);
+    if (Number.isFinite(maxFails) && user.failedLoginCount >= maxFails) {
+      return res.status(429).json({ ok: false, error: 'too_many_attempts' });
+    }
 
     const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) return res.status(401).json({ ok: false, error: 'invalid_credentials' });
+
+    if (!ok) {
+      // ✅ incrementa contador (sin filtrar info)
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginCount: { increment: 1 } },
+      });
+      return res.status(401).json({ ok: false, error: 'invalid_credentials' });
+    }
+
+    // ✅ login ok: reset + lastLoginAt
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { failedLoginCount: 0, lastLoginAt: new Date() },
+    });
 
     const token = signToken({ sub: user.id, role: user.role as any });
     return res.json({

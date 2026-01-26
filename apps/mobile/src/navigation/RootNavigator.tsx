@@ -29,7 +29,6 @@ const ONBOARDING_KEY = 'onboarding:seen';
 
 export default function RootNavigator() {
   const { token, loading, user } = useAuth();
-  const [bootReady, setBootReady] = useState(false);
   const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -39,12 +38,8 @@ export default function RootNavigator() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        const seen = await AsyncStorage.getItem(ONBOARDING_KEY);
-        if (!cancelled) setOnboardingSeen(seen === '1');
-      } finally {
-        if (!cancelled) setBootReady(true);
-      }
+      const seen = await AsyncStorage.getItem(ONBOARDING_KEY);
+      if (!cancelled) setOnboardingSeen(seen === '1');
     })();
 
     return () => {
@@ -53,13 +48,13 @@ export default function RootNavigator() {
   }, []);
 
   // ✅ Mientras hidrata auth + onboarding, mostramos splash
-  if (loading || !bootReady || onboardingSeen === null) {
-    return <Splash duration={1200} />;
+  if (loading || onboardingSeen === null) {
+    return <Splash />;
   }
 
   // ✅ Anti-flash: si hay token pero aún no cargó user (/auth/me)
   if (token && !user) {
-    return <Splash duration={600} />;
+    return <Splash />;
   }
 
   // ✅ Con token → stack privado (según role real)

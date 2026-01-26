@@ -81,3 +81,5 @@ export type FinishOrderInput = z.infer<typeof finishOrderSchema>;
 export type ConfirmOrderInput = z.infer<typeof confirmOrderSchema>;
 export type CancelOrderInput = z.infer<typeof cancelOrderSchema>;
 export type CancelBySpecialistInput = z.infer<typeof cancelBySpecialistSchema>;
+export type RejectOrderInput = z.infer<typeof rejectOrderSchema>;
+export type RateOrderInput = z.infer<typeof rateOrderSchema>;

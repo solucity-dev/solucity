@@ -702,11 +702,12 @@ export default function SpecialistDetail() {
                         <div
                           key={c.id}
                           style={{
-                            border: '1px solid rgba(0,0,0,0.08)',
-                            borderRadius: 12,
+                            border: '1px solid rgba(255,255,255,0.14)',
+                            borderRadius: 14,
                             padding: 12,
-                            background: '#fff',
+                            background: 'rgba(255,255,255,0.06)',
                           }}
+
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                             <div style={{ minWidth: 0 }}>

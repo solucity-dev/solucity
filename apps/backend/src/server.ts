@@ -12,7 +12,7 @@ import morgan from 'morgan';
 import './config/env';
 
 import { prisma } from './lib/prisma';
-import { uploadsRoot } from './lib/uploads';
+import { ensureUploadsStructure, uploadsRoot } from './lib/uploads';
 import { errorHandler, notFound } from './middlewares/error';
 import adminRoutes from './routes/admin.routes';
 import { categories } from './routes/categories';
@@ -65,21 +65,49 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+/** ================== Rate limiting (Auth Hardening) ================== **/
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 min
+  max: Number(process.env.AUTH_RATE_LIMIT_MAX ?? 20), // 20 intentos / 15 min por IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false, error: 'rate_limited' },
+});
+
+const adminAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.ADMIN_AUTH_RATE_LIMIT_MAX ?? 10), // más estricto
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false, error: 'rate_limited' },
+});
+
+// 🔒 aplicar SOLO a login endpoints
+app.use('/auth/login', authLimiter);
+app.use('/admin/auth/login', adminAuthLimiter);
+app.use('/admin/seed', adminAuthLimiter);
+
 /** ================== Parsers + CORS ================== **/
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
+const isProd = process.env.NODE_ENV === 'production';
+
 app.use(
   cors({
-    origin: ALLOWED_ORIGINS.length ? ALLOWED_ORIGINS : true,
+    origin: ALLOWED_ORIGINS.length ? ALLOWED_ORIGINS : !isProd,
     credentials: false,
     optionsSuccessStatus: 204,
   }),
 );
-app.options('*', cors({ origin: ALLOWED_ORIGINS.length ? ALLOWED_ORIGINS : true }));
+
+app.options('*', cors({ origin: ALLOWED_ORIGINS.length ? ALLOWED_ORIGINS : !isProd }));
 
 /** ================== Static uploads (DEV/PROD) ================== **/
+ensureUploadsStructure();
 app.use('/uploads', express.static(uploadsRoot));
-console.log('[static] uploadsRoot =', uploadsRoot);
+if (process.env.NODE_ENV !== 'production') {
+  console.log('[static] uploadsRoot =', uploadsRoot);
+}
 
 // ✅ Fallback para rutas legacy /uploads/avatars/*
 // (si el archivo no está en uploads/avatars, lo busca en otras rutas)
@@ -94,12 +122,18 @@ app.get('/uploads/avatars/:file', (req, res) => {
 
   for (const p of candidates) {
     if (fs.existsSync(p)) {
-      console.log('[uploads-fallback] HIT', req.path, '->', p);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[uploads-fallback] HIT', req.path, '->', p);
+      }
+
       return res.sendFile(p);
     }
   }
 
-  console.warn('[uploads-fallback] MISS', req.path, 'candidates=', candidates);
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn('[uploads-fallback] MISS', req.path, 'candidates=', candidates);
+  }
+
   return res.status(404).end();
 });
 

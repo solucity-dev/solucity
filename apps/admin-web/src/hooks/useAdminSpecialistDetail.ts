@@ -1,3 +1,4 @@
+// apps/admin-web/hooks/useAdminSpecialistDetail.tsx
 import { useCallback, useEffect, useState } from "react";
 import {
   getAdminSpecialistDetail,
@@ -8,6 +9,14 @@ export function useAdminSpecialistDetail(id?: string) {
   const [data, setData] = useState<AdminSpecialistDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ✅ CAMBIO 2: limpiar estado si no hay id
+  useEffect(() => {
+    if (!id) {
+      setData(null);
+      setError(null);
+    }
+  }, [id]);
 
   const reload = useCallback(async () => {
     if (!id) return;
@@ -30,6 +39,7 @@ export function useAdminSpecialistDetail(id?: string) {
 
   return { data, loading, error, reload };
 }
+
 
 
 

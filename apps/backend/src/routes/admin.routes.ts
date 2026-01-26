@@ -1,9 +1,10 @@
-// apps/backend/src/routes/admin.routes.ts
 import { Router } from 'express';
-import jwt, { type Secret, type SignOptions } from 'jsonwebtoken';
 import { z } from 'zod';
 
+import { signToken } from '../lib/jwt';
 import { prisma } from '../lib/prisma';
+import { auth } from '../middlewares/auth';
+import { requireAdmin } from '../middlewares/requiereAdmin';
 import { notifyBackgroundCheckStatus } from '../services/notifyBackgroundCheck';
 import { notifyCertificationStatus } from '../services/notifyCertification';
 import { notifyKycStatus } from '../services/notifyKyc';
@@ -21,28 +22,6 @@ function toAbsoluteUrl(u: string | null | undefined): string | null {
     `http://localhost:${process.env.PORT || 3000}`;
 
   return `${base}${u.startsWith('/') ? '' : '/'}${u}`;
-}
-
-function requireAdmin(req: any, res: any, next: any) {
-  try {
-    const auth = String(req.headers.authorization ?? '');
-    const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
-    if (!token) return res.status(401).json({ ok: false, error: 'missing_token' });
-
-    const JWT_SECRET = process.env.JWT_SECRET;
-    if (!JWT_SECRET) return res.status(500).json({ ok: false, error: 'jwt_not_configured' });
-
-    const payload = jwt.verify(token, JWT_SECRET as Secret) as any;
-    if (payload?.role !== 'ADMIN') {
-      return res.status(403).json({ ok: false, error: 'admin_only' });
-    }
-
-    (req as any).admin = payload;
-
-    return next();
-  } catch {
-    return res.status(401).json({ ok: false, error: 'invalid_token' });
-  }
 }
 
 /**
@@ -84,21 +63,12 @@ adminRouter.post('/auth/login', async (req, res) => {
     select: { id: true, email: true, role: true },
   });
 
-  const expiresIn: SignOptions['expiresIn'] = (process.env.JWT_EXPIRES_IN ?? '7d') as
-    | SignOptions['expiresIn']
-    | undefined;
+  const token = signToken({ sub: adminUser.id, role: 'ADMIN' });
+  return res.json({ ok: true, token });
+}); // ✅ ESTE CIERRE TE FALTABA
 
-  const token = jwt.sign(
-    { sub: adminUser.id, role: 'ADMIN', email: adminUser.email },
-    JWT_SECRET as Secret,
-    { expiresIn },
-  );
-
-  return res.json({ token });
-});
-
-// ✅ A partir de acá, TODO requiere ADMIN token
-adminRouter.use(requireAdmin);
+// ✅ A partir de acá, TODO requiere JWT + rol ADMIN
+adminRouter.use(auth, requireAdmin);
 
 // ✅ STATUS ADMIN (bloquear / activar usuarios)
 
@@ -186,7 +156,7 @@ adminRouter.patch('/users/:userId/status', async (req, res) => {
     return res.json({ ok: true, userId, status, already: true });
   }
 
-  const adminId = (req as any).admin?.sub ?? null;
+  const adminId = req.user?.id ?? null;
 
   await prisma.$transaction(async (tx) => {
     await tx.user.update({
@@ -1407,7 +1377,7 @@ adminRouter.patch('/background-checks/:id/expire', async (req, res) => {
       status: 'REJECTED',
       rejectionReason: reason,
       reviewedAt: new Date(),
-      reviewerId: (req as any).admin?.sub ?? null,
+      reviewerId: req.user?.id ?? null,
     },
     select: { id: true, status: true, rejectionReason: true, reviewedAt: true },
   });
@@ -1781,7 +1751,7 @@ adminRouter.patch('/specialists/:specialistId/grant-days', async (req, res) => {
 /**
  * DELETE /admin/users/:userId
  */
-adminRouter.delete('/users/:userId', requireAdmin, async (req, res) => {
+adminRouter.delete('/users/:userId', async (req, res) => {
   const userId = String(req.params.userId ?? '').trim();
   const mode = String(req.query.mode ?? 'anonymize').trim(); // anonymize | hard
 

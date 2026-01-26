@@ -1,5 +1,5 @@
 // apps/admin-web/src/pages/Orders.tsx
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { getAdminOrders, type AdminOrderRow } from '../api/adminApi';
@@ -11,12 +11,29 @@ type LoadState =
   | { kind: 'error'; message: string }
   | { kind: 'ready' };
 
+function mapGroupToBackendStatus(group: string | null): string | null {
+  const g = String(group ?? '').toUpperCase().trim();
+  if (!g) return null;
+
+  // Nota: el backend /admin/orders hoy SOLO soporta un status único.
+  // Elegimos un status representativo para cada grupo para que NO devuelva 0 resultados.
+  // (Luego, si querés soporte real de grupos, se hace en backend con IN [...].)
+
+  if (g === 'ACTIVE') return 'IN_PROGRESS';
+  if (g === 'FINISHED') return 'CLOSED';
+  if (g === 'CANCELLED') return 'CANCELLED_AUTO';
+
+  return null;
+}
+
 export default function Orders() {
   const nav = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const qParam = searchParams.get('q') ?? '';
-  const statusParam = searchParams.get('status') ?? 'ALL';
+  const groupParam = searchParams.get('group');
+  const mappedFromGroup = mapGroupToBackendStatus(groupParam);
+  const statusParam = mappedFromGroup ?? (searchParams.get('status') ?? 'ALL');
 
   const [q, setQ] = useState(qParam);
   const [status, setStatus] = useState(statusParam);
@@ -74,12 +91,10 @@ export default function Orders() {
     await load('', 'ALL');
   };
 
-  // Auto-load sin useEffect
-  const [didAutoLoad, setDidAutoLoad] = useState(false);
-  if (!didAutoLoad) {
-    setDidAutoLoad(true);
+   useEffect(() => {
     void load(qParam, statusParam);
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="ordersShell">

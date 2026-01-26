@@ -34,7 +34,7 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
 
     if (sub.trialEnd) {
       const diffMs = sub.trialEnd.getTime() - now.getTime();
-      daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      daysRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
     }
 
     return res.json({
@@ -95,6 +95,13 @@ router.post('/mercadopago/webhook', async (req: Request, res: Response) => {
       (req.query as any)?.['data.id'] || (req.body as any)?.data?.id || (req.body as any)?.id;
 
     if (!paymentId) return res.status(200).send('ok_no_payment_id');
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[MP webhook] incoming', {
+        query: req.query,
+        body: req.body,
+        paymentId: String(paymentId),
+      });
+    }
 
     await handleMercadoPagoWebhook(String(paymentId));
     return res.status(200).send('ok');

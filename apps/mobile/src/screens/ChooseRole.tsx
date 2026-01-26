@@ -27,7 +27,7 @@ export default function ChooseRole({ onBack, onPickClient, onPickPro }: Props) {
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={styles.container}>
-      <SafeAreaView style={styles.safe} edges={['top']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         {/* Header */}
         <View style={[styles.header, { height: headerHeight }]}>
           <Pressable
@@ -55,6 +55,7 @@ export default function ChooseRole({ onBack, onPickClient, onPickPro }: Props) {
             <Pressable
               onPress={onPickClient}
               accessibilityRole="button"
+              accessibilityLabel="Crear cuenta como cliente"
               hitSlop={8}
               style={({ pressed }) => [styles.card, pressed && { transform: [{ scale: 0.99 }] }]}
             >
@@ -70,6 +71,7 @@ export default function ChooseRole({ onBack, onPickClient, onPickPro }: Props) {
             <Pressable
               onPress={onPickPro}
               accessibilityRole="button"
+              accessibilityLabel="Crear cuenta como especialista"
               hitSlop={8}
               style={({ pressed }) => [styles.card, pressed && { transform: [{ scale: 0.99 }] }]}
             >

@@ -1,7 +1,8 @@
+//apps/mobile/src/screens/LoginScreen.tsx
 import { useNavigation } from '@react-navigation/native';
 import axios from 'axios';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -58,7 +59,7 @@ export default function LoginScreen() {
             ? 'Usuario o contraseña incorrectos.'
             : code === 'blocked'
               ? 'Tu cuenta está bloqueada.'
-              : (err.message ?? 'Ocurrió un error. Intentá nuevamente.');
+              : 'Ocurrió un error. Intentá nuevamente.';
         Alert.alert('Error', msg);
       } else {
         Alert.alert('Error', 'No pude conectar con el servidor.');
@@ -120,6 +121,11 @@ export default function LoginScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
+              returnKeyType="next"
+              blurOnSubmit={false}
+              onSubmitEditing={() => {
+                // por ahora no enfocamos password (sin ref), pero evitamos blur
+              }}
             />
 
             {/* ✅ Password con ojito */}
@@ -132,6 +138,8 @@ export default function LoginScreen() {
               secureTextEntry={!showPass}
               onToggleVisibility={() => setShowPass((v) => !v)}
               isVisible={showPass}
+              returnKeyType="go"
+              onSubmitEditing={onSubmit}
             />
 
             <Pressable
@@ -218,6 +226,8 @@ function LabeledPasswordInput({
         <Pressable
           onPress={onToggleVisibility}
           hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel={isVisible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
           style={({ pressed }) => [pwdStyles.eyeBtn, pressed && { opacity: 0.75 }]}
         >
           <Text style={pwdStyles.eyeText}>{isVisible ? '🙈' : '👁️'}</Text>

@@ -115,8 +115,14 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
     data: { usedAt: new Date() },
   });
 
-  // password
-  if (!args.password || args.password.length < 8) throw httpError('weak_password', 400);
+  const pwd = String(args.password ?? '');
+  const hasMinLen = pwd.length >= 8;
+  const hasLetter = /[A-Za-z]/.test(pwd);
+  const hasNumber = /\d/.test(pwd);
+
+  if (!hasMinLen || !hasLetter || !hasNumber) {
+    throw httpError('weak_password', 400);
+  }
 
   // unicidad clara
   const existing = await prisma.user.findFirst({

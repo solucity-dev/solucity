@@ -17,7 +17,7 @@ import type {
   AgendaStackParamList,
   SpecialistHomeStackParamList,
   SpecialistProfileStackParamList,
-  ClientTabsParamList as SpecialistTabsParamList,
+  SpecialistTabsParamList,
 } from '../types';
 
 const Tab = createBottomTabNavigator<SpecialistTabsParamList>();
@@ -29,6 +29,7 @@ function SpecialistHomeStackNavigator() {
     <SpecialistHomeStack.Navigator screenOptions={{ headerShown: false }}>
       <SpecialistHomeStack.Screen name="SpecialistHome" component={SpecialistHome} />
       <SpecialistHomeStack.Screen name="Notifications" component={NotificationsScreen} />
+      <SpecialistHomeStack.Screen name="BackgroundCheck" component={BackgroundCheckScreen} />
     </SpecialistHomeStack.Navigator>
   );
 }

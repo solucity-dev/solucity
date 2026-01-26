@@ -27,14 +27,14 @@ ensureDir(kycDir);
 ensureDir(certsDir);
 ensureDir(backgroundChecksDir);
 
-if (!fs.existsSync(kycDir)) fs.mkdirSync(kycDir, { recursive: true });
-if (!fs.existsSync(certsDir)) fs.mkdirSync(certsDir, { recursive: true });
-if (!fs.existsSync(backgroundChecksDir)) fs.mkdirSync(backgroundChecksDir, { recursive: true });
+const DEBUG_UPLOADS = process.env.NODE_ENV !== 'production' || process.env.DEBUG_UPLOADS === 'true';
 
-// (opcional) logs para verificar en Render
-console.log('[specialists.routes] uploadsRoot =', uploadsRoot);
-console.log('[specialists.routes] kycDir =', kycDir);
-console.log('[specialists.routes] certsDir =', certsDir);
+if (DEBUG_UPLOADS) {
+  console.log('[specialists.routes] uploadsRoot =', uploadsRoot);
+  console.log('[specialists.routes] kycDir =', kycDir);
+  console.log('[specialists.routes] certsDir =', certsDir);
+  console.log('[specialists.routes] backgroundChecksDir =', backgroundChecksDir);
+}
 
 /** ========= Multer storages ========= **/
 const storageKyc = multer.diskStorage({

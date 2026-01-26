@@ -33,6 +33,7 @@ async function getUserIdFromSubscription(subId: string) {
 
       // ✅ campos que después usamos en handleMercadoPagoWebhook
       currentPeriodEnd: true,
+      lastPaymentId: true,
 
       specialist: { select: { userId: true } },
     },
@@ -127,12 +128,6 @@ export async function createSubscriptionPaymentLink(userId: string) {
   const sub = await getOrCreateSubscriptionForSpecialist(userId);
   if (!sub) throw new Error('no_specialist_profile');
 
-  const now = new Date();
-
-  if (sub.status === 'TRIALING' && sub.trialEnd && sub.trialEnd > now) {
-    throw new Error('trial_active');
-  }
-
   const publicBackend = getPublicBackendUrl();
 
   const preference = await mpCreatePaymentLink({
@@ -164,6 +159,14 @@ export async function createSubscriptionPaymentLink(userId: string) {
 
 export async function handleMercadoPagoWebhook(paymentId: string) {
   const payment = await mpGetPayment(paymentId);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[MP payment]', {
+      paymentId,
+      status: payment?.status,
+      external_reference: payment?.external_reference,
+      preference_id: payment?.preference_id,
+    });
+  }
 
   const status = String(payment?.status || '');
   const externalRef = String(payment?.external_reference || '');
@@ -186,8 +189,35 @@ export async function handleMercadoPagoWebhook(paymentId: string) {
 
   if (status !== 'approved') return;
 
+  // ✅ IDEMPOTENCIA ROBUSTA: si ya guardamos este paymentId, no procesar 2 veces (race-safe)
+  const mark = await prisma.subscription.updateMany({
+    where: {
+      id: sub.id,
+      NOT: { lastPaymentId: paymentId },
+    },
+    data: {
+      lastPaymentId: paymentId,
+      lastPaymentStatus: 'approved',
+      provider: 'MERCADOPAGO',
+    },
+  });
+
+  if (mark.count === 0) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[MP webhook] deduped paymentId=', paymentId, 'subId=', sub.id);
+    }
+    return;
+  }
+
+  // ✅ Releer estado actual para calcular sobre datos frescos
+  const fresh = await prisma.subscription.findUnique({
+    where: { id: sub.id },
+    select: { currentPeriodEnd: true },
+  });
+
   const now = new Date();
-  const base = sub.currentPeriodEnd && sub.currentPeriodEnd > now ? sub.currentPeriodEnd : now;
+  const currentEnd = fresh?.currentPeriodEnd ?? null;
+  const base = currentEnd && currentEnd > now ? currentEnd : now;
   const newEnd = addOneCalendarMonth(base);
 
   await prisma.subscription.update({
@@ -197,7 +227,6 @@ export async function handleMercadoPagoWebhook(paymentId: string) {
       currentPeriodStart: base,
       currentPeriodEnd: newEnd,
       trialEnd: null,
-      lastPaymentStatus: 'approved',
     },
   });
 

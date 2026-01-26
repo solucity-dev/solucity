@@ -14,35 +14,39 @@ router.get('/me', auth, async (req, res) => {
   try {
     const base = await prisma.user.findUnique({
       where: { id: req.user!.id },
-      select: { id: true, email: true, role: true, name: true, surname: true, phone: true },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        name: true,
+        surname: true,
+        phone: true,
+        customer: {
+          select: {
+            id: true,
+            defaultAddress: { select: { id: true, formatted: true } },
+          },
+        },
+        specialist: { select: { id: true } },
+      },
     });
     if (!base) return res.status(404).json({ ok: false, error: 'not_found' });
 
-    const customer = await prisma.customerProfile.findUnique({
-      where: { userId: base.id },
-      select: { id: true, defaultAddressId: true },
-    });
-    const specialist = await prisma.specialistProfile.findUnique({
-      where: { userId: base.id },
-      select: { id: true },
-    });
-    let defaultAddress: { id: string; formatted: string } | null = null;
-    if (customer?.defaultAddressId) {
-      const addr = await prisma.address.findUnique({
-        where: { id: customer.defaultAddressId },
-        select: { id: true, formatted: true },
-      });
-      if (addr) defaultAddress = addr;
-    }
-
     return res.json({
       ok: true,
-      user: base,
-      profiles: {
-        customerId: customer?.id ?? null,
-        specialistId: specialist?.id ?? null,
+      user: {
+        id: base.id,
+        email: base.email,
+        role: base.role,
+        name: base.name,
+        surname: base.surname,
+        phone: base.phone,
       },
-      defaultAddress,
+      profiles: {
+        customerId: base.customer?.id ?? null,
+        specialistId: base.specialist?.id ?? null,
+      },
+      defaultAddress: base.customer?.defaultAddress ?? null,
     });
   } catch (e) {
     if (process.env.NODE_ENV !== 'production') console.error('GET /auth/me', e);

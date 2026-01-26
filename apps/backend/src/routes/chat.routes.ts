@@ -6,16 +6,11 @@ import { prisma } from '../lib/prisma';
 import { auth } from '../middlewares/auth';
 import { sendExpoPush } from '../services/pushExpo';
 
-import type { Request } from 'express';
-
 export const chat = Router();
 
 /* ───────────────── Helpers ───────────────── */
 
-const headerUserId = (req: Request) => String(req.header('x-user-id') || '').trim() || null;
-
-const getActorUserId = (req: any): string | null =>
-  (req.user?.id as string | undefined) ?? headerUserId(req);
+const getActorUserId = (req: any): string | null => (req.user?.id as string | undefined) ?? null;
 
 /**
  * En tu schema:

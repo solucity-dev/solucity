@@ -1,3 +1,4 @@
+//apps/mobile/src/navigation/navigationRef.ts
 import { createNavigationContainerRef } from '@react-navigation/native';
 
 export const navigationRef = createNavigationContainerRef<any>();
@@ -118,18 +119,27 @@ export function navigateToChatThread(threadId: string, orderId?: string | null) 
 }
 
 export function navigateToBackgroundCheck() {
-  if (!navigationRef.isReady() || navRole !== 'SPECIALIST') {
+  if (!navigationRef.isReady()) {
     queueBackgroundCheck();
     return;
   }
 
-  // Solo existe en flujo specialist (según tu diseño)
-  const root = 'MainSpecialist';
+  // si ya sabemos el rol y no es specialist, descartamos
+  if (navRole && navRole !== 'SPECIALIST') {
+    if (__DEV__) console.log('[NAV] drop backgroundCheck nav (role not specialist)');
+    return;
+  }
 
-  navigationRef.navigate(root, {
+  // si todavía no sabemos rol, esperamos
+  if (!navRole) {
+    queueBackgroundCheck();
+    return;
+  }
+
+  navigationRef.navigate('MainSpecialist', {
     screen: 'Perfil',
     params: {
-      screen: 'BackgroundCheck',
+      screen: 'BackgroundCheck', // ✅ screen dentro del ProfileStack
     },
   });
 }

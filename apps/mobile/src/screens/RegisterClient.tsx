@@ -77,8 +77,10 @@ export default function RegisterClient() {
   const passOk = password.length >= 8;
   const passMatch = passOk && password === password2;
 
-  // Ping inicial
+  // Ping inicial (solo DEV)
   useEffect(() => {
+    if (!__DEV__) return;
+
     (async () => {
       try {
         const res = await api.get('/health');
@@ -89,7 +91,6 @@ export default function RegisterClient() {
         } else {
           console.log('[health ERROR]', e);
         }
-        Alert.alert('Error', 'No puedo contactar la API desde la app.');
       }
     })();
   }, []);
@@ -99,7 +100,8 @@ export default function RegisterClient() {
     if (!nameOk || !emailOk || cooldown > 0 || loading) return;
     setLoading(true);
     try {
-      console.log('[register/start] POST ->', { email: email.trim() });
+      if (__DEV__) console.log('[register/start] POST ->', { email: email.trim() });
+
       const res = await api.post('/auth/register/start', { email: email.trim() });
       console.log('[register/start] RES <-', res.status, res.data);
       if (res.data?.ok) {
@@ -150,7 +152,8 @@ export default function RegisterClient() {
         password,
         phone: phone.trim() ? phone.trim() : null,
       };
-      console.log('[register/verify] POST ->', body);
+      if (__DEV__) console.log('[register/verify] POST ->', { ...body, password: '***' });
+
       const res = await api.post<VerifyOk>('/auth/register/verify', body);
       console.log('[register/verify] RES <-', res.status, res.data);
 
@@ -193,12 +196,25 @@ export default function RegisterClient() {
     }
   };
 
-  // cooldown timer
+  // cooldown timer (1 solo interval)
   useEffect(() => {
     if (cooldown <= 0) return;
-    cooldownRef.current = setInterval(() => setCooldown((c) => (c > 0 ? c - 1 : 0)), 1000);
+
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    cooldownRef.current = setInterval(() => {
+      setCooldown((c) => {
+        if (c <= 1) {
+          if (cooldownRef.current) clearInterval(cooldownRef.current);
+          cooldownRef.current = null;
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
+
     return () => {
       if (cooldownRef.current) clearInterval(cooldownRef.current);
+      cooldownRef.current = null;
     };
   }, [cooldown]);
 
@@ -207,7 +223,7 @@ export default function RegisterClient() {
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={styles.container}>
-      <SafeAreaView style={styles.safe} edges={['top']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <KeyboardAvoidingView
           style={styles.flex}
           behavior={Platform.select({ ios: 'padding', android: undefined })}
@@ -244,6 +260,7 @@ export default function RegisterClient() {
                   autoCapitalize="words"
                   autoComplete="name"
                   returnKeyType="next"
+                  editable={!loading}
                 />
 
                 <LabeledInput
@@ -254,6 +271,8 @@ export default function RegisterClient() {
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoComplete="email"
+                  textContentType="username"
+                  editable={!loading}
                 />
 
                 <LinedNote text="Teléfono (opcional)" />
@@ -263,6 +282,7 @@ export default function RegisterClient() {
                   value={phone}
                   onChangeText={setPhone}
                   keyboardType="phone-pad"
+                  editable={!loading}
                 />
 
                 <Pressable
@@ -297,6 +317,7 @@ export default function RegisterClient() {
                   value={otp}
                   onChangeText={(t) => setOtp(t.replace(/\D/g, '').slice(0, 6))}
                   keyboardType="number-pad"
+                  editable={!loading}
                 />
 
                 <Pressable
@@ -328,6 +349,9 @@ export default function RegisterClient() {
                   secureTextEntry={!showPass1}
                   isVisible={showPass1}
                   onToggleVisibility={() => setShowPass1((v) => !v)}
+                  textContentType="newPassword"
+                  autoComplete="new-password"
+                  editable={!loading}
                 />
 
                 {/* ✅ Repetir password con ojito */}
@@ -339,6 +363,9 @@ export default function RegisterClient() {
                   secureTextEntry={!showPass2}
                   isVisible={showPass2}
                   onToggleVisibility={() => setShowPass2((v) => !v)}
+                  textContentType="newPassword"
+                  autoComplete="new-password"
+                  editable={!loading}
                 />
 
                 <Pressable
@@ -412,6 +439,8 @@ function LabeledPasswordInput({
         <Pressable
           onPress={onToggleVisibility}
           hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel={isVisible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
           style={({ pressed }) => [pwdStyles.eyeBtn, pressed && { opacity: 0.75 }]}
         >
           <Text style={pwdStyles.eyeText}>{isVisible ? '🙈' : '👁️'}</Text>

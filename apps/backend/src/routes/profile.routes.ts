@@ -97,6 +97,11 @@ router.patch('/password', auth, async (req, res) => {
       data: { passwordHash: newHash },
     });
 
+    // 🔐 invalidar todas las sesiones activas (refresh tokens)
+    await prisma.refreshToken.deleteMany({
+      where: { userId },
+    });
+
     return res.json({ ok: true });
   } catch (e) {
     if (process.env.NODE_ENV !== 'production') {

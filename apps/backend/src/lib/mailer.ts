@@ -1,4 +1,4 @@
-// src/services/mailer.ts (o donde lo tengas)
+// src/services/mailer.ts
 import nodemailer, { type Transporter } from 'nodemailer';
 import { Resend } from 'resend';
 
@@ -92,7 +92,10 @@ export async function sendOtpEmail(to: string, code: string) {
       throw new Error('email_send_failed');
     }
 
-    console.log('📨 Email enviado (Resend):', data?.id);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('📨 Email enviado (Resend):', data?.id);
+    }
+
     return { messageId: data?.id };
   }
 
@@ -105,7 +108,9 @@ export async function sendOtpEmail(to: string, code: string) {
   });
 
   if (!hasSmtpCreds) {
-    console.log('📨 [FAKE SMTP] Email simulado ->', { to, subject, code });
+    if (!hasSmtpCreds && process.env.NODE_ENV !== 'production') {
+      console.log('📨 [FAKE SMTP] Email simulado ->', { to, subject });
+    }
   } else {
     console.log('📨 Email enviado (SMTP):', info.messageId);
   }

@@ -1,3 +1,4 @@
+//apps/mobile/src/screens/Splash.tsx
 import { LinearGradient } from 'expo-linear-gradient';
 import { ActivityIndicator, Image, StyleSheet } from 'react-native';
 

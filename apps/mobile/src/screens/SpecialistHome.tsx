@@ -220,7 +220,6 @@ export default function SpecialistHome() {
 
   // form fields
   const [bio, setBio] = useState('');
-  const [visibleNow, setVisibleNow] = useState(false); // lo que ve el cliente
   const [availableNow, setAvailableNow] = useState(true); // switch (intención)
   const [start, setStart] = useState('09:00');
   const [end, setEnd] = useState('18:00');
@@ -368,7 +367,6 @@ export default function SpecialistHome() {
 
         setProfile(p);
         setBio(p.bio ?? '');
-        setVisibleNow(!!p.available);
 
         // si todavía no viene (backend viejo), fallback a p.available
         setAvailableNow(
@@ -539,6 +537,9 @@ export default function SpecialistHome() {
 
   const canToggleAvailability =
     kycStatus === 'VERIFIED' && bgStatus === 'APPROVED' && subscriptionOk;
+
+  // ✅ La pill debe reflejar el switch (si está habilitado para togglear)
+  const visibleEffective = canToggleAvailability && availableNow;
 
   // permisos para cámara / galería
   async function requestCamera() {
@@ -1088,10 +1089,10 @@ export default function SpecialistHome() {
           <View style={styles.card}>
             <View style={styles.cardHeaderRow}>
               <Text style={styles.cardTitle}>Estado</Text>
-              <View style={[styles.badge, visibleNow ? styles.badgeOn : styles.badgeOff]}>
-                <View style={[styles.dot, visibleNow ? styles.dotOn : styles.dotOff]} />
-                <Text style={[styles.badgeT, { color: visibleNow ? '#063A40' : '#6F8C90' }]}>
-                  {visibleNow ? 'Disponible' : 'No disponible'}
+              <View style={[styles.badge, visibleEffective ? styles.badgeOn : styles.badgeOff]}>
+                <View style={[styles.dot, visibleEffective ? styles.dotOn : styles.dotOff]} />
+                <Text style={[styles.badgeT, { color: visibleEffective ? '#063A40' : '#6F8C90' }]}>
+                  {visibleEffective ? 'Disponible' : 'No disponible'}
                 </Text>
               </View>
             </View>

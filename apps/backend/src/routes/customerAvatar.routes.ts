@@ -3,8 +3,9 @@ import path from 'path';
 import { Router } from 'express';
 import multer from 'multer';
 
+import { imageFileFilter } from '../lib/multerImage';
 import { prisma } from '../lib/prisma';
-import { ensureDir, uploadsRoot } from '../lib/uploads';
+import { ensureDir, resolveUploadsPath, safeUnlink, uploadsRoot } from '../lib/uploads';
 import { auth } from '../middlewares/auth';
 
 const router = Router();
@@ -24,6 +25,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
+  fileFilter: imageFileFilter,
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
@@ -36,10 +38,18 @@ router.post('/', auth, upload.single('avatar'), async (req: any, res) => {
 
     const customer = await prisma.customerProfile.findUnique({
       where: { userId },
-      select: { id: true },
+      select: { id: true, avatarUrl: true },
     });
 
-    if (!customer) return res.status(404).json({ ok: false, error: 'customer_profile_not_found' });
+    if (!customer) {
+      return res.status(404).json({ ok: false, error: 'customer_profile_not_found' });
+    }
+
+    // ✅ borrar avatar anterior (best-effort)
+    if (customer.avatarUrl?.startsWith('/uploads/avatars/')) {
+      const prevPath = resolveUploadsPath(uploadsRoot, customer.avatarUrl);
+      if (prevPath) safeUnlink(prevPath);
+    }
 
     const avatarUrl = `/uploads/avatars/${req.file.filename}`;
 

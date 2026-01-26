@@ -122,7 +122,8 @@ export default function Dashboard() {
     value={data.orders.active}
     hint="Asignadas / en progreso"
     tone="neutral"
-    onClick={() => navigate('/app/orders?status=ACTIVE')}
+    onClick={() => navigate('/app/orders?group=ACTIVE')}
+
   />
 
   <MetricCard
@@ -130,7 +131,7 @@ export default function Dashboard() {
     value={data.orders.finished}
     hint="Confirmadas / cerradas"
     tone="good"
-    onClick={() => navigate('/app/orders?status=FINISHED')}
+    onClick={() => navigate('/app/orders?group=FINISHED')}
   />
 
   <MetricCard
@@ -138,7 +139,7 @@ export default function Dashboard() {
     value={data.orders.cancelled}
     hint="Cancelación / rechazo"
     tone="bad"
-    onClick={() => navigate('/app/orders?status=CANCELLED')}
+    onClick={() => navigate('/app/orders?group=CANCELLED')}
   />
 </Section>
 

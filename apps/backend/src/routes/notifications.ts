@@ -27,8 +27,10 @@ router.get('/', auth, async (req: AuthReq, res: Response) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' });
 
-    const limit = Number(req.query.limit ?? 50);
-    const take = Number.isNaN(limit) ? 50 : Math.min(Math.max(limit, 1), 100);
+    const rawLimit = typeof req.query.limit === 'string' ? req.query.limit : '';
+    const parsed = rawLimit ? parseInt(rawLimit, 10) : 50;
+
+    const take = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1), 100) : 50;
 
     const items = await prisma.notification.findMany({
       where: { userId },
@@ -59,7 +61,7 @@ router.get('/', auth, async (req: AuthReq, res: Response) => {
  */
 const pushTokenSchema = z.object({
   token: z.string().min(10),
-  platform: z.string().optional().nullable(),
+  platform: z.enum(['android', 'ios', 'web']).optional().nullable(),
 });
 
 router.post('/push-token', auth, async (req: AuthReq, res: Response) => {

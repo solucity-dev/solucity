@@ -3,8 +3,9 @@ import path from 'path';
 import { Router } from 'express';
 import multer from 'multer';
 
+import { imageFileFilter } from '../lib/multerImage';
 import { prisma } from '../lib/prisma';
-import { ensureDir, uploadsRoot } from '../lib/uploads';
+import { ensureDir, resolveUploadsPath, safeUnlink, uploadsRoot } from '../lib/uploads';
 import { auth } from '../middlewares/auth';
 
 const router = Router();
@@ -16,13 +17,14 @@ const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadDir),
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname || '') || '.jpg';
-    const name = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+    const name = `specialist-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
     cb(null, name);
   },
 });
 
 const upload = multer({
   storage,
+  fileFilter: imageFileFilter,
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
@@ -35,9 +37,16 @@ router.post('/me/avatar', auth, upload.single('avatar'), async (req, res) => {
   try {
     const specialist = await prisma.specialistProfile.findUnique({
       where: { userId },
-      select: { id: true },
+      select: { id: true, avatarUrl: true },
     });
+
     if (!specialist) return res.status(400).json({ ok: false, error: 'not_specialist' });
+
+    // ✅ borrar avatar anterior (best-effort)
+    if (specialist.avatarUrl?.startsWith('/uploads/avatars/')) {
+      const prevPath = resolveUploadsPath(uploadsRoot, specialist.avatarUrl);
+      if (prevPath) safeUnlink(prevPath);
+    }
 
     const avatarUrl = `/uploads/avatars/${req.file.filename}`;
 

@@ -15,32 +15,29 @@ export async function auth(req: Request, res: Response, next: NextFunction) {
   try {
     const payload = verifyToken(token);
 
-    // 🔹 Cargar estado real del usuario desde DB
+    if (!payload?.sub) {
+      return res.status(401).json({ ok: false, error: 'unauthorized' });
+    }
+
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
-      select: {
-        id: true,
-        role: true,
-        status: true,
-      },
+      select: { id: true, role: true, status: true },
     });
 
     if (!user) {
       return res.status(401).json({ ok: false, error: 'unauthorized' });
     }
 
-    // ⛔ BLOQUEO REAL
     if (user.status === 'BLOCKED') {
-      return res.status(403).json({
-        ok: false,
-        error: 'user_blocked',
-      });
+      return res.status(403).json({ ok: false, error: 'user_blocked' });
     }
 
-    // ✅ Usuario válido y activo
     req.user = { id: user.id, role: user.role };
-    next();
-  } catch {
+    return next();
+  } catch (err) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[auth] invalid token', err);
+    }
     return res.status(401).json({ ok: false, error: 'unauthorized' });
   }
 }

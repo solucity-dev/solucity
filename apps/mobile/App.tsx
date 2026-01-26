@@ -6,7 +6,7 @@ import * as Font from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, AppState, View } from 'react-native';
+import { AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from './src/auth/AuthProvider';
@@ -16,6 +16,7 @@ import RootNavigator from './src/navigation/RootNavigator';
 // React Query
 // 🔔 provider de notificaciones
 import { NotificationsProvider } from './src/notifications/NotificationsProvider';
+import Splash from './src/screens/Splash';
 
 // ✅ NUEVO: navigationRef global
 
@@ -61,11 +62,7 @@ export default function App() {
   }, []);
 
   if (!fontsReady) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator />
-      </View>
-    );
+    return <Splash />;
   }
 
   return (

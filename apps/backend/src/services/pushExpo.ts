@@ -1,4 +1,3 @@
-// apps/backend/src/services/pushExpo.ts
 import axios from 'axios';
 
 export type ExpoMessage = {
@@ -14,7 +13,9 @@ export type ExpoMessage = {
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
 function isExpoToken(t: unknown): t is string {
-  return typeof t === 'string' && t.startsWith('ExponentPushToken[');
+  return (
+    typeof t === 'string' && (t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken['))
+  );
 }
 
 function chunk<T>(arr: T[], size = 100) {
@@ -25,7 +26,7 @@ function chunk<T>(arr: T[], size = 100) {
 
 /**
  * Envía push a Expo en chunks de 100.
- * Devuelve los tickets de Expo para debug (ok/error por token).
+ * Devuelve tickets para debug (ok/error por token).
  */
 export async function sendExpoPush(messages: ExpoMessage[]) {
   const filtered = (messages ?? []).filter((m) => isExpoToken(m?.to));
@@ -38,15 +39,18 @@ export async function sendExpoPush(messages: ExpoMessage[]) {
   for (const ch of chunks) {
     try {
       const res = await axios.post(EXPO_PUSH_URL, ch, {
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
         timeout: 15_000,
         validateStatus: () => true,
       });
 
       const payload = res.data;
-      // Expo suele devolver: { data: [ { status:'ok'|'error', id?, message?, details? } ] }
+
       if (process.env.NODE_ENV !== 'production') {
-        console.log('[expoPush] response:', JSON.stringify(payload));
+        console.log('[expoPush] response', { status: res.status, count: ch.length });
       }
 
       if (payload?.data && Array.isArray(payload.data)) {
@@ -54,12 +58,16 @@ export async function sendExpoPush(messages: ExpoMessage[]) {
       }
 
       if (res.status < 200 || res.status >= 300) {
-        console.warn('[expoPush] non-2xx', res.status, JSON.stringify(payload));
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('[expoPush] non-2xx', res.status, JSON.stringify(payload));
+        }
       }
 
       sent += ch.length;
     } catch (e: any) {
-      console.warn('[expoPush] send failed', e?.message);
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[expoPush] send failed', e?.message);
+      }
     }
   }
 

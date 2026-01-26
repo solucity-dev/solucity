@@ -76,14 +76,21 @@ export default function Specialists() {
   }, [searchParams]);
 
   useEffect(() => {
-    const params = new URLSearchParams();
-    const trimmed = q.trim();
-    if (trimmed) params.set('q', trimmed);
-    if (filterKyc !== 'ALL') params.set('kyc', filterKyc);
-    if (filterSub !== 'ALL') params.set('sub', filterSub);
-    if (filterCat !== 'ALL') params.set('cat', filterCat);
-    setSearchParams(params, { replace: true });
-  }, [q, filterKyc, filterSub, filterCat, setSearchParams]);
+  const params = new URLSearchParams();
+  const trimmed = q.trim();
+
+  if (trimmed) params.set('q', trimmed);
+  if (filterKyc !== 'ALL') params.set('kyc', filterKyc);
+  if (filterSub !== 'ALL') params.set('sub', filterSub);
+  if (filterCat !== 'ALL') params.set('cat', filterCat);
+
+  // ✅ evita ping-pong (solo escribimos si cambia realmente)
+  const next = params.toString();
+  const current = searchParams.toString();
+  if (next === current) return;
+
+  setSearchParams(params, { replace: true });
+}, [q, filterKyc, filterSub, filterCat, searchParams, setSearchParams]);
 
   const specialtyOptions = useMemo(() => {
     const list: AdminSpecialistRow[] = data ?? [];
@@ -171,7 +178,7 @@ export default function Specialists() {
       <div className="specTop">
         <button
   className="specBack"
-  onClick={() => nav('/app/dashboard', { replace: true })}
+  onClick={() => nav('/app', { replace: true })}
 >
   ← Dashboard
 </button>
@@ -307,7 +314,8 @@ export default function Specialists() {
                     </td>
 
                     <td>
-                      {r.ratingAvg.toFixed(1)} ({r.ratingCount})
+                      {Number.isFinite(r.ratingAvg) ? r.ratingAvg.toFixed(1) : '0.0'} ({r.ratingCount ?? 0})
+
                     </td>
 
                     <td>{r.daysLeft ?? '-'}</td>

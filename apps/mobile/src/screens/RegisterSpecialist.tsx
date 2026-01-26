@@ -1,5 +1,4 @@
 // apps/mobile/src/screens/RegisterSpecialist.tsx
-import { useNavigation } from '@react-navigation/native';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -31,7 +30,7 @@ type CategoryGroup = { id: string; name: string; slug: string; categories: Categ
 
 export default function RegisterSpecialist() {
   const insets = useSafeAreaInsets();
-  useNavigation(); // ✅ evitamos ESLint "unused var" y mantenemos el hook para futuro
+
   const { setMode, login } = useAuth();
 
   const [step, setStep] = useState<Step>(1);
@@ -176,11 +175,6 @@ export default function RegisterSpecialist() {
 
   // ✅ hint suave paso 2 (exactamente qué falta)
   const [step2Hint, setStep2Hint] = useState<string | null>(null);
-
-  const step2MissingLabels = useMemo(() => {
-    const missing = step2Checks.filter((c) => !c.ok).map((c) => c.label);
-    return missing;
-  }, [step2Checks]);
 
   useEffect(() => {
     if (step2Complete) setStep2Hint(null);
@@ -347,7 +341,7 @@ export default function RegisterSpecialist() {
       await api.post(
         '/notifications/push-token',
         { token: pushToken, platform: Platform.OS },
-        { headers: { 'Cache-Control': 'no-cache' } },
+        { headers: { ...tempAuthHeaders(), 'Cache-Control': 'no-cache' } },
       );
     } catch {
       // no frenamos el flujo por esto
@@ -388,7 +382,7 @@ export default function RegisterSpecialist() {
 
       // ✅ 3) re-disparo submit (para que dispare push "PENDING" sí o sí)
       try {
-        await api.post('/specialists/kyc/submit', kycUrls);
+        await api.post('/specialists/kyc/submit', kycUrls, { headers: { ...tempAuthHeaders() } });
       } catch {}
     } catch (e: any) {
       console.log('[specialists/register]', e?.response?.data || e.message);
@@ -402,7 +396,7 @@ export default function RegisterSpecialist() {
 
   // ===== UI ================================================================
   return (
-    <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1, paddingTop: insets.top + 8 }}>
+    <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
       <KeyboardAwareScrollView
         enableOnAndroid
         extraScrollHeight={18}
@@ -410,6 +404,7 @@ export default function RegisterSpecialist() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           padding: 16,
+          paddingTop: insets.top + 8,
           paddingBottom: insets.bottom + 140,
         }}
       >
@@ -461,6 +456,9 @@ export default function RegisterSpecialist() {
               placeholderTextColor="#cfe"
               returnKeyType="send"
               onSubmitEditing={sendCode}
+              textContentType="username"
+              autoComplete="email"
+              editable={!loadingStart && !loadingVerify}
             />
 
             {!otpSent ? (
@@ -479,10 +477,12 @@ export default function RegisterSpecialist() {
                   keyboardType="number-pad"
                   maxLength={6}
                   value={otp}
-                  onChangeText={setOtp}
+                  onChangeText={(t) => setOtp(t.replace(/\D/g, '').slice(0, 6))}
                   placeholder="••••••"
                   placeholderTextColor="#cfe"
                   returnKeyType="next"
+                  textContentType="oneTimeCode"
+                  editable={!loadingVerify}
                 />
 
                 <Text style={s.label}>Nombre</Text>
@@ -525,6 +525,8 @@ export default function RegisterSpecialist() {
                   onToggle={() => setShowPass1((v) => !v)}
                   onSubmitEditing={() => {}}
                   returnKeyType="next"
+                  textContentType="newPassword"
+                  autoComplete="new-password"
                 />
 
                 <Text style={s.label}>Confirmar contraseña</Text>
@@ -536,6 +538,8 @@ export default function RegisterSpecialist() {
                   onToggle={() => setShowPass2((v) => !v)}
                   onSubmitEditing={verifyAndContinue}
                   returnKeyType="done"
+                  textContentType="newPassword"
+                  autoComplete="new-password"
                 />
 
                 <Pressable
@@ -592,12 +596,7 @@ export default function RegisterSpecialist() {
             <Pressable
               onPress={() => {
                 if (!step2Complete) {
-                  const missing = step2MissingLabels;
-                  setStep2Hint(
-                    missing.length
-                      ? `Falta: ${missing.join(', ')}. Completalo para continuar.`
-                      : 'Te faltan fotos para continuar.',
-                  );
+                  setStep2Hint('Subí DNI frente, dorso y selfie para continuar.');
                   return;
                 }
                 continueToStep3();
@@ -660,7 +659,7 @@ export default function RegisterSpecialist() {
 }
 
 /** ✅ Password input con ojito, mantiene mismo look del s.input */
-function PasswordInputRow(props: {
+type PasswordRowProps = {
   value: string;
   onChangeText: (t: string) => void;
   placeholder?: string;
@@ -668,7 +667,16 @@ function PasswordInputRow(props: {
   onToggle: () => void;
   returnKeyType?: 'done' | 'next' | 'send';
   onSubmitEditing?: () => void;
-}) {
+
+  // ✅ extras (autofill)
+  textContentType?: React.ComponentProps<typeof TextInput>['textContentType'];
+  autoComplete?: React.ComponentProps<typeof TextInput>['autoComplete'];
+
+  // ✅ hardening
+  editable?: boolean;
+};
+
+function PasswordInputRow(props: PasswordRowProps) {
   const { visible, onToggle, ...rest } = props;
   return (
     <View style={pwd.wrap}>
@@ -677,10 +685,15 @@ function PasswordInputRow(props: {
         style={pwd.input}
         secureTextEntry={!visible}
         placeholderTextColor="#cfe"
+        autoCapitalize="none"
+        autoCorrect={false}
       />
+
       <Pressable
         onPress={onToggle}
         hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel={visible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
         style={({ pressed }) => [pwd.eyeBtn, pressed && { opacity: 0.75 }]}
       >
         <Text style={pwd.eyeText}>{visible ? '🙈' : '👁️'}</Text>

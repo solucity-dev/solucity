@@ -18,10 +18,18 @@ export default function Welcome({ onCreateAccount, onLogin, onOpenTerms }: Props
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={styles.container}>
-      <SafeAreaView style={styles.safe} edges={['top']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         {/* Centro: logo + textos */}
         <View style={styles.content}>
-          <Image source={Logo} resizeMode="contain" style={styles.logo} />
+          <Image
+            source={Logo}
+            resizeMode="contain"
+            style={styles.logo}
+            accessible
+            accessibilityLabel="Logo de Solucity"
+            accessibilityIgnoresInvertColors
+          />
+
           <Text style={styles.brand}>Solucity</Text>
 
           <Text style={styles.subtitle}>

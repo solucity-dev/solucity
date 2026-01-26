@@ -1,3 +1,4 @@
+//apps/backend/prisma/cleanDb.ts
 import { PrismaClient, Role } from '@prisma/client';
 import 'dotenv/config';
 

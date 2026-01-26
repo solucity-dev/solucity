@@ -1,3 +1,4 @@
+//apps/admin-web/src/pages/Customer.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -31,21 +32,25 @@ export default function Customers() {
   const [q, setQ] = useState(initialQ);
   const [status, setStatus] = useState<StatusFilter>(initialStatus);
 
-  const { items, loading, error } = useAdminCustomers({
-    q,
-    status: status === 'ALL' ? undefined : status,
-  });
+  const { items, loading, error, reload } = useAdminCustomers({
+  q,
+  status: status === 'ALL' ? undefined : status,
+});
 
   // acciones por fila
   const [rowActionId, setRowActionId] = useState<string | null>(null);
   const [rowMsg, setRowMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    const params = new URLSearchParams();
-    if (q.trim()) params.set('q', q.trim());
-    if (status !== 'ALL') params.set('status', status);
-    setSearchParams(params, { replace: true });
-  }, [q, status, setSearchParams]);
+  const params = new URLSearchParams();
+  if (q.trim()) params.set('q', q.trim());
+  if (status !== 'ALL') params.set('status', status);
+
+  const next = params.toString();
+  const curr = searchParams.toString();
+  if (next !== curr) setSearchParams(params, { replace: true });
+}, [q, status, searchParams, setSearchParams]);
+
 
   const rows = useMemo<AdminCustomerRow[]>(() => {
     const query = q.trim().toLowerCase();
@@ -68,13 +73,14 @@ export default function Customers() {
     setRowMsg(null);
 
     try {
-      await setAdminCustomerStatus(r.userId, next);
-      setRowMsg(`Estado actualizado a ${next}`);
-    } catch {
-      setRowMsg('Error al cambiar estado');
-    } finally {
-      setRowActionId(null);
-    }
+  await setAdminCustomerStatus(r.userId, next);
+  await reload(); // ✅ refresca lista desde backend
+  setRowMsg(`Estado actualizado a ${next}`);
+} catch {
+  setRowMsg('Error al cambiar estado');
+} finally {
+  setRowActionId(null);
+}
   }
 
   async function freeEmail(r: AdminCustomerRow) {
@@ -86,19 +92,23 @@ export default function Customers() {
     setRowActionId(r.userId);
     setRowMsg(null);
 
-    try {
-      await deleteAdminUser(r.userId, 'anonymize');
-      setRowMsg('Email liberado correctamente');
-    } catch {
-      setRowMsg('Error al liberar email');
-    } finally {
-      setRowActionId(null);
-    }
+try {
+  await deleteAdminUser(r.userId, 'anonymize');
+  await reload(); // ✅ refresca lista para ver email nuevo + status bloqueado
+  setRowMsg('Email liberado correctamente');
+} catch {
+  setRowMsg('Error al liberar email');
+} finally {
+  setRowActionId(null);
+}
+
   }
 
   const goDetail = (r: AdminCustomerRow) => {
-    nav(`/app/customers/${r.userId}`);
-  };
+  // ✅ el detalle admin usa CustomerProfile.id (no User.id)
+  const id = (r as unknown as { customerId?: string | null }).customerId ?? r.userId;
+  nav(`/app/customers/${id}`);
+};
 
   return (
     <div className="custShell">

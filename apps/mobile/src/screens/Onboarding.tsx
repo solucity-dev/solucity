@@ -1,4 +1,5 @@
 // apps/mobile/src/screens/Onboarding.tsx
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useRef, useState } from 'react';
 import {
@@ -17,34 +18,38 @@ type OnboardingProps = { onFinish: () => void };
 
 type Slide = {
   key: string;
-  art: 'map' | 'chat' | 'specialist';
+  icon: { lib: 'ion' | 'mci'; name: string };
   h1: string;
   h2?: string;
   body?: string;
+  bullets?: string[];
   cta: string;
 };
 
 const SLIDES: Slide[] = [
   {
     key: 's1',
-    art: 'map',
+    icon: { lib: 'mci', name: 'account-search-outline' },
     h1: 'Encontrá especialistas',
     h2: 'en tu zona.',
-    body: 'Electricistas, plomeros, carpinteros y más, al alcance de tu mano.',
+    body: 'Electricistas, plomeros, carpinteros y más.',
+    bullets: ['Por rubro y cercanía', 'Perfiles y reseñas reales'],
     cta: 'SIGUIENTE',
   },
   {
     key: 's2',
-    art: 'chat',
+    icon: { lib: 'ion', name: 'chatbubbles-outline' },
     h1: 'Contactá en minutos.',
-    body: 'Chateá con especialistas, acordá precio y horario sin vueltas.',
+    body: 'Chateá, acordá precio y horario sin vueltas.',
+    bullets: ['Mensajes rápidos', 'Todo en un solo lugar'],
     cta: 'SIGUIENTE',
   },
   {
     key: 's3',
-    art: 'specialist',
+    icon: { lib: 'mci', name: 'shield-check-outline' },
     h1: 'Soluciones seguras.',
-    body: 'Especialistas verificados, calificados por otros clientes.',
+    body: 'Especialistas verificados y calificados por clientes.',
+    bullets: ['Verificación y antecedentes', 'Soporte ante cualquier problema'],
     cta: 'COMENZAR',
   },
 ];
@@ -83,6 +88,19 @@ export default function Onboarding({ onFinish }: OnboardingProps) {
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={styles.container}>
       <SafeAreaView style={styles.safe} edges={['top']}>
+        {/* Top bar */}
+        <View style={[styles.topBar, { paddingTop: 6 }]}>
+          <View style={styles.progressPill}>
+            <Text style={styles.progressText}>
+              {index + 1}/{SLIDES.length}
+            </Text>
+          </View>
+
+          <Pressable onPress={onFinish} style={styles.skipTop} accessibilityRole="button">
+            <Text style={styles.skipTopText}>Omitir</Text>
+          </Pressable>
+        </View>
+
         <FlatList
           ref={listRef}
           data={SLIDES}
@@ -102,21 +120,33 @@ export default function Onboarding({ onFinish }: OnboardingProps) {
           renderItem={({ item }) => (
             <View style={styles.slide}>
               <View style={styles.slideContent}>
-                <Art kind={item.art} />
+                <IconHero icon={item.icon} />
 
                 <View style={styles.textBox}>
                   <Text style={styles.title}>
                     <Text style={styles.titleBold}>{item.h1}</Text>
                     {item.h2 ? `\n${item.h2}` : ''}
                   </Text>
+
                   {!!item.body && <Text style={styles.body}>{item.body}</Text>}
+
+                  {!!item.bullets?.length && (
+                    <View style={styles.bullets}>
+                      {item.bullets.slice(0, 3).map((b, i) => (
+                        <View key={i} style={styles.bulletRow}>
+                          <View style={styles.bulletDot} />
+                          <Text style={styles.bulletText}>{b}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
                 </View>
               </View>
             </View>
           )}
         />
 
-        {/* Footer con safe area */}
+        {/* Footer */}
         <View style={[styles.footer, { paddingBottom: Math.max(14, insets.bottom + 8) }]}>
           <View style={styles.dots}>
             {SLIDES.map((_, i) => (
@@ -126,14 +156,10 @@ export default function Onboarding({ onFinish }: OnboardingProps) {
 
           <Pressable
             onPress={goNext}
-            style={({ pressed }) => [styles.cta, pressed && { opacity: 0.9 }]}
+            style={({ pressed }) => [styles.cta, pressed && { opacity: 0.92 }]}
             accessibilityRole="button"
           >
             <Text style={styles.ctaText}>{SLIDES[index].cta}</Text>
-          </Pressable>
-
-          <Pressable onPress={onFinish} style={styles.skip} accessibilityRole="button">
-            <Text style={styles.skipText}>Omitir</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -141,144 +167,23 @@ export default function Onboarding({ onFinish }: OnboardingProps) {
   );
 }
 
-/** ─────────────────────────────────────────────────────────
- *  ARTS (sin imágenes): mapa + pines, chat, especialista
- *  ───────────────────────────────────────────────────────── */
-function Art({ kind }: { kind: Slide['art'] }) {
+function IconHero({ icon }: { icon: Slide['icon'] }) {
+  const size = 44;
+
   return (
-    <View style={styles.artWrap}>
-      {kind === 'map' && <ArtMap />}
-      {kind === 'chat' && <ArtChat />}
-      {kind === 'specialist' && <ArtSpecialist />}
-    </View>
-  );
-}
-
-function ArtCard({ children }: { children: React.ReactNode }) {
-  return (
-    <View style={styles.artCardOuter}>
-      <View style={styles.artCardInner}>{children}</View>
-    </View>
-  );
-}
-
-/** Slide 1: “mapita con pines” (herramientas) */
-function ArtMap() {
-  return (
-    <ArtCard>
-      {/* grid tipo mapa */}
-      <View style={styles.mapGrid} />
-
-      {/* calles */}
-      <View
-        style={[styles.road, { top: 42, left: -10, width: 260, transform: [{ rotate: '12deg' }] }]}
-      />
-      <View
-        style={[
-          styles.road,
-          { top: 110, left: -20, width: 280, transform: [{ rotate: '-18deg' }] },
-        ]}
-      />
-      <View
-        style={[styles.road, { top: 78, left: 10, width: 220, transform: [{ rotate: '0deg' }] }]}
-      />
-
-      {/* pines */}
-      <Pin x={44} y={44} label="🔧" />
-      <Pin x={168} y={62} label="🧰" />
-      <Pin x={92} y={122} label="⚡" />
-      <Pin x={190} y={128} label="🔩" />
-
-      {/* Badge abajo */}
-      <View style={styles.mapBadge}>
-        <Text style={styles.mapBadgeText}>Especialistas cerca</Text>
-      </View>
-    </ArtCard>
-  );
-}
-
-function Pin({ x, y, label }: { x: number; y: number; label: string }) {
-  return (
-    <View style={[styles.pinWrap, { left: x, top: y }]}>
-      <View style={styles.pinDot}>
-        <Text style={styles.pinEmoji}>{label}</Text>
-      </View>
-      <View style={styles.pinStem} />
-    </View>
-  );
-}
-
-/** Slide 2: “Contactá en minutos” (burbujas chat + check) */
-function ArtChat() {
-  return (
-    <ArtCard>
-      <View style={styles.chatTopRow}>
-        <View style={styles.chatPill}>
-          <Text style={styles.chatPillText}>Online</Text>
-          <View style={styles.chatGreenDot} />
-        </View>
-        <View style={styles.chatMiniIcon}>
-          <Text style={styles.chatMiniIconText}>💬</Text>
-        </View>
-      </View>
-
-      <View style={[styles.bubble, styles.bubbleLeft]}>
-        <Text style={styles.bubbleText}>Hola! ¿Podés hoy?</Text>
-      </View>
-
-      <View style={[styles.bubble, styles.bubbleRight]}>
-        <Text style={styles.bubbleText}>Sí ✅ 18:00</Text>
-      </View>
-
-      <View style={[styles.bubble, styles.bubbleLeft]}>
-        <Text style={styles.bubbleText}>¿Cuánto sale?</Text>
-      </View>
-
-      <View style={[styles.bubble, styles.bubbleRight]}>
-        <Text style={styles.bubbleText}>$15.000 — confirmado 👍</Text>
-      </View>
-
-      <View style={styles.chatFooter}>
-        <View style={styles.chatInputFake}>
-          <Text style={styles.chatInputFakeText}>Escribí un mensaje…</Text>
-        </View>
-        <View style={styles.chatSend}>
-          <Text style={styles.chatSendText}>➤</Text>
-        </View>
-      </View>
-    </ArtCard>
-  );
-}
-
-/** Slide 3: “Avatar especialista” (cara simple + escudo verificado) */
-function ArtSpecialist() {
-  return (
-    <ArtCard>
-      <View style={styles.avatarWrap}>
-        <View style={styles.avatarHead}>
-          <View style={styles.avatarHair} />
-          <View style={styles.avatarEyesRow}>
-            <View style={styles.avatarEye} />
-            <View style={styles.avatarEye} />
-          </View>
-          <View style={styles.avatarMouth} />
-        </View>
-
-        <View style={styles.avatarBody}>
-          <View style={styles.avatarNeck} />
-          <View style={styles.avatarShirt}>
-            <View style={styles.avatarBadge}>
-              <Text style={styles.avatarBadgeText}>✔</Text>
-            </View>
+    <View style={styles.heroWrap}>
+      <View style={styles.heroCard}>
+        <View style={styles.heroRing}>
+          <View style={styles.heroInner}>
+            {icon.lib === 'ion' ? (
+              <Ionicons name={icon.name as any} size={size} color="#0B6B76" />
+            ) : (
+              <MaterialCommunityIcons name={icon.name as any} size={size} color="#0B6B76" />
+            )}
           </View>
         </View>
       </View>
-
-      <View style={styles.specialistCaption}>
-        <Text style={styles.specialistCaptionTitle}>Verificado</Text>
-        <Text style={styles.specialistCaptionBody}>Identidad + KYC + reseñas</Text>
-      </View>
-    </ArtCard>
+    </View>
   );
 }
 
@@ -286,20 +191,73 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   safe: { flex: 1 },
 
+  topBar: {
+    paddingHorizontal: 20,
+    paddingBottom: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  progressPill: {
+    height: 30,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    justifyContent: 'center',
+  },
+  progressText: { color: '#E9FEFF', fontWeight: '900' },
+  skipTop: { paddingHorizontal: 10, paddingVertical: 6 },
+  skipTopText: { color: 'rgba(255,255,255,0.92)', fontWeight: '800' },
+
   slide: { width: SCREEN_WIDTH, flex: 1 },
   slideContent: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 24,
+    paddingTop: 18,
+    paddingBottom: 110, // deja espacio al footer fijo
     alignItems: 'center',
     justifyContent: 'center',
   },
 
-  /** Texto */
-  textBox: { marginTop: 12, alignItems: 'center', paddingHorizontal: 6 },
-  title: { color: '#fff', fontSize: 28, lineHeight: 34, textAlign: 'center', fontWeight: '700' },
-  titleBold: { fontWeight: '800' },
+  heroWrap: { width: '100%', alignItems: 'center' },
+  heroCard: {
+    width: Math.min(SCREEN_WIDTH * 0.78, 320),
+    borderRadius: 26,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    paddingVertical: 26,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
+  },
+  heroRing: {
+    width: 118,
+    height: 118,
+    borderRadius: 59,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  heroInner: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  textBox: { marginTop: 18, alignItems: 'center', paddingHorizontal: 8 },
+  title: { color: '#fff', fontSize: 28, lineHeight: 34, textAlign: 'center', fontWeight: '800' },
+  titleBold: { fontWeight: '900' },
   body: {
     color: 'rgba(255,255,255,0.92)',
     fontSize: 16,
@@ -308,7 +266,26 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
-  /** Footer */
+  bullets: { marginTop: 14, gap: 10, alignSelf: 'stretch' },
+  bulletRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 35, 40, 0.22)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  bulletDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(233,254,255,0.9)',
+  },
+  bulletText: { color: '#E9FEFF', fontWeight: '800' },
+
   footer: {
     position: 'absolute',
     left: 0,
@@ -323,238 +300,9 @@ const styles = StyleSheet.create({
   cta: {
     backgroundColor: 'rgba(255,255,255,0.94)',
     borderRadius: 18,
-    height: 48,
+    height: 50,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ctaText: { color: '#0B6B76', fontWeight: '800', letterSpacing: 0.5, fontSize: 16 },
-  skip: { alignSelf: 'center', marginTop: 6 },
-  skipText: { color: 'rgba(255,255,255,0.92)' },
-
-  /** ART wrapper + card */
-  artWrap: {
-    width: Math.min(SCREEN_WIDTH * 0.82, 360),
-    aspectRatio: 1.08,
-    marginBottom: 16,
-  },
-  artCardOuter: {
-    flex: 1,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 10,
-    overflow: 'hidden',
-  },
-  artCardInner: {
-    flex: 1,
-    padding: 16,
-  },
-
-  /** MAP */
-  mapGrid: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-  },
-  road: {
-    position: 'absolute',
-    height: 10,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  pinWrap: { position: 'absolute', alignItems: 'center' },
-  pinDot: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.90)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(11,107,118,0.25)',
-  },
-  pinEmoji: { fontSize: 18 },
-  pinStem: {
-    width: 6,
-    height: 12,
-    borderRadius: 6,
-    marginTop: -2,
-    backgroundColor: 'rgba(255,255,255,0.65)',
-  },
-  mapBadge: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 16,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: 'rgba(1,90,105,0.65)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mapBadgeText: { color: '#fff', fontWeight: '800', letterSpacing: 0.2 },
-
-  /** CHAT */
-  chatTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  chatPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
-  },
-  chatPillText: { color: '#fff', fontWeight: '800' },
-  chatGreenDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: 'rgba(0,255,180,0.9)' },
-  chatMiniIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chatMiniIconText: { fontSize: 16 },
-
-  bubble: {
-    marginTop: 12,
-    maxWidth: '84%',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-  },
-  bubbleLeft: { alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.12)' },
-  bubbleRight: { alignSelf: 'flex-end', backgroundColor: 'rgba(255,255,255,0.18)' },
-  bubbleText: { color: '#fff', fontWeight: '700' },
-
-  chatFooter: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  chatInputFake: {
-    flex: 1,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-  },
-  chatInputFakeText: { color: 'rgba(255,255,255,0.75)', fontWeight: '700' },
-  chatSend: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.90)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chatSendText: { color: '#0B6B76', fontWeight: '900' },
-
-  /** SPECIALIST */
-  avatarWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarHead: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderWidth: 2,
-    borderColor: 'rgba(11,107,118,0.20)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  avatarHair: {
-    position: 'absolute',
-    top: 18,
-    width: 120,
-    height: 56,
-    borderTopLeftRadius: 60,
-    borderTopRightRadius: 60,
-    borderBottomLeftRadius: 26,
-    borderBottomRightRadius: 26,
-    backgroundColor: 'rgba(1,90,105,0.90)',
-  },
-  avatarEyesRow: { flexDirection: 'row', gap: 18, marginTop: 18 },
-  avatarEye: { width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(1,90,105,0.85)' },
-  avatarMouth: {
-    width: 34,
-    height: 8,
-    borderRadius: 8,
-    marginTop: 14,
-    backgroundColor: 'rgba(1,90,105,0.25)',
-  },
-
-  avatarBody: { marginTop: -10, alignItems: 'center' },
-  avatarNeck: {
-    width: 38,
-    height: 16,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.85)',
-  },
-  avatarShirt: {
-    width: 180,
-    height: 110,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderBottomLeftRadius: 22,
-    borderBottomRightRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 6,
-  },
-  avatarBadge: {
-    width: 54,
-    height: 54,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.90)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarBadgeText: { color: '#0B6B76', fontWeight: '900', fontSize: 20 },
-
-  specialistCaption: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    backgroundColor: 'rgba(1,90,105,0.65)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
-    alignItems: 'center',
-  },
-  specialistCaptionTitle: { color: '#fff', fontWeight: '900', letterSpacing: 0.2 },
-  specialistCaptionBody: { color: 'rgba(255,255,255,0.85)', fontWeight: '700', marginTop: 2 },
+  ctaText: { color: '#0B6B76', fontWeight: '900', letterSpacing: 0.5, fontSize: 16 },
 });

@@ -2,7 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, View } from 'react-native';
+import { Alert } from 'react-native';
 
 import {
   api,
@@ -12,6 +12,7 @@ import {
   setOnUnauthorizedHandler,
 } from '../lib/api';
 import { setNavRole } from '../navigation/navigationRef';
+import Splash from '../screens/Splash';
 
 type Role = 'ADMIN' | 'CUSTOMER' | 'SPECIALIST';
 type Mode = 'client' | 'specialist';
@@ -201,11 +202,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   if (effectiveLoading) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator />
-      </View>
-    );
+    return <Splash />;
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -33,6 +33,18 @@ export async function startPasswordReset(email: string) {
     return { otpId: 'ok', expiresAt: addMinutes(new Date(), OTP_MINUTES) };
   }
 
+  // invalidar OTPs previos no usados (evita múltiples códigos válidos)
+  await prisma.emailOtp.updateMany({
+    where: { email: normalized, usedAt: null },
+    data: { usedAt: new Date() },
+  });
+
+  // 🔐 invalidar OTPs previos no usados (evita múltiples códigos válidos)
+  await prisma.emailOtp.updateMany({
+    where: { email: normalized, usedAt: null },
+    data: { usedAt: new Date() },
+  });
+
   const code = generateOtp();
   const expiresAt = addMinutes(new Date(), OTP_MINUTES);
 
@@ -96,7 +108,11 @@ export async function verifyPasswordReset(args: VerifyResetArgs) {
 
   // password
   const newPassword = args.newPassword?.trim() ?? '';
-  if (newPassword.length < 8) throw httpError('weak_password', 400);
+  const hasMinLen = newPassword.length >= 8;
+  const hasLetter = /[A-Za-z]/.test(newPassword);
+  const hasNumber = /\d/.test(newPassword);
+
+  if (!hasMinLen || !hasLetter || !hasNumber) throw httpError('weak_password', 400);
 
   const passwordHash = await bcrypt.hash(newPassword, 10);
 

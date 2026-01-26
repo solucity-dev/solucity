@@ -3,7 +3,16 @@ import { Router } from 'express';
 
 const router = Router();
 
-// ✅ ping rápido para probar en navegador
+const isProd = process.env.NODE_ENV === 'production';
+const enabled = String(process.env.ENABLE_ADMIN_SEED ?? '').toLowerCase() === 'true';
+
+// ✅ En PROD: ocultar completamente, salvo que ENABLE_ADMIN_SEED=true
+router.use((req, res, next) => {
+  if (isProd && !enabled) return res.status(404).end();
+  return next();
+});
+
+// ✅ ping rápido (solo si está habilitado por el guard anterior)
 router.get('/seed', (_req, res) => res.json({ ok: true, route: '/admin/seed' }));
 
 router.post('/seed', async (req, res) => {

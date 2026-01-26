@@ -1,3 +1,4 @@
+//apps/backend/src/services/subscriptionGate.ts
 import { prisma } from '../lib/prisma';
 
 export type SubscriptionGate =

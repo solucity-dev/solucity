@@ -8,9 +8,11 @@ import {
   api,
   clearAuthToken,
   setAuthToken,
+  setCachedUserId,
   setOnBlockedHandler,
   setOnUnauthorizedHandler,
 } from '../lib/api';
+import { clearSubscriptionCache } from '../lib/subscriptionApi';
 import { setNavRole } from '../navigation/navigationRef';
 import Splash from '../screens/Splash';
 
@@ -86,7 +88,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     await AsyncStorage.removeItem(TOKEN_KEY);
+    clearSubscriptionCache();
     clearAuthToken();
+    setCachedUserId(null);
     setTokenState(null);
     setUser(null);
     setNavRole(null);
@@ -109,6 +113,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       surname: u.surname,
       phone: u.phone,
     });
+
+    setCachedUserId(u.id);
 
     setNavRole(u.role);
     return u.role;

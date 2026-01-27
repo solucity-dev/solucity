@@ -1,6 +1,9 @@
-// apps/mobile/metro.config.js
-const { getDefaultConfig } = require('expo/metro-config');
+/* eslint-env node */
+/* eslint-disable @typescript-eslint/no-var-requires */
+
 const path = require('path');
+
+const { getDefaultConfig } = require('expo/metro-config');
 
 const projectRoot = __dirname; // apps/mobile
 const workspaceRoot = path.resolve(projectRoot, '../..'); // solucity/

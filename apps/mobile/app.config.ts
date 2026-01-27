@@ -54,7 +54,7 @@ const config: ExpoConfig = {
 
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
-    usesCleartextTraffic: true,
+    usesCleartextTraffic: false,
 
     permissions: [
       'ACCESS_COARSE_LOCATION',

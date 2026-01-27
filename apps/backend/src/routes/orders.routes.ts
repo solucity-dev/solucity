@@ -31,20 +31,8 @@ export const orders = Router();
 /* ───────────────────────── Helpers ───────────────────────── */
 const now = () => new Date();
 const addMinutes = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
-const headerUserId = (req: Request): string | null => {
-  const v = req.get('x-user-id'); // ✅ Express: get()
-  return v ? String(v).trim() : null;
-};
-
 const getActorUserId = (req: Request): string | null => {
-  if (req.user?.id) return req.user.id;
-
-  // compat SOLO en development (jamás prod)
-  if (process.env.NODE_ENV !== 'production') {
-    return headerUserId(req);
-  }
-
-  return null;
+  return req.user?.id ?? null;
 };
 
 // ✅ Normaliza categorySlug (compat / alias)
@@ -110,11 +98,7 @@ async function getSpecialistUserId(specialistProfileId: string): Promise<string 
   });
   return s?.userId ?? null;
 }
-async function resolveActorUserId(
-  order: { specialistId: string | null; customerId: string },
-  headerUid?: string | null,
-) {
-  if (headerUid) return headerUid;
+async function resolveActorUserId(order: { specialistId: string | null; customerId: string }) {
   if (order.specialistId) {
     const uid = await getSpecialistUserId(order.specialistId);
     if (uid) return uid;
@@ -921,7 +905,7 @@ orders.post('/:id/reschedule', auth, async (req, res) => {
     data: { scheduledAt: new Date(scheduledAt) },
   });
 
-  const actorUid = await resolveActorUserId(order, getActorUserId(req));
+  const actorUid = getActorUserId(req) ?? (await resolveActorUserId(order));
   if (!actorUid) return res.status(400).json({ ok: false, error: 'actor_unknown' });
 
   await addEvent(orderId, actorUid, 'RESCHEDULED', {
@@ -985,8 +969,7 @@ orders.post('/:id/finish', auth, async (req, res) => {
     where: { id: orderId },
     data: { status: 'IN_CLIENT_REVIEW' },
   });
-
-  const actorUid = await resolveActorUserId(order, getActorUserId(req));
+  const actorUid = getActorUserId(req) ?? (await resolveActorUserId(order));
   if (!actorUid) return res.status(400).json({ ok: false, error: 'actor_unknown' });
 
   await addEvent(orderId, actorUid, 'FINISHED_BY_SPECIALIST', {
@@ -1769,17 +1752,25 @@ orders.get('/:id', auth, async (req, res) => {
 
 // GET /orders (listado con meta de deadlines)
 orders.get('/', auth, async (req, res) => {
+  const uid = getActorUserId(req as any);
+  if (!uid) return res.status(401).json({ ok: false, error: 'unauthorized' });
+
+  const isAdmin = (req as any).user?.role === 'ADMIN';
+  const requestedId = String(req.query.id || '');
+
+  // si no es admin, SIEMPRE usamos el user del token
+  const effectiveId = isAdmin && requestedId ? requestedId : uid;
+
   // ❌ NO autocancel acá (evitamos duplicación/carga)
 
   const role = String(req.query.role || '');
-  const id = String(req.query.id || '');
   const statusQ = String(req.query.status || '');
   const deadline = String(req.query.deadline || '').toLowerCase();
 
   const where: Prisma.ServiceOrderWhereInput = {};
 
-  if (role === 'customer' && id) where.customer = { userId: id };
-  if (role === 'specialist' && id) where.specialist = { userId: id };
+  if (role === 'customer') where.customer = { userId: effectiveId };
+  if (role === 'specialist') where.specialist = { userId: effectiveId };
 
   const OPEN_STATUSES_LOCAL: OrderStatus[] = [
     'PENDING',

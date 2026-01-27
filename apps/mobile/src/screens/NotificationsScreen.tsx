@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Notifications from 'expo-notifications';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -80,6 +81,12 @@ export default function NotificationsScreen() {
       });
       const list: NotificationItem[] = Array.isArray(data?.items) ? data.items : [];
       setItems(list);
+
+      // ✅ sync badge con unread (evita badge viejo si provider falló o quedó desfasado)
+      const count = list.filter((n) => !n.readAt).length;
+      try {
+        await Notifications.setBadgeCountAsync(count);
+      } catch {}
     } catch (e: any) {
       const status = e?.response?.status;
       console.log('[Notifications] error', status, e?.message);
@@ -204,7 +211,7 @@ export default function NotificationsScreen() {
 
     // Si la notificación parece de MENSAJE y tenemos orderId,
     // llamamos a /orders/:id para sacar chatThreadId + nombres si faltan
-    if (looksLikeMessage && orderId) {
+    if (looksLikeMessage && orderId && !threadId) {
       try {
         const r = await api.get(`/orders/${orderId}`, {
           headers: { 'Cache-Control': 'no-cache' },

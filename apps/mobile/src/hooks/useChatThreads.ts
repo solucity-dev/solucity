@@ -1,8 +1,9 @@
 // apps/mobile/src/hooks/useChatThreads.ts
 import { useQuery } from '@tanstack/react-query';
 
-import { getMyChatThreads } from '@/api/chat';
 import type { ChatThreadListItem } from '@/types/chat';
+
+import { getMyChatThreads } from '@/api/chat';
 
 export function useChatThreads() {
   const query = useQuery<ChatThreadListItem[]>({

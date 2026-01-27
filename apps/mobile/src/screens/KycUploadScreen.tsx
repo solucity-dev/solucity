@@ -1,3 +1,4 @@
+//apps/mobile/screens/KycUploadScreen.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as ImageManipulator from 'expo-image-manipulator';

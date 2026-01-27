@@ -1,3 +1,4 @@
+//apps/mobile/src/hooks/useImagePicker.ts
 import * as ImagePicker from 'expo-image-picker';
 
 export type PickResult = { uri: string; width: number; height: number; size?: number };

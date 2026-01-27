@@ -72,3 +72,7 @@ prisma/dev.db-journal
 
 # root app.json (evitar conflicto con Expo config en apps/mobile)
 app.json
+
+metro.config.js
+babel.config.js
+app.config.ts

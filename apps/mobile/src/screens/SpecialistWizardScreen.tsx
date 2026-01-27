@@ -1,7 +1,6 @@
 // apps/mobile/src/screens/SpecialistWizardScreen.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMemo, useState } from 'react';
 import {
@@ -17,7 +16,9 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { api } from '../lib/api';
+
 import type { HomeStackParamList } from '../types';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 type Nav = NativeStackNavigationProp<HomeStackParamList>;
 

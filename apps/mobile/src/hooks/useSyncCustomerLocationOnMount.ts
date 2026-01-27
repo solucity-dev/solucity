@@ -1,3 +1,4 @@
+//apps/mobile/src/hooks/useSyncCustomerLocationOnMount.ts
 import * as Location from 'expo-location';
 import { useEffect } from 'react';
 

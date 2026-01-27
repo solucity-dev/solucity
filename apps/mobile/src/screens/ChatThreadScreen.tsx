@@ -1,7 +1,6 @@
 // apps/mobile/src/screens/ChatThreadScreen.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -17,8 +16,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useChat } from '@/hooks/useChat';
 import type { ChatMessage, ChatStackParamList } from '@/types/chat';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
+import { useChat } from '@/hooks/useChat';
 
 type RouteT = RouteProp<ChatStackParamList, 'ChatThread'>;
 type Nav = NativeStackNavigationProp<ChatStackParamList, 'ChatThread'>;

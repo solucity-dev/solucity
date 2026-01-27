@@ -88,6 +88,14 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   // ✅ evita navegar 2 veces por la misma notificación (cold start + listener)
   const lastHandledNotificationIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    lastHandledNotificationIdRef.current = null;
+  }, [token]);
+
+  // ✅ Reset dedupe al cambiar sesión (evita ignorar taps viejos después de logout/login)
+  useEffect(() => {
+    lastHandledNotificationIdRef.current = null;
+  }, [token]);
 
   const refresh = useCallback(async () => {
     if (!token) {

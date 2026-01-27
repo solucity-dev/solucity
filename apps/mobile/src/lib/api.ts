@@ -15,10 +15,7 @@ const fromExtra = (Constants.expoConfig?.extra as { API_URL?: string })?.API_URL
 const fromEnv = process.env.EXPO_PUBLIC_API_URL;
 
 // ✅ TU URL REAL DE RENDER (HTTPS)
-const PROD_FALLBACK = 'https://solucity-backend.onrender.com';
-
-// Si estás en DEV y querés forzar local, seteá EXPO_PUBLIC_API_URL con tu LAN.
-// const LOCAL_FALLBACK = 'http://192.168.0.103:3000';
+export const PROD_FALLBACK = 'https://solucity-backend.onrender.com';
 
 export const API_URL = (fromEnv || fromExtra || PROD_FALLBACK).replace(/\/+$/, '');
 
@@ -53,58 +50,37 @@ let blockedNotified = false;
 /** ── Auth token en memoria ─────────────────────────────── */
 let AUTH_TOKEN: string | null = null;
 
-/** ──────────────────────────────────────────────────────
- *  Helpers JWT (sin dependencias) → sacar sub del token
- *  Evitamos llamar /auth/me para cada request (causaba bloqueos/lentitud)
- * ────────────────────────────────────────────────────── */
-function base64UrlDecode(input: string) {
-  const pad = '='.repeat((4 - (input.length % 4)) % 4);
-  const base64 = (input + pad).replace(/-/g, '+').replace(/_/g, '/');
-
-  // atob existe en Expo/RN. Si alguna vez falla, lo ajustamos.
-  const raw = atob(base64);
-
-  // Convertimos a UTF-8 safe
-  return decodeURIComponent(
-    Array.prototype.map
-      .call(raw, (c: string) => `%${('00' + c.charCodeAt(0).toString(16)).slice(-2)}`)
-      .join(''),
-  );
-}
-
-function getUserIdFromJwt(token: string | null): string | null {
-  try {
-    if (!token) return null;
-    const parts = token.split('.');
-    if (parts.length < 2) return null;
-    const payload = JSON.parse(base64UrlDecode(parts[1]));
-    return typeof payload?.sub === 'string' ? payload.sub : null;
-  } catch {
-    return null;
-  }
-}
-
-/** ── x-user-id cache ───────────────────────────────
- *  Ya NO hacemos /auth/me en cada request.
- *  Lo resolvemos desde el JWT al loguear.
+/**
+ * ── x-user-id cache ───────────────────────────────
+ * Ya NO decodificamos JWT con atob.
+ * Lo seteamos desde /auth/me en AuthProvider (id real).
  */
 let cachedUserId: string | null = null;
+
+export function setCachedUserId(id: string | null) {
+  cachedUserId = id;
+}
+
+export function getCachedUserId() {
+  return cachedUserId;
+}
 
 export function setAuthToken(token: string | null) {
   AUTH_TOKEN = token;
 
-  // ✅ clave: setear userId desde JWT (sin pedir /auth/me)
-  cachedUserId = getUserIdFromJwt(token);
-
   if (token) {
     unauthorizedNotified = false;
-    blockedNotified = false; // ✅ reset también cuando se setea token
+    blockedNotified = false;
 
     api.defaults.headers.common.Authorization = `Bearer ${token}`;
-    if (__DEV__)
-      console.log('[API] Authorization set (Bearer ...)', { cachedUserId, baseURL: API_URL });
+
+    if (__DEV__) console.log('[API] Authorization set', { baseURL: API_URL });
   } else {
     delete api.defaults.headers.common.Authorization;
+
+    // si se borra el token, también limpiamos el userId cacheado
+    cachedUserId = null;
+
     if (__DEV__) console.log('[API] Authorization cleared');
   }
 }
@@ -114,12 +90,13 @@ export const setAuthHeader = setAuthToken;
 export function clearAuthToken() {
   setAuthToken(null);
 }
+
 export function getAuthToken() {
   return AUTH_TOKEN;
 }
 
 /** ── REQUEST INTERCEPTOR ───────────────────────────────
- *  Importante: NO bloquear requests esperando /auth/me.
+ * Importante: NO bloquear requests esperando /auth/me.
  */
 api.interceptors.request.use(
   async (config: InternalAxiosRequestConfig): Promise<InternalAxiosRequestConfig> => {
@@ -180,7 +157,6 @@ api.interceptors.response.use(
 
       await AsyncStorage.removeItem('auth:token');
       clearAuthToken();
-      cachedUserId = null;
 
       if (!blockedNotified && onBlockedHandler) {
         blockedNotified = true;
@@ -206,7 +182,6 @@ api.interceptors.response.use(
 
       await AsyncStorage.removeItem('auth:token');
       clearAuthToken();
-      cachedUserId = null;
 
       if (!unauthorizedNotified && onUnauthorizedHandler) {
         unauthorizedNotified = true;
@@ -224,10 +199,13 @@ api.interceptors.response.use(
 
 /** Ping de salud (solo dev) */
 if (__DEV__) {
-  api
-    .get('/health')
-    .then((r) => console.log('[health OK]', r.status, r.data))
-    .catch((e) => console.log('[health ERROR]', e.code, e.response?.status, e.message));
+  // ✅ no despertar Render si estás usando el fallback PROD en dev
+  if (API_URL !== PROD_FALLBACK) {
+    api
+      .get('/health')
+      .then((r) => console.log('[health OK]', r.status, r.data))
+      .catch((e) => console.log('[health ERROR]', e.code, e.response?.status, e.message));
+  }
 
   console.log('[API] baseURL =>', API_URL);
 }

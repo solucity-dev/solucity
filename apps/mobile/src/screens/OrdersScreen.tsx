@@ -1,8 +1,6 @@
 // apps/mobile/src/screens/OrdersScreen.tsx
 import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
-import type { RouteProp } from '@react-navigation/native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -17,7 +15,10 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { api } from '../lib/api';
+
 import type { HomeStackParamList } from '../types';
+import type { RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 type RouteT = RouteProp<HomeStackParamList, 'Orders'>;
 

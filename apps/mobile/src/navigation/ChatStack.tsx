@@ -1,9 +1,10 @@
 // apps/mobile/src/navigation/ChatStack.tsx
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
+import type { ChatStackParamList } from '@/types';
+
 import ChatListScreen from '@/screens/ChatListScreen';
 import ChatThreadScreen from '@/screens/ChatThreadScreen';
-import type { ChatStackParamList } from '@/types';
 
 const Stack = createNativeStackNavigator<ChatStackParamList>();
 

@@ -1,6 +1,8 @@
+//apps/mobile/src/components/GradiantBackground.tsx
 import { LinearGradient } from 'expo-linear-gradient';
-import type { PropsWithChildren } from 'react';
 import { StyleSheet } from 'react-native';
+
+import type { PropsWithChildren } from 'react';
 
 export default function GradientBackground({ children }: PropsWithChildren) {
   return (

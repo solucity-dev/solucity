@@ -1,6 +1,7 @@
 // apps/mobile/src/api/chat.ts
-import { api } from '@/lib/api';
 import type { ChatMessage, ChatThread, ChatThreadListItem } from '@/types/chat';
+
+import { api } from '@/lib/api';
 
 // 1) Asegurar/obtener thread de una orden
 type EnsureOrderChatResp = {

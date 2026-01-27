@@ -1,4 +1,4 @@
-// Nuevo archivo
+//mobile/src/lib/reactQuery.ts
 import { QueryClient } from '@tanstack/react-query';
 
 export const queryClient = new QueryClient({

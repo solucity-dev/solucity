@@ -32,10 +32,21 @@ type MessagesResp = {
 };
 
 export async function getMessages(threadId: string, cursor?: string): Promise<ChatMessage[]> {
-  const res = await api.get<MessagesResp>(`/chat/threads/${threadId}/messages`, {
-    params: cursor ? { cursor } : undefined,
-  });
-  return res.data.messages;
+  try {
+    const res = await api.get<MessagesResp>(`/chat/threads/${threadId}/messages`, {
+      params: cursor ? { cursor } : undefined,
+    });
+    return res.data.messages;
+  } catch (e: any) {
+    const status = e?.response?.status;
+
+    // ✅ Thread oculto / cerrado → no es error
+    if (status === 404 || status === 403) {
+      return [];
+    }
+
+    throw e;
+  }
 }
 
 // 4) Enviar mensaje

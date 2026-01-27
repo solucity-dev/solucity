@@ -130,6 +130,7 @@ const SPECIALTY_OPTIONS = [
   'acompanante-terapeutico',
   'clases-particulares',
   'paseador-de-perros',
+  'fletes',
 ] as const;
 
 const REQUIRES_CERT_FALLBACK = new Set([
@@ -259,22 +260,40 @@ export default function SpecialistHome() {
   const locationRequestedRef = useRef(false);
 
   // ✅ Catálogo rubros: GET /categories (background)
+  // ✅ Catálogo rubros: GET /categories (background)
   const loadCategories = useCallback(async () => {
     if (categoriesLoadedOnceRef.current) return;
     categoriesLoadedOnceRef.current = true;
 
     try {
-      const { data } = await api.get('/categories');
+      const res = await api.get('/categories');
 
-      const flat: CategoryOption[] = (data ?? []).flatMap((g: any) =>
-        (g.categories ?? []).map((c: any) => ({
-          slug: c.slug,
-          name: c.name,
-          groupSlug: g.slug,
-          groupName: g.name,
-          requiresCertification: !!c.requiresCertification,
-        })),
-      );
+      // Soporta múltiples formatos: [] | {groups:[]} | {data:[]} | {items:[]} | {ok:true, groups:[]}
+      const raw = res?.data;
+
+      const groups = Array.isArray(raw)
+        ? raw
+        : Array.isArray(raw?.groups)
+          ? raw.groups
+          : Array.isArray(raw?.data)
+            ? raw.data
+            : Array.isArray(raw?.items)
+              ? raw.items
+              : Array.isArray(raw?.result)
+                ? raw.result
+                : [];
+
+      const flat: CategoryOption[] = groups
+        .flatMap((g: any) =>
+          (Array.isArray(g?.categories) ? g.categories : []).map((c: any) => ({
+            slug: c?.slug,
+            name: c?.name,
+            groupSlug: g?.slug,
+            groupName: g?.name,
+            requiresCertification: !!c?.requiresCertification,
+          })),
+        )
+        .filter((x: any) => !!x?.slug);
 
       setCategoryOptions(flat);
     } catch (e) {
@@ -631,6 +650,7 @@ export default function SpecialistHome() {
     try {
       setSaving(true);
       await api.patch('/specialists/me', { bio });
+      setProfile((prev) => (prev ? { ...prev, bio } : prev));
       Alert.alert('Listo', 'Biografía actualizada.');
     } catch {
       Alert.alert('Ups', 'No se pudo guardar.');
@@ -1382,7 +1402,9 @@ export default function SpecialistHome() {
                           onPress={() => handleUploadCert(slug)}
                           disabled={certSaving}
                         >
-                          <Text style={styles.smallBtnT}>{c ? 'Actualizar' : 'Subir'}</Text>
+                          <Text style={styles.smallBtnT}>
+                            {certSaving ? 'Subiendo…' : c ? 'Actualizar' : 'Subir'}
+                          </Text>
                         </Pressable>
                       </View>
                     </View>

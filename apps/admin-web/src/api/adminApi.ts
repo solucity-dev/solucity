@@ -28,6 +28,8 @@ export type AdminMetrics = {
       CANCELLED: number;
     };
     kycPending: number;
+    backgroundPending: number;
+    certificationsPending: number;
   };
 };
 

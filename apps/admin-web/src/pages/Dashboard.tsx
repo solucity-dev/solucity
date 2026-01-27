@@ -163,6 +163,22 @@ export default function Dashboard() {
             />
 
             <MetricCard
+  label="Matrículas pendientes"
+  value={data.specialists.certificationsPending}
+  hint="Certificaciones por aprobar"
+  tone={data.specialists.certificationsPending > 0 ? 'warn' : 'good'}
+  onClick={() => navigate('/app/certifications?status=PENDING')}
+/>
+
+<MetricCard
+  label="Antecedentes pendientes"
+  value={data.specialists.backgroundPending}
+  hint="Certificado de buena conducta"
+  tone={data.specialists.backgroundPending > 0 ? 'warn' : 'good'}
+  onClick={() => navigate('/app/background-checks?status=PENDING')}
+/>
+
+            <MetricCard
               label="Suscripción activa"
               value={data.specialists.subscriptions.ACTIVE}
               tone="good"

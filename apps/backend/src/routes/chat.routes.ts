@@ -264,7 +264,10 @@ chat.post('/threads/:threadId/messages', auth, async (req, res) => {
       },
     },
   });
-  if (!thread) return res.status(404).json({ ok: false, error: 'thread_not_found' });
+  if (!thread) {
+    // thread oculto o inexistente → no es error
+    return res.json({ ok: true, messages: [] });
+  }
 
   const uCustomer = thread.order.customer?.userId === uid;
   const uSpecial = thread.order.specialist?.userId === uid;

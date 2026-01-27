@@ -340,6 +340,8 @@ adminRouter.get('/metrics', async (_req, res) => {
 
     subsByStatus,
     kycPending,
+    certificationsPending,
+    backgroundPending,
   ] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { role: 'ADMIN' } }),
@@ -377,6 +379,12 @@ adminRouter.get('/metrics', async (_req, res) => {
     }),
 
     prisma.kycSubmission.count({ where: { status: 'PENDING' } }),
+
+    // 🆕 MATRÍCULAS
+    prisma.specialistCertification.count({ where: { status: 'PENDING' } }),
+
+    // 🆕 ANTECEDENTES
+    prisma.specialistBackgroundCheck.count({ where: { status: 'PENDING' } }),
   ]);
 
   const subs = Object.fromEntries(subsByStatus.map((x) => [x.status, x._count._all]));
@@ -404,6 +412,8 @@ adminRouter.get('/metrics', async (_req, res) => {
         CANCELLED: subs.CANCELLED ?? 0,
       },
       kycPending,
+      certificationsPending,
+      backgroundPending,
     },
   });
 });

@@ -77,8 +77,6 @@ export type AdminSpecialistRow = {
   ratingAvg: number;
   ratingCount: number;
 
-  // ⚠️ si tu User no tiene avatarUrl, en specialist list probablemente tampoco.
-  // Dejá el campo por compatibilidad UI si ya lo usás, pero puede venir null siempre.
   avatarUrl: string | null;
 
   subscription: SubscriptionDTO | null;
@@ -131,7 +129,7 @@ export type AdminKycSubmission = {
 
 export type AdminBackgroundCheck = {
   id: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED' | string;
 
   fileUrl: string | null;
 
@@ -241,6 +239,156 @@ export async function expireBackgroundCheck(bgId: string) {
     method: 'PATCH',
   });
 }
+
+/* ─────────────────────────────────────────────────────────────
+ * ✅ Listados admin (pendientes)
+ * ───────────────────────────────────────────────────────────── */
+
+export type AdminLiteSpecialist = {
+  specialistId: string;          // ✅ para navegar a /app/specialists/:id
+  userId?: string | null;
+  name?: string | null;
+  email?: string | null;
+};
+
+export type AdminCertificationRowList = {
+  id: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | string;
+  createdAt: string | null;
+
+  fileUrl: string | null;
+
+  category: { id: string; slug: string; name: string } | null;
+
+  specialist: AdminLiteSpecialist | null;
+};
+
+export type AdminCertificationsListResp = {
+  ok: true;
+  count: number;
+  items: AdminCertificationRowList[];
+};
+
+type BackendCertPendingItem = {
+  id: string;
+  status: string;
+  fileUrl: string | null;
+  number?: string | null;
+  issuer?: string | null;
+  expiresAt?: string | null;
+  createdAt: string;
+
+  reviewerId?: string | null;
+  rejectionReason?: string | null;
+  reviewedAt?: string | null;
+
+  category: { id: string; name: string; slug: string } | null;
+  specialist: {
+    id: string;           // specialistId real
+    userId: string;
+    email: string | null;
+    name: string | null;
+  } | null;
+};
+
+export async function getAdminCertificationsList(params?: { status?: string }) {
+  const status = (params?.status ?? 'PENDING').toUpperCase();
+
+  // Por ahora tu backend sólo expone pending (según lo pegado)
+  if (status !== 'PENDING' && status !== 'ALL') {
+    throw new Error(`Backend no soporta /admin/certifications?status=${status}. Solo /pending.`);
+  }
+
+  const resp = await apiFetch<{ ok: true; count: number; items: BackendCertPendingItem[] }>(
+    '/admin/certifications/pending',
+  );
+
+  return {
+    ok: true as const,
+    count: resp.count,
+    items: resp.items.map((c) => ({
+      id: c.id,
+      status: c.status,
+      createdAt: c.createdAt ?? null,
+      fileUrl: c.fileUrl ?? null,
+      category: c.category
+        ? { id: c.category.id, slug: c.category.slug, name: c.category.name }
+        : null,
+      specialist: c.specialist
+        ? {
+            specialistId: c.specialist.id,
+            userId: c.specialist.userId ?? null,
+            email: c.specialist.email ?? null,
+            name: c.specialist.name ?? null,
+          }
+        : null,
+    })),
+  } satisfies AdminCertificationsListResp;
+}
+
+export type AdminBackgroundCheckRowList = {
+  id: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED' | string;
+  createdAt: string | null;
+
+  fileUrl: string | null;
+
+  specialist: AdminLiteSpecialist | null;
+};
+
+export type AdminBackgroundChecksListResp = {
+  ok: true;
+  count: number;
+  items: AdminBackgroundCheckRowList[];
+};
+
+type BackendBgPendingItem = {
+  id: string;
+  status: string;
+  fileUrl: string | null;
+  createdAt: string;
+
+  reviewerId?: string | null;
+  rejectionReason?: string | null;
+  reviewedAt?: string | null;
+
+  specialistId: string; // ✅ viene flat
+  userId?: string | null;
+  email?: string | null;
+  name?: string | null;
+};
+
+export async function getAdminBackgroundChecksList(params?: { status?: string }) {
+  const status = (params?.status ?? 'PENDING').toUpperCase();
+
+  if (status !== 'PENDING' && status !== 'ALL') {
+    throw new Error(`Backend no soporta /admin/background-checks?status=${status}. Solo /pending.`);
+  }
+
+  const resp = await apiFetch<{ ok: true; count: number; items: BackendBgPendingItem[] }>(
+    '/admin/background-checks/pending',
+  );
+
+  return {
+    ok: true as const,
+    count: resp.count,
+    items: resp.items.map((b) => ({
+      id: b.id,
+      status: b.status,
+      createdAt: b.createdAt ?? null,
+      fileUrl: b.fileUrl ?? null,
+      specialist: b.specialistId
+        ? {
+            specialistId: b.specialistId,
+            userId: b.userId ?? null,
+            email: b.email ?? null,
+            name: b.name ?? null,
+          }
+        : null,
+    })),
+  } satisfies AdminBackgroundChecksListResp;
+}
+
 
 /* ─────────────────────────────────────────────────────────────
  * Grant days (admin)
@@ -355,27 +503,25 @@ export async function setAdminSpecialistStatus(userId: string, status: UserStatu
   );
 }
 
-
-
 /* ─────────────────────────────────────────────────────────────
- * Orders (admin) ✅ NUEVO
+ * Orders (admin)
  * ───────────────────────────────────────────────────────────── */
 
 export type AdminOrderUserLite = {
-  // ✅ IDs para navegación
-  userId?: string | null;        // User.id (opcional)
-  customerId?: string | null;    // CustomerProfile.id (para /customers/:id)
-  specialistId?: string | null;  // SpecialistProfile.id (para /specialists/:id)
+  userId?: string | null; // User.id (opcional)
+  customerId?: string | null; // CustomerProfile.id (para /customers/:id)
+  specialistId?: string | null; // SpecialistProfile.id (para /specialists/:id)
 
-  // ✅ lo que ya venías usando
   name?: string | null;
   email?: string | null;
 };
 
-export type AdminOrderServiceLite = {
-  id: string;
-  name: string;
-} | null;
+export type AdminOrderServiceLite =
+  | {
+      id: string;
+      name: string;
+    }
+  | null;
 
 export type AdminOrderRow = {
   id: string;
@@ -414,11 +560,3 @@ export type AdminOrderDetailResp = { ok: true; order: AdminOrderDetail };
 export async function getAdminOrderDetail(id: string) {
   return apiFetch<AdminOrderDetailResp>(`/admin/orders/${encodeURIComponent(id)}`);
 }
-
-
-
-
-
-
-
-

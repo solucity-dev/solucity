@@ -27,6 +27,7 @@ type Step = 1 | 2 | 3;
 type KycUploadRes = { ok: true; url: string };
 type Category = { id: string; name: string; slug: string };
 type CategoryGroup = { id: string; name: string; slug: string; categories: Category[] };
+type CategoriesRes = { ok: true; groups: CategoryGroup[] };
 
 export default function RegisterSpecialist() {
   const insets = useSafeAreaInsets();
@@ -308,19 +309,22 @@ export default function RegisterSpecialist() {
   useEffect(() => {
     const load = async () => {
       try {
-        const r = await api.get<CategoryGroup[]>('/categories');
-        setGroups(r.data || []);
+        const r = await api.get<CategoriesRes>('/categories');
+        setGroups(r.data.groups ?? []);
       } catch (e: any) {
         console.log('[categories]', e?.response?.data || e.message);
+        setGroups([]);
       }
     };
+
     load();
   }, []);
 
-  const flatCategories = useMemo(
-    () => groups.flatMap((g) => g.categories.map((c) => ({ ...c, group: g.slug }))),
-    [groups],
-  );
+  const flatCategories = useMemo(() => {
+    return (groups ?? []).flatMap((g) =>
+      (g.categories ?? []).map((c) => ({ ...c, group: g.slug })),
+    );
+  }, [groups]);
 
   const toggleSlug = (slug: string) => {
     setSelectedSlugs((prev) =>

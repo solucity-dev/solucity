@@ -46,8 +46,8 @@ export function useChat({ orderId, threadId }: UseChatArgs) {
       return last ? last.createdAt : undefined;
     },
     // ⏱️ Polling suave para que aparezcan los mensajes del otro sin tocar nada
-    refetchInterval: 2500,
-    refetchIntervalInBackground: true,
+    refetchInterval: hasOrder ? 2500 : false,
+    refetchIntervalInBackground: hasOrder,
   });
 
   const qc = useQueryClient();

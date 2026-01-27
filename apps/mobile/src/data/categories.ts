@@ -93,7 +93,6 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     },
     { id: 'paseador-de-perros', title: 'Paseador de perros', icon: { set: 'mdi', name: 'dog' } },
 
-    // ✅ NUEVO RUBRO
     { id: 'fletes', title: 'Fletes', icon: { set: 'mdi', name: 'truck-fast-outline' } },
   ],
 };

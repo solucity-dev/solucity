@@ -1314,9 +1314,9 @@ adminRouter.post('/background-checks/:id/request-update', async (req, res) => {
     select: {
       id: true,
       specialistId: true,
-      specialist: { select: { userId: true } },
       status: true,
       fileUrl: true,
+      specialist: { select: { userId: true } },
     },
   });
 
@@ -1325,6 +1325,25 @@ adminRouter.post('/background-checks/:id/request-update', async (req, res) => {
   const userId = bg.specialist?.userId;
   if (!userId) return res.status(400).json({ ok: false, error: 'user_not_found' });
 
+  // ✅ 1) Pasar a PENDING + limpiar revisión + bloquear disponibilidad (TRANSACCIÓN)
+  await prisma.$transaction(async (tx) => {
+    await tx.specialistBackgroundCheck.update({
+      where: { id: bg.id },
+      data: {
+        status: 'PENDING',
+        reviewedAt: null,
+        reviewerId: null,
+        rejectionReason: null,
+      },
+    });
+
+    await tx.specialistProfile.update({
+      where: { id: bg.specialistId },
+      data: { availableNow: false },
+    });
+  });
+
+  // ✅ 2) Notificación + push (como ya lo venías haciendo)
   const title = 'Actualización de antecedentes';
   const body =
     'Necesitamos que actualices tu certificado de antecedentes. Subí uno nuevo desde la app.';
@@ -1355,7 +1374,7 @@ adminRouter.post('/background-checks/:id/request-update', async (req, res) => {
     console.warn('[push] BACKGROUND_CHECK_REVIEW_REQUEST failed', e);
   }
 
-  return res.json({ ok: true, id, notificationId: notif.id });
+  return res.json({ ok: true, id, status: 'PENDING', notificationId: notif.id });
 });
 
 /** PATCH /admin/background-checks/:id/expire */

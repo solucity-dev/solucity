@@ -143,6 +143,11 @@ const REQUIRES_CERT_FALLBACK = new Set([
   'acompanante-terapeutico',
 ]);
 
+// 🔒 Rubros legacy que queremos ocultar SOLO en SpecialistHome
+const HIDDEN_SPECIALTIES = new Set<string>([
+  'plomeria', // legacy: existe en DB pero usamos "plomeria-gasista"
+]);
+
 const DAY_LABELS = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
 
 function Section({
@@ -181,6 +186,11 @@ export default function SpecialistHome() {
   // ✅ Loading real
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // ✅ Snapshots (baseline) para detectar cambios por bloque
+  const bioSnapRef = useRef<string>('');
+  const availabilitySnapRef = useRef<string>(''); // guardamos JSON string
+  const priceRadiusSnapRef = useRef<string>(''); // guardamos JSON string
+  const specialtiesSnapRef = useRef<string>(''); // guardamos JSON string
 
   const [profile, setProfile] = useState<SpecProfile | null>(null);
 
@@ -192,7 +202,7 @@ export default function SpecialistHome() {
 
   // certificaciones
   const [certs, setCerts] = useState<CertItem[]>([]);
-  const [certSaving, setCertSaving] = useState(false);
+  const [certSavingBySlug, setCertSavingBySlug] = useState<Record<string, boolean>>({});
   const [openCerts, setOpenCerts] = useState(true);
 
   // catálogo rubros
@@ -213,6 +223,32 @@ export default function SpecialistHome() {
 
     const valid = new Set(categoryOptions.map((c) => c.slug));
     setSpecialties((prev) => prev.filter((s) => valid.has(s)));
+  }, [categoryOptions]);
+
+  useEffect(() => {
+    if (!categoryOptions.length) return;
+
+    const bySlug = new Map(categoryOptions.map((c) => [c.slug, c.slug]));
+    const byName = new Map(categoryOptions.map((c) => [toSlugLike(c.name), c.slug]));
+
+    setSpecialties((prev) => {
+      const next = prev
+        .map((raw) => {
+          const s = String(raw ?? '').trim();
+          if (!s) return null;
+
+          // ya es slug válido
+          if (bySlug.has(s)) return s;
+
+          // capaz viene como nombre “humano”
+          const maybe = byName.get(toSlugLike(s));
+          return maybe ?? s; // fallback: lo dejamos, no lo perdemos
+        })
+        .filter(Boolean) as string[];
+
+      // dedupe
+      return Array.from(new Set(next));
+    });
   }, [categoryOptions]);
 
   // ⭐ reseñas
@@ -259,6 +295,14 @@ export default function SpecialistHome() {
   // ubicación: auto-update una sola vez, sin bloquear
   const locationRequestedRef = useRef(false);
 
+  // ✅ loading por rubro (solo el botón que se está subiendo)
+  function setCertLoading(slug: string, v: boolean) {
+    setCertSavingBySlug((prev) => ({ ...prev, [slug]: v }));
+  }
+  function isCertLoading(slug: string) {
+    return !!certSavingBySlug[slug];
+  }
+
   // ✅ Catálogo rubros: GET /categories (background)
   // ✅ Catálogo rubros: GET /categories (background)
   const loadCategories = useCallback(async () => {
@@ -295,6 +339,13 @@ export default function SpecialistHome() {
         )
         .filter((x: any) => !!x?.slug);
 
+      if (__DEV__) {
+        console.log('[/categories] raw keys:', Object.keys(res?.data ?? {}));
+        console.log('[/categories] raw sample:', res?.data);
+        console.log('[/categories] flat length:', flat.length);
+        console.log('[/categories] flat sample:', flat.slice(0, 5));
+      }
+
       setCategoryOptions(flat);
     } catch (e) {
       if (__DEV__) console.log('[loadCategories] error', e);
@@ -304,11 +355,49 @@ export default function SpecialistHome() {
   const requiresCert = useCallback(
     (slug: string) => {
       const fromApi = categoryOptions.find((c) => c.slug === slug)?.requiresCertification;
-      if (typeof fromApi === 'boolean') return fromApi;
+
+      // ✅ Si el backend dice TRUE, listo.
+      if (fromApi === true) return true;
+
+      // ✅ Si el backend dice FALSE o no viene, usamos nuestro fallback local
       return REQUIRES_CERT_FALLBACK.has(slug);
     },
     [categoryOptions],
   );
+
+  function normalizeSpecialties(input: any): string[] {
+    if (!input) return [];
+    if (!Array.isArray(input)) return [];
+
+    if (input.every((x) => typeof x === 'string')) {
+      const slugs = input.map((s) => s.trim()).filter(Boolean);
+
+      const normalized = slugs.map((s) => (s === 'plomeria' ? 'plomeria-gasista' : s));
+      return Array.from(new Set(normalized));
+    }
+
+    const slugs = input
+      .map((x) => {
+        if (!x) return null;
+        if (typeof x === 'string') return x.trim();
+        if (typeof x?.slug === 'string') return x.slug.trim();
+        if (typeof x?.category?.slug === 'string') return x.category.slug.trim();
+        return null;
+      })
+      .filter(Boolean) as string[];
+
+    const normalized = slugs.map((s) => (s === 'plomeria' ? 'plomeria-gasista' : s));
+    return Array.from(new Set(normalized));
+  }
+
+  function toSlugLike(s: string) {
+    return String(s)
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/[^\w-]+/g, '')
+      .replace(/-+/g, '-');
+  }
 
   function catNameBySlug(slug: string) {
     return categoryOptions.find((c) => c.slug === slug)?.name ?? slug;
@@ -383,6 +472,10 @@ export default function SpecialistHome() {
         });
         if (!data?.ok) throw new Error('bad_response');
         const p: SpecProfile = data.profile;
+        if (__DEV__) {
+          console.log('[/specialists/me] specialties raw:', p.specialties);
+          console.log('[/specialists/me] kyc:', p.kycStatus, 'bg:', p.backgroundCheck?.status);
+        }
 
         setProfile(p);
         setBio(p.bio ?? '');
@@ -401,13 +494,33 @@ export default function SpecialistHome() {
         setStart(avail.start ?? '09:00');
         setEnd(avail.end ?? '18:00');
 
-        setSpecialties(p.specialties ?? []);
+        setSpecialties(normalizeSpecialties((p as any).specialties));
         setAvatar(p.avatarUrl ?? null);
 
         setPrice(String(p.visitPrice ?? 0));
         setRadius(String(p.radiusKm ?? 10));
 
         setPricingLabel((p.pricingLabel ?? '').trim());
+        // ✅ actualizar snapshots (baseline) SOLO cuando viene del backend
+        const bioBase = p.bio ?? '';
+        bioSnapRef.current = bioBase;
+
+        const availBase = {
+          days: p.availability?.days ?? [1, 2, 3, 4, 5],
+          start: p.availability?.start ?? '09:00',
+          end: p.availability?.end ?? '18:00',
+        };
+        availabilitySnapRef.current = JSON.stringify(availBase);
+
+        const priceBase = {
+          visitPrice: p.visitPrice ?? 0,
+          radiusKm: p.radiusKm ?? 10,
+          pricingLabel: (p.pricingLabel ?? '').trim(),
+        };
+        priceRadiusSnapRef.current = JSON.stringify(priceBase);
+
+        const specsBase = normalizeSpecialties((p as any).specialties);
+        specialtiesSnapRef.current = JSON.stringify(Array.from(new Set(specsBase)).sort());
       } catch (err: any) {
         const status = err?.response?.status;
         if (status === 401) {
@@ -652,6 +765,7 @@ export default function SpecialistHome() {
       await api.patch('/specialists/me', { bio });
       setProfile((prev) => (prev ? { ...prev, bio } : prev));
       Alert.alert('Listo', 'Biografía actualizada.');
+      bioSnapRef.current = bio;
     } catch {
       Alert.alert('Ups', 'No se pudo guardar.');
     } finally {
@@ -738,7 +852,16 @@ export default function SpecialistHome() {
   async function saveSpecialties() {
     try {
       setSaving(true);
-      await api.patch('/specialists/specialties', { specialties });
+      const cleaned = Array.from(
+        new Set(
+          specialties
+            .map((s) => (s === 'plomeria' ? 'plomeria-gasista' : s))
+            .filter((s) => !HIDDEN_SPECIALTIES.has(s)),
+        ),
+      );
+
+      await api.patch('/specialists/specialties', { specialties: cleaned });
+
       Alert.alert('Listo', 'Rubros actualizados.');
     } catch (e: any) {
       const msg = e?.response?.data?.error ?? 'No se pudieron actualizar los rubros.';
@@ -788,6 +911,14 @@ export default function SpecialistHome() {
     );
   }
 
+  function sameStringSet(a: string[], b: string[]) {
+    const aa = Array.from(new Set(a)).sort();
+    const bb = Array.from(new Set(b)).sort();
+    if (aa.length !== bb.length) return false;
+    for (let i = 0; i < aa.length; i++) if (aa[i] !== bb[i]) return false;
+    return true;
+  }
+
   function formatDate(dateStr?: string | null) {
     if (!dateStr) return '';
     const d = new Date(dateStr);
@@ -834,7 +965,7 @@ export default function SpecialistHome() {
           text: 'Imagen (Galería)',
           onPress: async () => {
             try {
-              setCertSaving(true);
+              setCertLoading(categorySlug, true);
 
               const res = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -854,7 +985,7 @@ export default function SpecialistHome() {
               if (__DEV__) console.log('[handleUploadCert:image] error', e);
               Alert.alert('Ups', 'No se pudo subir la matrícula.');
             } finally {
-              setCertSaving(false);
+              setCertLoading(categorySlug, false);
             }
           },
         },
@@ -862,7 +993,7 @@ export default function SpecialistHome() {
           text: 'Documento (PDF)',
           onPress: async () => {
             try {
-              setCertSaving(true);
+              setCertLoading(categorySlug, true);
 
               const doc = await DocumentPicker.getDocumentAsync({
                 type: ['application/pdf'],
@@ -888,7 +1019,7 @@ export default function SpecialistHome() {
               if (__DEV__) console.log('[handleUploadCert:pdf] error', e);
               Alert.alert('Ups', 'No se pudo subir el documento.');
             } finally {
-              setCertSaving(false);
+              setCertLoading(categorySlug, false);
             }
           },
         },
@@ -900,15 +1031,64 @@ export default function SpecialistHome() {
 
   const chipSource: { slug: string; name: string }[] = useMemo(() => {
     if (categoryOptions.length) {
-      return categoryOptions.map((c) => ({ slug: c.slug, name: c.name }));
+      return categoryOptions
+        .filter((c) => !HIDDEN_SPECIALTIES.has(c.slug))
+        .map((c) => ({ slug: c.slug, name: c.name }));
     }
-    return (SPECIALTY_OPTIONS as readonly string[]).map((s) => ({ slug: s, name: s }));
+
+    return (SPECIALTY_OPTIONS as readonly string[])
+      .filter((s) => !HIDDEN_SPECIALTIES.has(s))
+      .map((s) => ({ slug: s, name: s }));
   }, [categoryOptions]);
 
   const specialtiesRequiringCert = useMemo(
     () => specialties.filter((s) => requiresCert(s)),
     [specialties, requiresCert],
   );
+
+  useEffect(() => {
+    if (!__DEV__) return;
+
+    console.log('[DEBUG] categoryOptions.length:', categoryOptions.length);
+    console.log('[DEBUG] specialties:', specialties);
+    console.log('[DEBUG] specialtiesRequiringCert:', specialtiesRequiringCert);
+
+    // probá 2-3 slugs típicos del usuario
+    for (const s of specialties.slice(0, 6)) {
+      const fromApi = categoryOptions.find((c) => c.slug === s)?.requiresCertification;
+      console.log(`[DEBUG] requiresCert("${s}") =>`, requiresCert(s), 'fromApi:', fromApi);
+    }
+  }, [categoryOptions, specialties, specialtiesRequiringCert, requiresCert]);
+
+  const bioDirty = useMemo(() => {
+    return bio !== bioSnapRef.current;
+  }, [bio]);
+
+  const availabilityDirty = useMemo(() => {
+    const current = JSON.stringify({ days, start, end });
+    return current !== availabilitySnapRef.current;
+  }, [days, start, end]);
+
+  const priceRadiusDirty = useMemo(() => {
+    const current = JSON.stringify({
+      visitPrice: Math.max(0, Math.floor(Number(price) || 0)),
+      radiusKm: Math.max(0, Number(radius) || 0),
+      pricingLabel: pricingLabel.trim(),
+    });
+    return current !== priceRadiusSnapRef.current;
+  }, [price, radius, pricingLabel]);
+
+  const specialtiesDirty = useMemo(() => {
+    const cleaned = Array.from(
+      new Set(
+        specialties
+          .map((s) => (s === 'plomeria' ? 'plomeria-gasista' : s))
+          .filter((s) => !HIDDEN_SPECIALTIES.has(s)),
+      ),
+    );
+    const base = JSON.parse(specialtiesSnapRef.current || '[]') as string[];
+    return !sameStringSet(cleaned, base);
+  }, [specialties]);
 
   if (loading) {
     return (
@@ -1226,7 +1406,11 @@ export default function SpecialistHome() {
               multiline
               style={[styles.input, { minHeight: 110 }]}
             />
-            <Pressable onPress={saveBio} style={[styles.btn, saving && styles.btnDisabled]}>
+            <Pressable
+              onPress={saveBio}
+              disabled={!bioDirty || saving}
+              style={[styles.btn, (!bioDirty || saving) && styles.btnDisabled]}
+            >
               <Text style={styles.btnT}>Guardar biografía</Text>
             </Pressable>
           </View>
@@ -1276,7 +1460,8 @@ export default function SpecialistHome() {
 
             <Pressable
               onPress={saveAvailability}
-              style={[styles.btn, saving && styles.btnDisabled]}
+              disabled={!availabilityDirty || saving}
+              style={[styles.btn, (!availabilityDirty || saving) && styles.btnDisabled]}
             >
               <Text style={styles.btnT}>Guardar disponibilidad</Text>
             </Pressable>
@@ -1322,7 +1507,8 @@ export default function SpecialistHome() {
 
             <Pressable
               onPress={savePriceAndRadius}
-              style={[styles.btn, saving && styles.btnDisabled]}
+              disabled={!priceRadiusDirty || saving}
+              style={[styles.btn, (!priceRadiusDirty || saving) && styles.btnDisabled]}
             >
               <Text style={styles.btnT}>Guardar tarifa y radio</Text>
             </Pressable>
@@ -1368,7 +1554,11 @@ export default function SpecialistHome() {
               })}
             </View>
 
-            <Pressable onPress={saveSpecialties} style={[styles.btn, saving && styles.btnDisabled]}>
+            <Pressable
+              onPress={saveSpecialties}
+              disabled={!specialtiesDirty || saving}
+              style={[styles.btn, (!specialtiesDirty || saving) && styles.btnDisabled]}
+            >
               <Text style={styles.btnT}>Guardar rubros</Text>
             </Pressable>
           </View>
@@ -1384,6 +1574,8 @@ export default function SpecialistHome() {
                 {specialtiesRequiringCert.map((slug) => {
                   const c = findCert(slug);
                   const badge = certStatusBadge(c?.status);
+                  const uploading = isCertLoading(slug);
+
                   return (
                     <View key={slug} style={styles.certItem}>
                       <View style={{ flex: 1 }}>
@@ -1397,13 +1589,14 @@ export default function SpecialistHome() {
                         <View style={[styles.badge, { backgroundColor: badge.bg }]}>
                           <Text style={[styles.badgeT, { color: badge.txt }]}>{badge.label}</Text>
                         </View>
+
                         <Pressable
-                          style={[styles.smallBtn, certSaving && { opacity: 0.6 }]}
+                          style={[styles.smallBtn, uploading && { opacity: 0.6 }]}
                           onPress={() => handleUploadCert(slug)}
-                          disabled={certSaving}
+                          disabled={uploading}
                         >
                           <Text style={styles.smallBtnT}>
-                            {certSaving ? 'Subiendo…' : c ? 'Actualizar' : 'Subir'}
+                            {uploading ? 'Subiendo…' : c ? 'Actualizar' : 'Subir'}
                           </Text>
                         </Pressable>
                       </View>

@@ -35,6 +35,23 @@ const getActorUserId = (req: Request): string | null => {
   return req.user?.id ?? null;
 };
 
+// ✅ NUEVO: helpers para normalizar req.query (string | string[] | undefined)
+const q1 = (v: unknown): string | undefined => {
+  if (typeof v === 'string') return v.trim() || undefined;
+  if (Array.isArray(v)) {
+    const first = v[0];
+    return typeof first === 'string' ? first.trim() || undefined : undefined;
+  }
+  return undefined;
+};
+
+const qNum = (v: unknown): number | null => {
+  const s = q1(v);
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+};
+
 // ✅ Normaliza categorySlug (compat / alias)
 function normalizeCategorySlug(raw: any): string | null {
   if (typeof raw !== 'string') return null;
@@ -675,8 +692,10 @@ orders.get('/mine', auth, async (req: any, res) => {
     const uid = getActorUserId(req);
     if (!uid) return res.status(401).json({ ok: false, error: 'unauthorized' });
 
-    const role = (req.query.role as 'customer' | 'specialist') ?? 'customer';
-    const isClosed = (req.query.status as string) === 'closed';
+    const roleQ = q1(req.query.role);
+    const role: 'customer' | 'specialist' = roleQ === 'specialist' ? 'specialist' : 'customer';
+    const isClosed = q1(req.query.status) === 'closed';
+
     const byStatuses = isClosed ? CLOSED_STATUSES : OPEN_STATUSES;
 
     const whereByRole =
@@ -1615,10 +1634,10 @@ orders.get('/:id', auth, async (req, res) => {
         : null;
 
     // 👇 coords del que consulta (vienen por query desde el mobile)
-    const viewerLatRaw = req.query.lat ? Number(req.query.lat) : undefined;
-    const viewerLngRaw = req.query.lng ? Number(req.query.lng) : undefined;
-    const viewerLat = viewerLatRaw != null && !Number.isNaN(viewerLatRaw) ? viewerLatRaw : null;
-    const viewerLng = viewerLngRaw != null && !Number.isNaN(viewerLngRaw) ? viewerLngRaw : null;
+    const viewerLatRaw = qNum(req.query.lat);
+    const viewerLngRaw = qNum(req.query.lng);
+    const viewerLat = viewerLatRaw;
+    const viewerLng = viewerLngRaw;
 
     if (jobLat != null && jobLng != null) {
       // 1️⃣ Caso ideal: tenemos ubicación del trabajo
@@ -1756,16 +1775,16 @@ orders.get('/', auth, async (req, res) => {
   if (!uid) return res.status(401).json({ ok: false, error: 'unauthorized' });
 
   const isAdmin = (req as any).user?.role === 'ADMIN';
-  const requestedId = String(req.query.id || '');
+  const requestedId = q1(req.query.id) ?? '';
 
   // si no es admin, SIEMPRE usamos el user del token
   const effectiveId = isAdmin && requestedId ? requestedId : uid;
 
   // ❌ NO autocancel acá (evitamos duplicación/carga)
 
-  const role = String(req.query.role || '');
-  const statusQ = String(req.query.status || '');
-  const deadline = String(req.query.deadline || '').toLowerCase();
+  const role = q1(req.query.role) ?? '';
+  const statusQ = q1(req.query.status) ?? '';
+  const deadline = (q1(req.query.deadline) ?? '').toLowerCase();
 
   const where: Prisma.ServiceOrderWhereInput = {};
 

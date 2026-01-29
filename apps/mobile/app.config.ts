@@ -1,10 +1,11 @@
-import { ExpoConfig } from 'expo/config';
+import type { ExpoConfig } from '@expo/config-types';
 
 const config: ExpoConfig = {
   name: 'solucity',
   slug: 'solucity',
   version: '1.0.0',
   orientation: 'portrait',
+  scheme: 'solucity',
 
   // ✅ Ícono principal de la app (launcher)
   icon: './assets/icon.png',
@@ -14,7 +15,7 @@ const config: ExpoConfig = {
 
   // ✅ Splash
   splash: {
-    image: './assets/splash-icon.png',
+    image: './assets/splash-logo.png',
     resizeMode: 'contain',
     backgroundColor: '#004d5d',
   },
@@ -32,6 +33,9 @@ const config: ExpoConfig = {
 
   android: {
     package: 'com.solucity.app',
+    versionCode: 1,
+
+    blockedPermissions: ['android.permission.RECORD_AUDIO'],
 
     // ✅ Firebase
     googleServicesFile: './google-services.json',
@@ -42,26 +46,15 @@ const config: ExpoConfig = {
       backgroundColor: '#ffffff',
     },
 
-    /**
-     * ✅ ÍCONO DE NOTIFICACIONES
-     * Este es el que evita el cuadrado vacío
-     * PNG blanco/transparente ✔
-     */
-    notification: {
-      icon: './assets/notification-icon.png',
-      color: '#004d5d',
-    },
-
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
-    usesCleartextTraffic: false,
 
     permissions: [
-      'ACCESS_COARSE_LOCATION',
-      'ACCESS_FINE_LOCATION',
-      'CAMERA',
-      'READ_MEDIA_IMAGES',
-      'POST_NOTIFICATIONS',
+      'android.permission.ACCESS_COARSE_LOCATION',
+      'android.permission.ACCESS_FINE_LOCATION',
+      'android.permission.CAMERA',
+      'android.permission.READ_MEDIA_IMAGES',
+      'android.permission.POST_NOTIFICATIONS',
     ],
   } as any,
 
@@ -87,6 +80,7 @@ const config: ExpoConfig = {
       },
     ],
     'expo-notifications',
+    './plugins/removeRecordAudio',
   ],
 };
 

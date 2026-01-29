@@ -6,20 +6,20 @@ const path = require('path');
 const { getDefaultConfig } = require('expo/metro-config');
 
 const projectRoot = __dirname; // apps/mobile
-const workspaceRoot = path.resolve(projectRoot, '../..'); // solucity/
+const workspaceRoot = path.resolve(projectRoot, '../..'); // repo root
 
 const config = getDefaultConfig(projectRoot);
 
-// Ver monorepo
-config.watchFolders = [workspaceRoot];
+// ✅ IMPORTANTE: no pisar defaults, solo agregar el workspaceRoot
+config.watchFolders = [...(config.watchFolders ?? []), workspaceRoot];
 
-// MUY IMPORTANTE: primero node_modules del app móvil, luego el de la raíz.
+// ✅ Mantener priorización del node_modules del proyecto
 config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, 'node_modules'),
   path.resolve(workspaceRoot, 'node_modules'),
 ];
 
-// Evita que Metro suba por el arbol y tome paquetes erróneos
-config.resolver.disableHierarchicalLookup = true;
+// ✅ Expo doctor espera false. Mejor no tocarlo; lo dejamos explícito en false.
+config.resolver.disableHierarchicalLookup = false;
 
 module.exports = config;

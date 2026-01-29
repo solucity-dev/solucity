@@ -76,3 +76,21 @@ app.json
 metro.config.js
 babel.config.js
 app.config.ts
+
+# --- build artifacts / bundletool outputs ---
+apps/mobile/*.aab
+apps/mobile/*.apks
+apps/mobile/bundletool.jar
+apps/mobile/base/
+apps/mobile/META-INF/
+apps/mobile/BUNDLE-METADATA/
+apps/mobile/BundleConfig.pb
+
+# --- local backups / random assets ---
+apps/mobile/app.json.bak
+apps/mobile/assets/icon2*.png
+
+# --- expo/eas local ---
+apps/mobile/.easignore
+
+solucity-legal-site/

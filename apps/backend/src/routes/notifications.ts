@@ -70,6 +70,7 @@ router.post('/push-token', auth, async (req: AuthReq, res: Response) => {
     if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' });
 
     const { token, platform } = pushTokenSchema.parse(req.body);
+    console.log('[push-token]', 'userId=', userId, 'platform=', platform, 'token=', token);
 
     // token es UNIQUE en schema.prisma
     await prisma.pushToken.upsert({

@@ -31,6 +31,7 @@ module.exports = {
 
   android: {
     package: 'com.solucity.app',
+    versionCode: 13,
     blockedPermissions: ['android.permission.RECORD_AUDIO'],
     googleServicesFile: './google-services.json',
     adaptiveIcon: {

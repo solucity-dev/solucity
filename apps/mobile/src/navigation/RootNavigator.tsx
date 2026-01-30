@@ -20,7 +20,6 @@ import RegisterClient from '../screens/RegisterClient';
 import RegisterSpecialist from '../screens/RegisterSpecialist';
 import ResetPassword from '../screens/ResetPassword';
 import SpecialistWizard from '../screens/SpecialistWizard';
-import Splash from '../screens/Splash';
 import SubscriptionScreen from '../screens/SubscriptionScreen';
 import Welcome from '../screens/Welcome';
 
@@ -49,12 +48,12 @@ export default function RootNavigator() {
 
   // ✅ Mientras hidrata auth + onboarding, mostramos splash
   if (loading || onboardingSeen === null) {
-    return <Splash />;
+    return null;
   }
 
   // ✅ Anti-flash: si hay token pero aún no cargó user (/auth/me)
   if (token && !user) {
-    return <Splash />;
+    return null;
   }
 
   // ✅ Con token → stack privado (según role real)

@@ -1,19 +1,17 @@
-import type { ExpoConfig } from '@expo/config-types';
-
-const config: ExpoConfig = {
-  name: 'solucity',
+// apps/mobile/app.config.js
+/** @type {import('@expo/config-types').ExpoConfig} */
+module.exports = {
+  name: 'Solucity',
   slug: 'solucity',
   version: '1.0.0',
   orientation: 'portrait',
   scheme: 'solucity',
 
-  // ✅ Ícono principal de la app (launcher)
   icon: './assets/icon.png',
 
   userInterfaceStyle: 'light',
   newArchEnabled: true,
 
-  // ✅ Splash
   splash: {
     image: './assets/splash-logo.png',
     resizeMode: 'contain',
@@ -33,22 +31,14 @@ const config: ExpoConfig = {
 
   android: {
     package: 'com.solucity.app',
-    versionCode: 1,
-
     blockedPermissions: ['android.permission.RECORD_AUDIO'],
-
-    // ✅ Firebase
     googleServicesFile: './google-services.json',
-
-    // ✅ Adaptive icon (Android moderno)
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',
       backgroundColor: '#ffffff',
     },
-
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
-
     permissions: [
       'android.permission.ACCESS_COARSE_LOCATION',
       'android.permission.ACCESS_FINE_LOCATION',
@@ -56,7 +46,11 @@ const config: ExpoConfig = {
       'android.permission.READ_MEDIA_IMAGES',
       'android.permission.POST_NOTIFICATIONS',
     ],
-  } as any,
+    notification: {
+      icon: './assets/notification-icon.png',
+      color: '#004d5d',
+    },
+  },
 
   web: {
     output: 'single',
@@ -83,5 +77,3 @@ const config: ExpoConfig = {
     './plugins/removeRecordAudio',
   ],
 };
-
-export default config;

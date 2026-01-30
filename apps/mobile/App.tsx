@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { QueryClientProvider, focusManager } from '@tanstack/react-query';
 import * as Font from 'expo-font';
 import * as Notifications from 'expo-notifications';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
@@ -16,7 +17,6 @@ import RootNavigator from './src/navigation/RootNavigator';
 // React Query
 // 🔔 provider de notificaciones
 import { NotificationsProvider } from './src/notifications/NotificationsProvider';
-import Splash from './src/screens/Splash';
 
 // ✅ NUEVO: navigationRef global
 
@@ -33,6 +33,8 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function App() {
   const [fontsReady, setFontsReady] = useState(false);
@@ -62,7 +64,7 @@ export default function App() {
   }, []);
 
   if (!fontsReady) {
-    return <Splash />;
+    return null; // mantiene splash nativo visible
   }
 
   return (
@@ -76,6 +78,7 @@ export default function App() {
             <NavigationContainer
               ref={navigationRef}
               onReady={() => {
+                SplashScreen.hideAsync().catch(() => {});
                 if (__DEV__) console.log('[NAV] ready -> flushPendingNav()');
                 flushPendingNav();
               }}

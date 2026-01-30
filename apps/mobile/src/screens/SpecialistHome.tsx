@@ -408,7 +408,7 @@ export default function SpecialistHome() {
     async (options?: { silent?: boolean }) => {
       const silent = options?.silent ?? true;
       try {
-        setSaving(true);
+        if (!silent) setSaving(true);
 
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
@@ -452,7 +452,7 @@ export default function SpecialistHome() {
           Alert.alert('Ups', 'No pudimos actualizar tu ubicación. Probá de nuevo más tarde.');
         }
       } finally {
-        setSaving(false);
+        if (!silent) setSaving(true);
       }
     },
     [setProfile],
@@ -619,24 +619,17 @@ export default function SpecialistHome() {
     }, [token, reloadProfileAndSubscription, loadCategories]),
   );
 
-  // ✅ pedir ubicación sólo una vez y sin bloquear
+  // ✅ pedir ubicación apenas entra el especialista (una vez por sesión y sin bloquear)
   useEffect(() => {
     if (!token) return;
-    if (!profile) return;
     if (locationRequestedRef.current) return;
 
-    const hasCoords =
-      profile.centerLat != null &&
-      profile.centerLng != null &&
-      !(profile.centerLat === 0 && profile.centerLng === 0);
-
-    if (hasCoords) return;
-
     locationRequestedRef.current = true;
+
     InteractionManager.runAfterInteractions(() => {
       updateLocationFromDevice({ silent: true });
     });
-  }, [token, profile, updateLocationFromDevice]);
+  }, [token, updateLocationFromDevice]);
 
   const avatarSrc = useMemo(() => {
     const u = absoluteUrl(avatar);

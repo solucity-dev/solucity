@@ -150,7 +150,6 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
   if (otp.code !== code) {
     if (trace) {
       const safeGot = code ? `len=${code.length}` : 'len=0';
-      // NO mostramos otp.code, solo metadata
       console.log(
         `[OTP/verify] e=${ehash} fail=otp_invalid otpId=${otp.id} attempts=${otp.attempts} got(${safeGot})`,
       );
@@ -164,11 +163,8 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
     throw httpError('otp_invalid', 400);
   }
 
-  // Marcar OTP como usado
-  await prisma.emailOtp.update({
-    where: { id: otp.id },
-    data: { usedAt: new Date() },
-  });
+  // ✅ acá recién: otp match
+  if (trace) console.log(`[OTP/verify] e=${ehash} otp_match id=${otp.id}`);
 
   const pwd = String(args.password ?? '');
   const hasMinLen = pwd.length >= 8;
@@ -191,20 +187,43 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
   const passwordHash = await bcrypt.hash(args.password, 10);
 
   try {
-    const user = await prisma.user.create({
-      data: {
-        email,
-        phone,
-        name,
-        surname: surname ? surname : null,
-        passwordHash,
-        role: args.role === 'SPECIALIST' ? 'SPECIALIST' : 'CUSTOMER',
-        ...(args.role === 'SPECIALIST'
-          ? { specialist: { create: {} } }
-          : { customer: { create: {} } }),
-      },
-      select: { id: true, email: true, role: true, name: true, surname: true, phone: true },
+    if (trace) {
+      console.log(
+        `[OTP/verify] e=${ehash} creating_user role=${args.role} phone=${phone ? 'yes' : 'no'} surname=${surname ? 'yes' : 'no'}`,
+      );
+    }
+
+    const now = new Date();
+
+    const user = await prisma.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          email,
+          phone,
+          name,
+          surname: surname ? surname : null,
+          passwordHash,
+          role: args.role === 'SPECIALIST' ? 'SPECIALIST' : 'CUSTOMER',
+          ...(args.role === 'SPECIALIST'
+            ? { specialist: { create: {} } }
+            : { customer: { create: {} } }),
+        },
+        select: { id: true, email: true, role: true, name: true, surname: true, phone: true },
+      });
+
+      // ✅ ahora sí: consumimos OTP SOLO si user se creó OK
+      await tx.emailOtp.update({
+        where: { id: otp.id },
+        data: { usedAt: now },
+      });
+
+      if (trace) console.log(`[OTP/verify] e=${ehash} otp_used id=${otp.id}`);
+
+      return createdUser;
     });
+
+    if (trace) console.log(`[OTP/verify] e=${ehash} created_user id=${user.id} role=${user.role}`);
+
     await notifyAdmins({
       type: 'ADMIN_NEW_USER_REGISTERED',
       title: 'Nuevo usuario registrado',

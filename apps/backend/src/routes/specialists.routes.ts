@@ -871,8 +871,67 @@ router.post('/kyc/upload', auth, (req: Request, res: Response) => {
   });
 });
 
+/** POST /specialists/kyc/submit (IDEMPOTENTE) */
+router.post('/kyc/submit', auth, async (req: AuthReq, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' });
+
+    const schema = z.object({
+      dniFrontUrl: urlLike,
+      dniBackUrl: urlLike,
+      selfieUrl: urlLike,
+    });
+
+    const body = schema.parse(req.body);
+
+    const spec = await prisma.specialistProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!spec) return res.status(400).json({ ok: false, error: 'no_profile' });
+
+    // ✅ 1) si ya hay una submission PENDING, devolvemos esa (idempotencia)
+    const existing = await prisma.kycSubmission.findFirst({
+      where: { specialistId: spec.id, status: 'PENDING' },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, status: true, dniFrontUrl: true, dniBackUrl: true, selfieUrl: true },
+    });
+
+    if (existing) {
+      return res.json({ ok: true, submission: existing, reused: true });
+    }
+
+    // ✅ 2) si no existe, creamos
+    const created = await prisma.kycSubmission.create({
+      data: {
+        specialistId: spec.id,
+        dniFrontUrl: toAbsoluteUrl(body.dniFrontUrl),
+        dniBackUrl: toAbsoluteUrl(body.dniBackUrl),
+        selfieUrl: toAbsoluteUrl(body.selfieUrl),
+        status: 'PENDING',
+      },
+      select: { id: true, status: true, dniFrontUrl: true, dniBackUrl: true, selfieUrl: true },
+    });
+
+    // notificación (solo al crear)
+    await notifyKycStatus({ userId, status: 'PENDING', submissionId: created.id });
+
+    return res.json({ ok: true, submission: created, reused: false });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ ok: false, error: 'invalid_input', details: err.flatten() });
+    }
+    if (process.env.NODE_ENV !== 'production') console.error('POST /specialists/kyc/submit', err);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
 /** POST /specialists/register */
 router.post('/register', auth, async (req: AuthReq, res: Response) => {
+  const t0 = Date.now();
+  console.log(`[spec/register] t0 start userId=${req.user?.id}`);
+
   try {
     const schema = z.object({
       specialties: z.array(z.string().min(1)).min(1),
@@ -924,6 +983,8 @@ router.post('/register', auth, async (req: AuthReq, res: Response) => {
       select: { id: true },
     });
 
+    console.log(`[spec/register] t1 after_profile ms=${Date.now() - t0}`);
+
     // 2) specialties
     await prisma.specialistSpecialty.deleteMany({ where: { specialistId: specialist.id } });
 
@@ -940,19 +1001,31 @@ router.post('/register', auth, async (req: AuthReq, res: Response) => {
       skipDuplicates: true,
     });
 
-    // 3) kyc submission
-    const submission = await prisma.kycSubmission.create({
-      data: {
-        specialistId: specialist.id,
-        dniFrontUrl: kycAbs.dniFrontUrl,
-        dniBackUrl: kycAbs.dniBackUrl,
-        selfieUrl: kycAbs.selfieUrl,
-        status: 'PENDING',
-      },
+    // 3) kyc submission (idempotente: si ya existe PENDING, reusar)
+    const existing = await prisma.kycSubmission.findFirst({
+      where: { specialistId: specialist.id, status: 'PENDING' },
+      orderBy: { createdAt: 'desc' },
       select: { id: true },
     });
 
-    await notifyKycStatus({ userId, status: 'PENDING', submissionId: submission.id });
+    const submission = existing
+      ? existing
+      : await prisma.kycSubmission.create({
+          data: {
+            specialistId: specialist.id,
+            dniFrontUrl: kycAbs.dniFrontUrl,
+            dniBackUrl: kycAbs.dniBackUrl,
+            selfieUrl: kycAbs.selfieUrl,
+            status: 'PENDING',
+          },
+          select: { id: true },
+        });
+
+    if (!existing) {
+      await notifyKycStatus({ userId, status: 'PENDING', submissionId: submission.id });
+    }
+
+    console.log(`[spec/register] t2 after_specialties_kyc ms=${Date.now() - t0}`);
 
     // ✅ 4) IMPORTANTÍSIMO: asegurar rol SPECIALIST + token nuevo
     const updatedUser = await prisma.user.update({
@@ -965,6 +1038,9 @@ router.post('/register', auth, async (req: AuthReq, res: Response) => {
 
     // 5) sync index
     await syncSearchIndexForUser(userId);
+    console.log(`[spec/register] t3 after_search_index ms=${Date.now() - t0}`);
+
+    console.log(`[spec/register] tEnd total_ms=${Date.now() - t0}`);
 
     return res.json({
       ok: true,

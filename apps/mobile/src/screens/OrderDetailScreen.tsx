@@ -304,7 +304,7 @@ export default function OrderDetailScreen() {
 
         // ✅ permiso: pedir UNA vez (cache)
         if (locPermRef.current === 'unknown') {
-          const { status } = await Location.requestForegroundPermissionsAsync();
+          const { status } = await Location.getForegroundPermissionsAsync();
           locPermRef.current = status === 'granted' ? 'granted' : 'denied';
         }
 

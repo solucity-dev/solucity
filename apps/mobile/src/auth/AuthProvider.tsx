@@ -12,6 +12,7 @@ import {
   setOnBlockedHandler,
   setOnUnauthorizedHandler,
 } from '../lib/api';
+import { ensureLocationPermissionOnce } from '../lib/locationOnce';
 import { clearSubscriptionCache } from '../lib/subscriptionApi';
 import { setNavRole } from '../navigation/navigationRef';
 import Splash from '../screens/Splash';
@@ -189,6 +190,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     return () => setOnBlockedHandler(null);
   }, [logout]);
+
+  // ✅ Pedir ubicación 1 vez por usuario (solo cuando ya tenemos user real)
+  useEffect(() => {
+    if (!token || !user) return;
+
+    (async () => {
+      try {
+        await ensureLocationPermissionOnce({
+          userId: user.id,
+          role: user.role,
+        });
+      } catch {
+        // fail-soft
+      }
+    })();
+  }, [token, user]);
 
   const effectiveLoading = loading || meLoading;
 

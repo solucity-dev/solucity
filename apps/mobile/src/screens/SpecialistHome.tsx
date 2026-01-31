@@ -26,6 +26,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useAuth } from '../auth/AuthProvider';
 import { api } from '../lib/api';
+import { markLocationSynced } from '../lib/locationOnce';
 import {
   listCertifications,
   uploadCertificationAnyFile,
@@ -182,6 +183,7 @@ export default function SpecialistHome() {
   const auth = useAuth() as any;
   const token: string | null = auth.token ?? null;
   const logout: (() => void) | undefined = auth.logout;
+  const uid: string | null = auth?.user?.id ?? null;
 
   // ✅ Loading real
   const [loading, setLoading] = useState(true);
@@ -410,8 +412,8 @@ export default function SpecialistHome() {
       try {
         if (!silent) setSaving(true);
 
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
+        const perm = await Location.getForegroundPermissionsAsync();
+        if (perm.status !== 'granted') {
           if (!silent) {
             Alert.alert(
               'Permiso requerido',
@@ -433,6 +435,10 @@ export default function SpecialistHome() {
           centerLng: lng,
         });
 
+        if (uid) {
+          await markLocationSynced(uid, { lat, lng });
+        }
+
         setProfile((prev) =>
           prev
             ? {
@@ -452,10 +458,10 @@ export default function SpecialistHome() {
           Alert.alert('Ups', 'No pudimos actualizar tu ubicación. Probá de nuevo más tarde.');
         }
       } finally {
-        if (!silent) setSaving(true);
+        if (!silent) setSaving(false);
       }
     },
-    [setProfile],
+    [uid], // ✅ esto soluciona el warning y evita stale closure
   );
 
   // ✅ PERFIL bloqueante / lo demás background
@@ -624,12 +630,16 @@ export default function SpecialistHome() {
     if (!token) return;
     if (locationRequestedRef.current) return;
 
+    // 👇 SOLO si el backend todavía no tiene centerLat/centerLng
+    const missingCenter = !profile?.centerLat || !profile?.centerLng;
+    if (!missingCenter) return;
+
     locationRequestedRef.current = true;
 
     InteractionManager.runAfterInteractions(() => {
       updateLocationFromDevice({ silent: true });
     });
-  }, [token, updateLocationFromDevice]);
+  }, [token, profile?.centerLat, profile?.centerLng, updateLocationFromDevice]);
 
   const avatarSrc = useMemo(() => {
     const u = absoluteUrl(avatar);

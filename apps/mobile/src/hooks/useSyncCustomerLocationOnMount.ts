@@ -1,8 +1,8 @@
-//apps/mobile/src/hooks/useSyncCustomerLocationOnMount.ts
+//apps/mobile/src/hooks/useSyncCustomerLOcationOnMount.ts
 import * as Location from 'expo-location';
 import { useEffect } from 'react';
 
-import { api, getAuthToken } from '../lib/api';
+import { api, getAuthToken, getCachedUserId } from '../lib/api';
 
 export function useSyncCustomerLocationOnMount() {
   useEffect(() => {
@@ -15,20 +15,31 @@ export function useSyncCustomerLocationOnMount() {
         return;
       }
 
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') return;
+      // ✅ NO pedimos permisos acá. Solo chequeamos.
+      const perm = await Location.getForegroundPermissionsAsync();
+      if (perm.status !== 'granted') {
+        if (__DEV__) console.log('[useSyncCustomerLocationOnMount] skip: no location permission');
+        return;
+      }
 
-        const loc = await Location.getCurrentPositionAsync({});
+      try {
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
         if (cancelled) return;
 
+        // ✅ Mandamos al backend
         await api.patch('/customers/me/location', {
           lat: loc.coords.latitude,
           lng: loc.coords.longitude,
         });
+
+        // ✅ Cache simple local opcional (si querés ver en logs)
+        const uid = getCachedUserId?.() ?? null;
+        if (__DEV__) console.log('[useSyncCustomerLocationOnMount] synced location for', uid);
       } catch (e: any) {
         const st = e?.response?.status;
-        console.log('[useSyncCustomerLocationOnMount] error', st, e?.message);
+        if (__DEV__) console.log('[useSyncCustomerLocationOnMount] error', st, e?.message);
       }
     };
 

@@ -4,6 +4,46 @@ import { useNavigate } from 'react-router-dom';
 import { useAdminMetrics } from '../hooks/useAdminMetrics';
 import './dashboard.css';
 
+// 🔔 Helpers para alarma (sin assets) + notificación del navegador
+function playBeep() {
+  try {
+    const AudioContextCtor =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+    if (!AudioContextCtor) return;
+
+    const ctx = new AudioContextCtor();
+
+
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.value = 880; // tono
+    gain.gain.value = 0.08; // volumen
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    setTimeout(() => {
+      osc.stop();
+      ctx.close();
+    }, 250);
+  } catch {
+    // si el navegador bloquea audio o falla, no hacemos nada
+  }
+}
+
+function notify(title: string, body: string) {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') {
+    new Notification(title, { body });
+  }
+}
+
 function MetricCard(props: {
   label: string;
   value: number | string;
@@ -51,6 +91,77 @@ function Section(props: { title: string; subtitle?: string; children: React.Reac
 export default function Dashboard() {
   const { data, loading, error, reload } = useAdminMetrics();
   const navigate = useNavigate();
+
+    // Snapshot anterior para detectar incrementos
+  const prevRef = React.useRef<{
+    usersTotal: number;
+    kycPending: number;
+    certificationsPending: number;
+    backgroundPending: number;
+  } | null>(null);
+
+  React.useEffect(() => {
+    const id = window.setInterval(() => {
+      if (!loading) reload();
+    }, 30000);
+
+    return () => window.clearInterval(id);
+  }, [reload, loading]);
+
+
+  // Pedir permiso de notificaciones (opcional, pero recomendado)
+  React.useEffect(() => {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, []);
+
+  // Comparar valores y disparar alarma si INCREMENTAN
+  React.useEffect(() => {
+    if (!data) return;
+
+    const current = {
+      usersTotal: Number(data.users?.total || 0),
+      kycPending: Number(data.specialists?.kycPending || 0),
+      certificationsPending: Number(data.specialists?.certificationsPending || 0),
+      backgroundPending: Number(data.specialists?.backgroundPending || 0),
+    };
+
+    const prev = prevRef.current;
+
+    if (prev) {
+      const alerts: string[] = [];
+
+      if (current.usersTotal > prev.usersTotal) {
+        alerts.push(`Usuarios totales: ${prev.usersTotal} → ${current.usersTotal}`);
+      }
+
+      if (current.kycPending > prev.kycPending) {
+        alerts.push(`KYC pendientes: ${prev.kycPending} → ${current.kycPending}`);
+      }
+
+      if (current.certificationsPending > prev.certificationsPending) {
+        alerts.push(
+          `Matrículas pendientes: ${prev.certificationsPending} → ${current.certificationsPending}`
+        );
+      }
+
+      if (current.backgroundPending > prev.backgroundPending) {
+        alerts.push(
+          `Antecedentes pendientes: ${prev.backgroundPending} → ${current.backgroundPending}`
+        );
+      }
+
+      // Si hubo al menos un incremento, sonar + notificar
+      if (alerts.length > 0) {
+        playBeep();
+        notify('Solucity · Nuevo pendiente / cambio', alerts.join('\n'));
+      }
+    }
+
+    prevRef.current = current;
+  }, [data]);
 
   return (
     <div className="dashboardShell">

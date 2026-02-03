@@ -5,8 +5,13 @@ import { useAdminMetrics } from '../hooks/useAdminMetrics';
 import './dashboard.css';
 
 // 🔔 Helpers para alarma (sin assets) + notificación del navegador
-function playBeep() {
+let alarmInterval: number | null = null;
+
+function playAlarm(durationMs = 30000) {
   try {
+    // Si ya hay una alarma sonando, no arrancamos otra
+    if (alarmInterval !== null) return;
+
     const AudioContextCtor =
       window.AudioContext ||
       (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -15,25 +20,43 @@ function playBeep() {
 
     const ctx = new AudioContextCtor();
 
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
 
+    const playTone = () => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
 
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 900; // tono alarma
+      gain.gain.value = 0.18;    // volumen
 
-    osc.type = 'sine';
-    osc.frequency.value = 880; // tono
-    gain.gain.value = 0.08; // volumen
+      osc.connect(gain);
+      gain.connect(ctx.destination);
 
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.4);
+    };
 
-    osc.start();
-    setTimeout(() => {
-      osc.stop();
+    // 🔔 beep inmediato
+    playTone();
+
+    // 🔁 beep cada 1.2 segundos
+    alarmInterval = window.setInterval(() => {
+      playTone();
+    }, 1200);
+
+    // ⛔ cortar alarma después de X tiempo
+    window.setTimeout(() => {
+      if (alarmInterval) {
+        window.clearInterval(alarmInterval);
+        alarmInterval = null;
+      }
       ctx.close();
-    }, 250);
+    }, durationMs);
   } catch {
-    // si el navegador bloquea audio o falla, no hacemos nada
+    // no-op
   }
 }
 
@@ -154,10 +177,11 @@ export default function Dashboard() {
       }
 
       // Si hubo al menos un incremento, sonar + notificar
-      if (alerts.length > 0) {
-        playBeep();
-        notify('Solucity · Nuevo pendiente / cambio', alerts.join('\n'));
-      }
+if (alerts.length > 0) {
+  playAlarm(30000); // 🔔 30 segundos de alarma
+  notify('Solucity · Nuevo pendiente / cambio', alerts.join('\n'));
+}
+
     }
 
     prevRef.current = current;
@@ -171,7 +195,18 @@ export default function Dashboard() {
           <p className="dashboardSubtitle">Resumen del sistema (usuarios, órdenes y especialistas)</p>
         </div>
 
-        <button className="refreshBtn" onClick={reload} disabled={loading}>
+        <button
+  className="refreshBtn"
+  onClick={() => {
+    if (alarmInterval) {
+      window.clearInterval(alarmInterval);
+      alarmInterval = null;
+    }
+    reload();
+  }}
+  disabled={loading}
+>
+
           {loading ? 'Actualizando…' : 'Actualizar'}
         </button>
       </div>

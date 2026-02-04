@@ -94,3 +94,9 @@ apps/mobile/assets/icon2*.png
 apps/mobile/.easignore
 
 solucity-legal-site/
+
+# --- build artifacts (any level) ---
+**/build/
+*.aab
+*.apk
+*.apks

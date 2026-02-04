@@ -31,6 +31,7 @@ const groups: GroupSeed[] = [
       'Pintura',
       'Jardinería',
       'Piscinas',
+      'Desagote y baños químicos',
     ],
   },
   {
@@ -57,7 +58,18 @@ const groups: GroupSeed[] = [
       'Clases particulares',
       'Paseador de perros',
       'Fletes',
+      'Diseño de interiores',
     ],
+  },
+  {
+    name: 'Gastronomía',
+    slug: 'gastronomia',
+    rubros: ['Camarero / Mozo', 'Cocinero', 'Bartender', 'Catering', 'Ayudante de cocina'],
+  },
+  {
+    name: 'Profesionales',
+    slug: 'profesionales',
+    rubros: ['Abogado', 'Contador', 'Escribano', 'Arquitecto', 'Ingeniero'],
   },
 ];
 

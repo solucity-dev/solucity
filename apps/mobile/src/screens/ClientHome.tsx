@@ -8,7 +8,7 @@ import { ROOT_CATEGORIES } from '../data/categories';
 import { useSyncCustomerLocationOnMount } from '../hooks/useSyncCustomerLocationOnMount';
 import { useNotifications } from '../notifications/NotificationsProvider';
 
-import type { CategorySlug, HomeStackParamList } from '../types';
+import type { HomeStackParamList } from '../types';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 // ➕ IMPORTAMOS EL HOOK
@@ -56,7 +56,7 @@ export default function ClientHome() {
             {ROOT_CATEGORIES.map((c) => (
               <Pressable
                 key={c.id}
-                onPress={() => nav.navigate('Category', { id: c.id as CategorySlug })}
+                onPress={() => nav.navigate('Category', { id: c.id })}
                 style={({ pressed }) => [
                   styles.card,
                   pressed && { transform: [{ scale: 0.98 }], opacity: 0.98 },

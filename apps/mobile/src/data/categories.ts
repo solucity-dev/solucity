@@ -17,6 +17,16 @@ export const ROOT_CATEGORIES: { id: RootCategoryId; title: string; icon: IconSpe
   },
   { id: 'seguridad', title: 'Seguridad', icon: { set: 'mdi', name: 'shield-lock-outline' } },
   { id: 'servicios', title: 'Servicios', icon: { set: 'mdi', name: 'hand-heart-outline' } },
+  {
+    id: 'gastronomia',
+    title: 'Gastronomía',
+    icon: { set: 'mdi', name: 'silverware-fork-knife' },
+  },
+  {
+    id: 'profesionales',
+    title: 'Profesionales',
+    icon: { set: 'mdi', name: 'briefcase-account' },
+  },
 ];
 
 // Mapa (cómodo para lookup por id)
@@ -46,6 +56,11 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     { id: 'pintura', title: 'Pintura', icon: { set: 'mdi', name: 'format-paint' } },
     { id: 'jardineria', title: 'Jardinería', icon: { set: 'mdi', name: 'shovel' } },
     { id: 'piscinas', title: 'Piscinas', icon: { set: 'mdi', name: 'pool' } },
+    {
+      id: 'desagote-y-banos-quimicos',
+      title: 'Desagote y baños químicos',
+      icon: { set: 'mdi', name: 'toilet' }, // o 'truck-water' si preferís
+    },
   ],
 
   'informatica-electronica': [
@@ -94,5 +109,30 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     { id: 'paseador-de-perros', title: 'Paseador de perros', icon: { set: 'mdi', name: 'dog' } },
 
     { id: 'fletes', title: 'Fletes', icon: { set: 'mdi', name: 'truck-fast-outline' } },
+    {
+      id: 'diseno-de-interiores',
+      title: 'Diseño de interiores',
+      icon: { set: 'mdi', name: 'sofa' }, // o 'palette-swatch'
+    },
+  ],
+
+  gastronomia: [
+    { id: 'camarero-mozo', title: 'Camarero / Mozo', icon: { set: 'mdi', name: 'account-tie' } },
+    { id: 'cocinero', title: 'Cocinero', icon: { set: 'mdi', name: 'chef-hat' } },
+    { id: 'bartender', title: 'Bartender', icon: { set: 'mdi', name: 'glass-cocktail' } },
+    { id: 'catering', title: 'Catering', icon: { set: 'mdi', name: 'food' } },
+    {
+      id: 'ayudante-de-cocina',
+      title: 'Ayudante de cocina',
+      icon: { set: 'mdi', name: 'silverware' },
+    },
+  ],
+
+  profesionales: [
+    { id: 'abogado', title: 'Abogado', icon: { set: 'mdi', name: 'scale-balance' } },
+    { id: 'contador', title: 'Contador', icon: { set: 'mdi', name: 'calculator' } },
+    { id: 'escribano', title: 'Escribano', icon: { set: 'mdi', name: 'file-sign' } },
+    { id: 'arquitecto', title: 'Arquitecto', icon: { set: 'mdi', name: 'compass-outline' } },
+    { id: 'ingeniero', title: 'Ingeniero', icon: { set: 'mdi', name: 'cog-outline' } },
   ],
 };

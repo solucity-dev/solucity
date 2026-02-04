@@ -5,12 +5,14 @@ export type RootCategoryId =
   | 'construccion-mantenimiento'
   | 'informatica-electronica'
   | 'seguridad'
-  | 'servicios';
-
+  | 'servicios'
+  | 'gastronomia'
+  | 'profesionales';
 /**
  * Slugs de rubros (categorías hijas).
  * ✅ Regla: minúsculas, sin tildes, sin espacios, sin "/" y con guiones.
  */
+
 export type CategorySlug =
   // ── Construcción & Mantenimiento ──────────────────────────
   | 'albanileria'
@@ -18,10 +20,11 @@ export type CategorySlug =
   | 'yeseria-durlock'
   | 'carpinteria'
   | 'herreria'
-  | 'plomeria'
+  | 'plomeria-gasista'
   | 'pintura'
   | 'jardineria'
   | 'piscinas'
+  | 'desagote-y-banos-quimicos'
   // ── Informática & Electrónica ─────────────────────────────
   | 'climatizacion'
   | 'servicio-tecnico-electronica'
@@ -36,7 +39,20 @@ export type CategorySlug =
   | 'clases-particulares'
   | 'paseador-de-perros'
   | 'acompanante-terapeutico'
-  | 'fletes';
+  | 'fletes'
+  | 'diseno-de-interiores'
+  // ── Gastronomía ───────────────────────────────────────────
+  | 'camarero-mozo'
+  | 'cocinero'
+  | 'bartender'
+  | 'catering'
+  | 'ayudante-de-cocina'
+  // ── Profesionales ─────────────────────────────────────────
+  | 'abogado'
+  | 'contador'
+  | 'escribano'
+  | 'arquitecto'
+  | 'ingeniero';
 
 /** Tabs principales del cliente */
 export type ClientTabsParamList = {
@@ -52,7 +68,7 @@ export type SpecialistTabsParamList = ClientTabsParamList;
 /** Stack interno de la pestaña Home del cliente */
 export type HomeStackParamList = {
   ClientHome: undefined;
-  Category: { id: CategorySlug };
+  Category: { id: RootCategoryId };
   SpecialistsList: { categorySlug: CategorySlug; title: string };
   SpecialistProfile: { id: string; lat?: number; lng?: number };
 

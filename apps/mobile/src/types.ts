@@ -25,6 +25,7 @@ export type CategorySlug =
   | 'jardineria'
   | 'piscinas'
   | 'desagote-y-banos-quimicos'
+  | 'soldador'
   // ── Informática & Electrónica ─────────────────────────────
   | 'climatizacion'
   | 'servicio-tecnico-electronica'

@@ -95,9 +95,7 @@ export default function KycStatusScreen() {
   const badge = badgeFor(status);
 
   const goToUpload = () => {
-    // 👇 AJUSTÁ este nombre a tu screen real de “subir KYC”
-    // Ejemplos: 'SpecialistRegisterKyc' / 'KycUpload' / 'KycSubmit'
-    (nav.getParent() as any)?.navigate('KycUpload');
+    nav.navigate('KycUpload');
   };
 
   return (

@@ -17,6 +17,7 @@ import { api } from '../lib/api';
 import {
   navigateToBackgroundCheck,
   navigateToChatThread,
+  navigateToKycStatus,
   navigateToOrderDetail,
   navigateToSubscription,
 } from '../navigation/navigationRef';
@@ -357,6 +358,14 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         String(type) === 'BACKGROUND_CHECK_REVIEW_REQUEST'
       ) {
         navigateToBackgroundCheck();
+        return;
+      }
+
+      // ✅ KYC → pantalla KycStatus
+      if (String(type).startsWith('KYC_') || String(type) === 'KYC_STATUS') {
+        // Si tu backend manda type KYC_REJECTED / KYC_PENDING / etc, entra acá.
+        // También soporta KYC_STATUS si lo usás así.
+        navigateToKycStatus();
         return;
       }
 

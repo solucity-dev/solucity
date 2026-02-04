@@ -111,6 +111,7 @@ function maskedCertRowText(c?: CertItem | null) {
 
 // ✅ Fallback: si /categories falla, no te quedás sin rubros
 const SPECIALTY_OPTIONS = [
+  // ── Construcción & Mantenimiento ──────────────────────────
   'albanileria',
   'electricidad',
   'yeseria-durlock',
@@ -120,28 +121,60 @@ const SPECIALTY_OPTIONS = [
   'pintura',
   'jardineria',
   'piscinas',
+  'desagote-y-banos-quimicos',
+  'soldador',
+
+  // ── Informática & Electrónica ─────────────────────────────
   'climatizacion',
   'servicio-tecnico-electronica',
   'servicio-tecnico-electrodomesticos',
   'servicio-tecnico-informatica',
+
+  // ── Seguridad ─────────────────────────────────────────────
   'cerrajeria',
   'camaras-y-alarmas',
   'personal-de-seguridad',
+
+  // ── Servicios Generales ───────────────────────────────────
   'limpieza',
-  'acompanante-terapeutico',
   'clases-particulares',
   'paseador-de-perros',
+  'acompanante-terapeutico',
   'fletes',
+  'diseno-de-interiores',
+
+  // ── Gastronomía ───────────────────────────────────────────
+  'camarero-mozo',
+  'cocinero',
+  'bartender',
+  'catering',
+  'ayudante-de-cocina',
+
+  // ── Profesionales ─────────────────────────────────────────
+  'abogado',
+  'contador',
+  'escribano',
+  'arquitecto',
+  'ingeniero',
 ] as const;
 
 const REQUIRES_CERT_FALLBACK = new Set([
   'plomeria-gasista',
   'electricidad',
   'climatizacion',
+  'servicio-tecnico-electronica',
+  'servicio-tecnico-electrodomesticos',
+  'servicio-tecnico-informatica',
   'camaras-y-alarmas',
   'personal-de-seguridad',
   'cerrajeria',
   'acompanante-terapeutico',
+  'diseno-de-interiores',
+  'abogado',
+  'contador',
+  'escribano',
+  'arquitecto',
+  'ingeniero',
 ]);
 
 // 🔒 Rubros legacy que queremos ocultar SOLO en SpecialistHome
@@ -794,7 +827,7 @@ export default function SpecialistHome() {
     if (!(kycStatus === 'VERIFIED' && bgStatus === 'APPROVED')) {
       Alert.alert(
         'Verificación requerida',
-        'Para activar tu disponibilidad necesitás KYC verificado y el certificado de buena conducta aprobado.',
+        'Para activar tu disponibilidad necesitás verificacion de identidad y el certificado de buena conducta aprobado.',
       );
       return;
     }
@@ -826,7 +859,7 @@ export default function SpecialistHome() {
       if (e?.response?.status === 403 || err === 'kyc_required') {
         Alert.alert(
           'Verificación requerida',
-          'Para activar tu disponibilidad necesitás KYC verificado y antecedentes aprobados.',
+          'Para activar tu disponibilidad necesitás verificacion de identidad y antecedentes aprobados.',
         );
         setAvailableNow(false);
         return;
@@ -1311,7 +1344,7 @@ export default function SpecialistHome() {
               <Text style={[styles.muted, { marginTop: 6 }]}>
                 {!subscriptionOk
                   ? 'Tu disponibilidad requiere suscripción activa. Tocá la tarjeta de Suscripción para activarla.'
-                  : 'Tu disponibilidad se habilita cuando el KYC esté verificado y el certificado de buena conducta esté aprobado.'}
+                  : 'Tu disponibilidad se habilita cuando validemos tú identidad y el certificado de buena conducta esté aprobado.'}
               </Text>
             ) : null}
 

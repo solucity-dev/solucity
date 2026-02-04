@@ -32,6 +32,7 @@ const groups: GroupSeed[] = [
       'Jardinería',
       'Piscinas',
       'Desagote y baños químicos',
+      'Soldador',
     ],
   },
   {
@@ -87,7 +88,24 @@ function slugify(name: string) {
 }
 
 // Rubros que requieren matrícula/título (certificación por rubro)
-const REQUIRES_CERTIFICATION = new Set<string>(['climatizacion', 'plomeria-gasista']);
+const REQUIRES_CERTIFICATION = new Set<string>([
+  'electricidad',
+  'plomeria-gasista',
+  'climatizacion',
+  'servicio-tecnico-electronica',
+  'servicio-tecnico-electrodomesticos',
+  'servicio-tecnico-informatica',
+  'camaras-y-alarmas',
+  'cerrajeria',
+  'personal-de-seguridad',
+  'acompanante-terapeutico',
+  'diseno-de-interiores',
+  'abogado',
+  'contador',
+  'escribano',
+  'arquitecto',
+  'ingeniero',
+]);
 
 async function upsertCategories() {
   for (let i = 0; i < groups.length; i++) {

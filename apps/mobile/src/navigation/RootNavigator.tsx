@@ -10,7 +10,7 @@ import { useAuth } from '../auth/AuthProvider';
 import ChooseRole from '../screens/ChooseRole';
 import ForgotPassword from '../screens/ForgotPassword';
 import KycStatusScreen from '../screens/KycStatusScreen';
-// import KycUploadScreen from '../screens/KycUploadScreen'; // ✅ si existe en tu proyecto, descomentá
+import KycUploadScreen from '../screens/KycUploadScreen';
 import PrivacyPolicyScreen from '../screens/legal/PrivacyPolicyScreen';
 import SupportScreen from '../screens/legal/SupportScreen';
 import TermsScreen from '../screens/legal/TermsScreen';
@@ -70,7 +70,7 @@ export default function RootNavigator() {
 
         {/* ✅ Global */}
         <Stack.Screen name="KycStatus" component={KycStatusScreen} />
-        {/* <Stack.Screen name="KycUpload" component={KycUploadScreen} /> */}
+        <Stack.Screen name="KycUpload" component={KycUploadScreen} />
 
         {/* ✅ Legal + soporte global */}
         <Stack.Screen name="Support" component={SupportScreen} />

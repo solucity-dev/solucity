@@ -57,6 +57,15 @@ export function navigateToSubscription() {
   navigationRef.navigate('Subscription' as never);
 }
 
+export function navigateToKycStatus() {
+  try {
+    if (!navigationRef.isReady()) return;
+    navigationRef.navigate('KycStatus' as never);
+  } catch (e) {
+    if (__DEV__) console.log('[navigateToKycStatus] error', e);
+  }
+}
+
 /**
  * ✅ Navegación global al OrderDetail
  */

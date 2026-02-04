@@ -61,6 +61,7 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
       title: 'Desagote y baños químicos',
       icon: { set: 'mdi', name: 'toilet' }, // o 'truck-water' si preferís
     },
+    { id: 'soldador', title: 'Soldador', icon: { set: 'mdi', name: 'torch' } },
   ],
 
   'informatica-electronica': [

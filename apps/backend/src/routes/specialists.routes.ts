@@ -1206,7 +1206,7 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
 
     // 👉 toggle real (intención del user)
     // si no cumple requisitos (kyc/bg/user), lo mostramos false para evitar incoherencias
-    const availableNow = safe.canToggle ? !!profile.availableNow : false;
+    const availableNow = !!profile.availableNow;
 
     const ratingAvg = profile.ratingAvg ?? null;
     const ratingCount = profile.ratingCount ?? null;

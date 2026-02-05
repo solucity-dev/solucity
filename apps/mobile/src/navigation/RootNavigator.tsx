@@ -110,6 +110,7 @@ export default function RootNavigator() {
             onCreateAccount={() => navigation.navigate('ChooseRole')}
             onLogin={() => navigation.navigate('Login')}
             onOpenTerms={() => navigation.navigate('Terms')}
+            onOpenPrivacy={() => navigation.navigate('PrivacyPolicy')}
           />
         )}
       />

@@ -524,7 +524,7 @@ export default function RegisterSpecialist() {
                 <PasswordInputRow
                   value={password}
                   onChangeText={setPassword}
-                  placeholder="Mínimo 8 caracteres"
+                  placeholder="Requiere 8 caracteres, 1 letra y 1 número"
                   visible={showPass1}
                   onToggle={() => setShowPass1((v) => !v)}
                   onSubmitEditing={() => {}}
@@ -532,6 +532,8 @@ export default function RegisterSpecialist() {
                   textContentType="newPassword"
                   autoComplete="new-password"
                 />
+
+                <Text style={s.passHelp}>Requiere 8 caracteres, al menos 1 letra y 1 número.</Text>
 
                 <Text style={s.label}>Confirmar contraseña</Text>
                 <PasswordInputRow
@@ -899,6 +901,13 @@ const s = StyleSheet.create({
     paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.16)',
+  },
+
+  passHelp: {
+    marginTop: -4,
+    color: 'rgba(233,254,255,0.85)',
+    fontWeight: '800',
+    fontSize: 12,
   },
 
   // card base

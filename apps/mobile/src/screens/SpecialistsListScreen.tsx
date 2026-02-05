@@ -212,7 +212,7 @@ export default function SpecialistsListScreen() {
         if (onlyEnabled) paramsQ.enabled = true;
 
         // ✅ SIEMPRE filtrar por disponibilidad actual
-        paramsQ.availableNow = true;
+        paramsQ.visible = true; // o el nombre que uses server-side
 
         if (priceMax != null) paramsQ.priceMax = priceMax;
 
@@ -293,7 +293,7 @@ export default function SpecialistsListScreen() {
 
   const list = useMemo(() => {
     // ✅ blindaje extra: aunque el backend falle, nunca mostramos no disponibles
-    const arr = items.filter((x) => x.availableNow).slice();
+    const arr = items.slice(); // NO filtramos por horario
 
     switch (sortBy) {
       case 'distance':

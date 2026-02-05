@@ -136,7 +136,9 @@ function multerErrorToResponse(err: any, res: Response) {
   if (err?.message === 'unsupported_type') {
     return res.status(415).json({ ok: false, error: 'unsupported_type' });
   }
-  return false;
+
+  // ✅ fallback: cualquier otro error de multer / filesystem
+  return res.status(400).json({ ok: false, error: 'upload_failed' });
 }
 
 /** ========= HORARIOS =========
@@ -542,6 +544,18 @@ router.get('/search', async (req, res) => {
       }
     }
 
+    // ✅ cache por request para evitar N llamadas repetidas a canSpecialistBeVisible
+    const gateCache = new Map<string, { ok: boolean; status?: string | null }>();
+
+    const gateFor = async (userId: string) => {
+      if (!userId) return { ok: false, status: null };
+      const hit = gateCache.get(userId);
+      if (hit) return hit;
+      const gate = await canSpecialistBeVisible(userId);
+      gateCache.set(userId, gate);
+      return gate;
+    };
+
     // 4) construir lista final + disponibilidad REAL (toggle + horario)
     let enriched = await Promise.all(
       withDist.map(async (x) => {
@@ -557,10 +571,11 @@ router.get('/search', async (req, res) => {
         const toggleAvailable = kycOk && bgOk ? !!prof?.availableNow : false;
         const scheduleOk = isWithinAvailability(prof?.availability);
 
-        const gate = await canSpecialistBeVisible(prof?.userId ?? '');
+        const gate = await gateFor(prof?.userId ?? '');
         const subOk = gate.ok;
 
-        const visibleNow = userOk && kycOk && bgOk && subOk && toggleAvailable && scheduleOk;
+        const visible = userOk && kycOk && bgOk && subOk && toggleAvailable; // ⬅️ NO incluye horario
+        const availableNow = visible && scheduleOk; // ⬅️ SOLO para la pill
 
         const name = `${user?.name ?? 'Especialista'} ${user?.surname ?? ''}`.trim();
 
@@ -611,7 +626,8 @@ router.get('/search', async (req, res) => {
 
           kycStatus: prof?.kycStatus ?? 'UNVERIFIED',
           avatarUrl: prof?.avatarUrl ?? null,
-          availableNow: visibleNow,
+          visible,
+          availableNow, // pill (incluye horario)
           pricingLabel: prof?.pricingLabel ?? null,
         };
       }),
@@ -891,6 +907,15 @@ router.post('/kyc/submit', auth, async (req: AuthReq, res: Response) => {
     });
     if (!spec) return res.status(400).json({ ok: false, error: 'no_profile' });
 
+    // ✅ IMPORTANTÍSIMO: cuando el especialista reenvía KYC, el profile vuelve a PENDING
+    await prisma.specialistProfile.update({
+      where: { id: spec.id },
+      data: {
+        kycStatus: 'PENDING',
+        availableNow: false,
+      },
+    });
+
     // ✅ 1) si ya hay una submission PENDING, devolvemos esa (idempotencia)
     const existing = await prisma.kycSubmission.findFirst({
       where: { specialistId: spec.id, status: 'PENDING' },
@@ -899,7 +924,20 @@ router.post('/kyc/submit', auth, async (req: AuthReq, res: Response) => {
     });
 
     if (existing) {
-      return res.json({ ok: true, submission: existing, reused: true });
+      const updated = await prisma.kycSubmission.update({
+        where: { id: existing.id },
+        data: {
+          dniFrontUrl: toAbsoluteUrl(body.dniFrontUrl),
+          dniBackUrl: toAbsoluteUrl(body.dniBackUrl),
+          selfieUrl: toAbsoluteUrl(body.selfieUrl),
+          rejectionReason: null,
+          reviewerId: null,
+          reviewedAt: null,
+        },
+        select: { id: true, status: true, dniFrontUrl: true, dniBackUrl: true, selfieUrl: true },
+      });
+
+      return res.json({ ok: true, submission: updated, reused: true });
     }
 
     // ✅ 2) si no existe, creamos
@@ -1127,6 +1165,7 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
           ratingCount: null,
           badge: null,
           kycStatus: 'UNVERIFIED',
+          kyc: null,
           specialties: [],
           avatarUrl: null,
           stats: { done: 0, canceled: 0 },
@@ -1135,6 +1174,21 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
         },
       });
     }
+
+    // ✅ Traer último envío de KYC (para UI: estado, motivo, fechas y urls)
+    const lastKyc = await prisma.kycSubmission.findFirst({
+      where: { specialistId: profile.id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        status: true,
+        rejectionReason: true,
+        createdAt: true,
+        reviewedAt: true,
+        dniFrontUrl: true,
+        dniBackUrl: true,
+        selfieUrl: true,
+      },
+    });
 
     const avail = (profile.availability as any) || null;
 
@@ -1175,6 +1229,18 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
         ratingCount,
         badge,
         kycStatus: profile.kycStatus as any,
+        kyc: lastKyc
+          ? {
+              status: lastKyc.status as any,
+              rejectionReason: lastKyc.rejectionReason ?? null,
+              createdAt: lastKyc.createdAt ? lastKyc.createdAt.toISOString() : null,
+              reviewedAt: lastKyc.reviewedAt ? lastKyc.reviewedAt.toISOString() : null,
+              dniFrontUrl: lastKyc.dniFrontUrl ? toAbsoluteUrl(lastKyc.dniFrontUrl) : null,
+              dniBackUrl: lastKyc.dniBackUrl ? toAbsoluteUrl(lastKyc.dniBackUrl) : null,
+              selfieUrl: lastKyc.selfieUrl ? toAbsoluteUrl(lastKyc.selfieUrl) : null,
+            }
+          : null,
+
         backgroundCheck: profile.backgroundCheck
           ? {
               status: profile.backgroundCheck.status,
@@ -1256,7 +1322,11 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
 
     let nextAvail = currentAvail;
     if (data.availability) nextAvail = { ...currentAvail, ...data.availability };
-    // NO guardamos enabled dentro de availability (evita inconsistencias)
+
+    // ✅ NO guardar enabled dentro de availability (evita inconsistencias)
+    if (nextAvail && typeof nextAvail === 'object') {
+      delete (nextAvail as Record<string, unknown>).enabled;
+    }
 
     const setAvailableNow = typeof data.available === 'boolean' ? data.available : undefined;
 

@@ -834,7 +834,7 @@ export default function SpecialistHome() {
 
     try {
       setAvailableNow(v);
-      await api.patch('/specialists/me', { available: v });
+      await api.patch('/specialists/me', { availableNow: v });
 
       // ✅ asegura coherencia contra reglas server-side
       await reloadProfileAndSubscription({ silent: true });

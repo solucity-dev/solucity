@@ -9,9 +9,10 @@ type Props = {
   onCreateAccount: () => void;
   onLogin: () => void;
   onOpenTerms: () => void;
+  onOpenPrivacy: () => void;
 };
 
-export default function Welcome({ onCreateAccount, onLogin, onOpenTerms }: Props) {
+export default function Welcome({ onCreateAccount, onLogin, onOpenTerms, onOpenPrivacy }: Props) {
   const insets = useSafeAreaInsets();
   // levantamos el footer para que no quede pegado al borde
   const bottomLift = Math.max(32, insets.bottom + 18);
@@ -58,14 +59,27 @@ export default function Welcome({ onCreateAccount, onLogin, onOpenTerms }: Props
             <Text style={styles.secondaryText}>Ya tengo una cuenta</Text>
           </Pressable>
 
-          <Pressable
-            onPress={onOpenTerms}
-            style={styles.termsBtn}
-            accessibilityRole="link"
-            accessibilityLabel="Términos y condiciones"
-          >
-            <Text style={styles.termsText}>Términos y condiciones</Text>
-          </Pressable>
+          <Text style={styles.legalText}>
+            Al continuar, aceptás nuestros{' '}
+            <Text
+              style={styles.legalLink}
+              onPress={onOpenTerms}
+              accessibilityRole="link"
+              accessibilityLabel="Términos y condiciones"
+            >
+              Términos y Condiciones
+            </Text>{' '}
+            y la{' '}
+            <Text
+              style={styles.legalLink}
+              onPress={onOpenPrivacy}
+              accessibilityRole="link"
+              accessibilityLabel="Política de privacidad"
+            >
+              Política de Privacidad
+            </Text>
+            .
+          </Text>
         </View>
       </SafeAreaView>
     </LinearGradient>
@@ -135,6 +149,18 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     fontSize: 15,
   },
-  termsBtn: { alignSelf: 'center', paddingVertical: 6, marginTop: 2 },
-  termsText: { color: 'rgba(255,255,255,0.92)', textDecorationLine: 'underline' },
+
+  legalText: {
+    alignSelf: 'center',
+    paddingVertical: 6,
+    marginTop: 2,
+    textAlign: 'center',
+    color: 'rgba(255,255,255,0.92)',
+    lineHeight: 18,
+  },
+  legalLink: {
+    color: 'rgba(255,255,255,0.98)',
+    fontWeight: '900',
+    textDecorationLine: 'underline',
+  },
 });

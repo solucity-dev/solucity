@@ -343,7 +343,7 @@ export default function RegisterClient() {
                 {/* ✅ Password con ojito */}
                 <LabeledPasswordInput
                   label="Contraseña"
-                  placeholder="Mínimo 8 caracteres"
+                  placeholder="Requiere 8 caracteres, 1 letra y 1 número"
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={!showPass1}
@@ -353,6 +353,10 @@ export default function RegisterClient() {
                   autoComplete="new-password"
                   editable={!loading}
                 />
+
+                <Text style={styles.passHelp}>
+                  Requiere 8 caracteres, al menos 1 letra y 1 número.
+                </Text>
 
                 {/* ✅ Repetir password con ojito */}
                 <LabeledPasswordInput
@@ -495,6 +499,13 @@ const styles = StyleSheet.create({
   linkText: { color: 'rgba(255,255,255,0.95)', textDecorationLine: 'underline' },
 
   note: { color: 'rgba(255,255,255,0.75)', marginTop: 8, marginBottom: -4 },
+
+  passHelp: {
+    marginTop: -6,
+    color: 'rgba(233,254,255,0.85)',
+    fontWeight: '800',
+    fontSize: 12,
+  },
 });
 
 const pwdStyles = StyleSheet.create({

@@ -687,7 +687,7 @@ export default function SpecialistHome() {
 
   // ✅ Suscripción OK: ACTIVE o TRIALING con días > 0
   const subscriptionOk = useMemo(() => {
-    if (!subscription) return true; // fail-open (si no cargó aún, no bloqueamos)
+    if (!subscription) return false; // fail-closed
     if (subscription.status === 'ACTIVE') return true;
 
     if (subscription.status === 'TRIALING') {

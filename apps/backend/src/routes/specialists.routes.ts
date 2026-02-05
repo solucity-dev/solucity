@@ -1289,6 +1289,11 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
     if (data.available === true) {
       // ✅ SUSCRIPCIÓN: si no está OK, no puede ponerse disponible
       const gate = await canSpecialistBeVisible(userId);
+
+      console.log('[DEBUG availability gate]', {
+        userId,
+        gate,
+      });
       if (!gate.ok) {
         return res.status(403).json({
           ok: false,

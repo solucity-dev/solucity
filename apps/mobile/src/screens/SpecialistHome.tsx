@@ -834,7 +834,7 @@ export default function SpecialistHome() {
 
     try {
       setAvailableNow(v);
-      await api.patch('/specialists/me', { availableNow: v });
+      await api.patch('/specialists/me', { available: v });
 
       // ✅ asegura coherencia contra reglas server-side
       await reloadProfileAndSubscription({ silent: true });
@@ -1230,12 +1230,12 @@ export default function SpecialistHome() {
                     <Ionicons name="shield-checkmark-outline" size={18} color="#E9FEFF" />
                     <Text style={{ color: '#E9FEFF', fontWeight: '800', flex: 1 }}>
                       {profile.kycStatus === 'VERIFIED'
-                        ? 'KYC verificado ✅'
+                        ? 'Verificación de Identidad ✅'
                         : profile.kycStatus === 'PENDING'
-                          ? 'KYC en revisión'
+                          ? 'Identidad en revisión'
                           : profile.kycStatus === 'REJECTED'
-                            ? 'KYC rechazado — reenviar'
-                            : 'KYC pendiente — completar'}
+                            ? 'Identidad rechazada — reenviar'
+                            : 'Identidad pendiente — completar'}
                     </Text>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color="#E9FEFF" />

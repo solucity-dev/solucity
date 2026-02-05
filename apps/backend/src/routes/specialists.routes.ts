@@ -633,7 +633,7 @@ router.get('/search', async (req, res) => {
       }),
     );
 
-    enriched = enriched.filter((x) => x.userOk !== false);
+    enriched = enriched.filter((x) => x.userOk !== false && x.visible === true);
 
     if (onlyAvailable) enriched = enriched.filter((x) => x.availableNow === true);
     if (onlyEnabled) enriched = enriched.filter((x) => x.enabled === true);

@@ -33,6 +33,10 @@ const groups: GroupSeed[] = [
       'Piscinas',
       'Desagote y baños químicos',
       'Soldador',
+      'Porcelanato liquido',
+      'Vidriería',
+      'Aberturas',
+      'Impermeabilización',
     ],
   },
   {
@@ -40,15 +44,23 @@ const groups: GroupSeed[] = [
     slug: 'informatica-electronica',
     rubros: [
       'Climatizacion',
+      'Cartelería',
       'Servicio técnico electrónica',
-      'Servicio técnico electrodomésticos',
+      'Reparación de celulares',
+      'Servicio tecnico electrodomésticos',
+      'Servicio tecnico audiovisual',
       'Servicio técnico informática',
     ],
   },
   {
     name: 'Seguridad',
     slug: 'seguridad',
-    rubros: ['Cámaras y alarmas', 'Cerrajería', 'Personal de seguridad'],
+    rubros: [
+      'Cámaras y alarmas',
+      'Cerrajería',
+      'Personal de seguridad',
+      'Cercos eléctricos / perimetrales',
+    ],
   },
   {
     name: 'Servicios',
@@ -58,14 +70,24 @@ const groups: GroupSeed[] = [
       'Acompañante terapéutico',
       'Clases particulares',
       'Paseador de perros',
+      'Cuidado de mascotas',
       'Fletes',
       'Diseño de interiores',
+      'Organización de eventos',
+      'Fotografía y video',
     ],
   },
   {
     name: 'Gastronomía',
     slug: 'gastronomia',
-    rubros: ['Camarero / Mozo', 'Cocinero', 'Bartender', 'Catering', 'Ayudante de cocina'],
+    rubros: [
+      'Camarero / Mozo',
+      'Cocinero',
+      'Bartender',
+      'Catering',
+      'Ayudante de cocina',
+      'Bachero',
+    ],
   },
   {
     name: 'Profesionales',
@@ -89,17 +111,30 @@ function slugify(name: string) {
 
 // Rubros que requieren matrícula/título (certificación por rubro)
 const REQUIRES_CERTIFICATION = new Set<string>([
+  // Construcción
   'electricidad',
   'plomeria-gasista',
+  'desagote-y-banos-quimicos', // si realmente querés exigir habilitación
+
+  // Informática y electrónica
   'climatizacion',
   'servicio-tecnico-electronica',
   'servicio-tecnico-electrodomesticos',
   'servicio-tecnico-informatica',
+  'servicio-tecnico-audiovisual', // OJO con el nombre exacto (ver punto 1.1)
+
+  // Seguridad
   'camaras-y-alarmas',
   'cerrajeria',
   'personal-de-seguridad',
+  'cercos-electricos-perimetrales', // si querés exigir habilitación (tiene sentido)
+
+  // Servicios
   'acompanante-terapeutico',
+  'fletes', // licencia + seguro (criterio tuyo)
   'diseno-de-interiores',
+
+  // Profesionales
   'abogado',
   'contador',
   'escribano',

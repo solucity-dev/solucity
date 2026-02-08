@@ -62,6 +62,14 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
       icon: { set: 'mdi', name: 'toilet' }, // o 'truck-water' si preferís
     },
     { id: 'soldador', title: 'Soldador', icon: { set: 'mdi', name: 'torch' } },
+    {
+      id: 'porcelanato-liquido',
+      title: 'Porcelanato liquido',
+      icon: { set: 'mdi', name: 'trowel' }, // si no existe, usá 'floor-plan' o 'format-paint'
+    },
+    { id: 'vidrieria', title: 'Vidriería', icon: { set: 'mdi', name: 'glass-fragile' } },
+    { id: 'aberturas', title: 'Aberturas', icon: { set: 'mdi', name: 'door' } },
+    { id: 'impermeabilizacion', title: 'Impermeabilización', icon: { set: 'mdi', name: 'water' } },
   ],
 
   'informatica-electronica': [
@@ -83,6 +91,17 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
       title: 'Servicio técnico (informática)',
       icon: { set: 'mdi', name: 'desktop-classic' },
     },
+    { id: 'carteleria', title: 'Cartelería', icon: { set: 'mdi', name: 'sign-text' } },
+    {
+      id: 'reparacion-de-celulares',
+      title: 'Reparación de celulares',
+      icon: { set: 'mdi', name: 'cellphone' },
+    },
+    {
+      id: 'servicio-tecnico-audiovisual',
+      title: 'Servicio técnico (audiovisual)',
+      icon: { set: 'mdi', name: 'television' },
+    },
   ],
 
   seguridad: [
@@ -92,6 +111,11 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
       id: 'personal-de-seguridad',
       title: 'Personal de seguridad',
       icon: { set: 'mdi', name: 'shield-account-outline' },
+    },
+    {
+      id: 'cercos-electricos-perimetrales',
+      title: 'Cercos eléctricos / perimetrales',
+      icon: { set: 'mdi', name: 'electric-switch' },
     },
   ],
 
@@ -108,6 +132,13 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
       icon: { set: 'mdi', name: 'book-open-variant' },
     },
     { id: 'paseador-de-perros', title: 'Paseador de perros', icon: { set: 'mdi', name: 'dog' } },
+    { id: 'cuidado-de-mascotas', title: 'Cuidado de mascotas', icon: { set: 'mdi', name: 'paw' } },
+    {
+      id: 'organizacion-de-eventos',
+      title: 'Organización de eventos',
+      icon: { set: 'mdi', name: 'calendar-star' },
+    },
+    { id: 'fotografia-y-video', title: 'Fotografía y video', icon: { set: 'mdi', name: 'camera' } },
 
     { id: 'fletes', title: 'Fletes', icon: { set: 'mdi', name: 'truck-fast-outline' } },
     {
@@ -126,6 +157,11 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
       id: 'ayudante-de-cocina',
       title: 'Ayudante de cocina',
       icon: { set: 'mdi', name: 'silverware' },
+    },
+    {
+      id: 'bachero',
+      title: 'Bachero',
+      icon: { set: 'mdi', name: 'dishwasher' }, // si no existe, usá 'silverware-clean' o 'broom'
     },
   ],
 

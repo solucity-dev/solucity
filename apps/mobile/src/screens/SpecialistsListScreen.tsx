@@ -3,7 +3,7 @@ import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
@@ -95,6 +95,13 @@ export default function SpecialistsListScreen() {
   const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
 
   const dbCategorySlug = params.categorySlug;
+  // 🔒 Profesionales: siempre exigir "Habilitados"
+  const isProfessionalCategory =
+    dbCategorySlug === 'abogado' ||
+    dbCategorySlug === 'contador' ||
+    dbCategorySlug === 'escribano' ||
+    dbCategorySlug === 'arquitecto' ||
+    dbCategorySlug === 'ingeniero';
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -103,8 +110,16 @@ export default function SpecialistsListScreen() {
 
   // Filtros que impactan en backend
   const [onlyEnabled, setOnlyEnabled] = useState(false);
+  // ✅ En Profesionales: siempre true (fail-closed)
+  const effectiveOnlyEnabled = isProfessionalCategory ? true : onlyEnabled;
+  // ✅ Opcional seguro: si estoy en Profesionales, dejamos el estado también en true
+  // (no cambia el comportamiento real porque ya usamos effectiveOnlyEnabled)
+  useEffect(() => {
+    if (isProfessionalCategory && !onlyEnabled) setOnlyEnabled(true);
+  }, [isProfessionalCategory, onlyEnabled]);
+
   // ✅ ya NO usamos onlyAvailable: siempre filtramos disponibles
-  const [priceMax, setPriceMax] = useState<number | undefined>(undefined);
+  const [priceMax] = useState<number | undefined>(undefined);
 
   // Orden local
   const [sortBy, setSortBy] = useState<SortBy>('distance');
@@ -158,12 +173,12 @@ export default function SpecialistsListScreen() {
         latKey,
         lngKey,
         RADIUS_KM_DEFAULT,
-        onlyEnabled ? 'E1' : 'E0',
+        effectiveOnlyEnabled ? 'E1' : 'E0',
         'A1', // ✅ SIEMPRE disponibles
         priceMax ?? 'Px',
       ].join('|');
     },
-    [dbCategorySlug, onlyEnabled, priceMax],
+    [dbCategorySlug, effectiveOnlyEnabled, priceMax],
   );
 
   const fetchData = useCallback(
@@ -209,7 +224,7 @@ export default function SpecialistsListScreen() {
           radiusKm: RADIUS_KM_DEFAULT,
         };
 
-        if (onlyEnabled) paramsQ.enabled = true;
+        if (effectiveOnlyEnabled) paramsQ.enabled = true;
 
         // ✅ SIEMPRE filtrar por disponibilidad actual
         paramsQ.visible = true; // o el nombre que uses server-side
@@ -243,7 +258,7 @@ export default function SpecialistsListScreen() {
         setRefreshing(false);
       }
     },
-    [buildCacheKey, dbCategorySlug, getCoordsSmart, onlyEnabled, priceMax],
+    [buildCacheKey, dbCategorySlug, getCoordsSmart, effectiveOnlyEnabled, priceMax],
   );
 
   // ✅ Refetch cuando la app vuelve al frente (background -> active)
@@ -382,17 +397,23 @@ export default function SpecialistsListScreen() {
         <Pressable
           style={({ pressed }) => [
             styles.filterChip,
-            onlyEnabled && styles.filterChipOn,
-            pressed && { opacity: 0.9 },
+            effectiveOnlyEnabled && styles.filterChipOn,
+            pressed && !isProfessionalCategory && { opacity: 0.9 },
+            isProfessionalCategory && { opacity: 0.8 },
           ]}
-          onPress={() => setOnlyEnabled((v) => !v)}
+          onPress={() => {
+            if (isProfessionalCategory) return; // 🔒 bloqueado en profesionales
+            setOnlyEnabled((v) => !v);
+          }}
         >
           <MDI
-            name="badge-account-horizontal-outline"
+            name={isProfessionalCategory ? 'lock-outline' : 'badge-account-horizontal-outline'}
             size={16}
-            color={onlyEnabled ? '#06494F' : '#E9FEFF'}
+            color={effectiveOnlyEnabled ? '#06494F' : '#E9FEFF'}
           />
-          <Text style={[styles.filterText, onlyEnabled && styles.filterTextOn]}>Habilitados</Text>
+          <Text style={[styles.filterText, effectiveOnlyEnabled && styles.filterTextOn]}>
+            Habilitados
+          </Text>
         </Pressable>
 
         {/* ✅ “Disponibles” oculto: ahora siempre filtramos disponibles */}

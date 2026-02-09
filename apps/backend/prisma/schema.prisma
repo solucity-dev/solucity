@@ -131,11 +131,12 @@ model SpecialistProfile {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId String @unique
 
-  bio          String?
-  visitPrice   Int?
-  pricingLabel String?
-  currency     String?
-  availableNow Boolean @default(false)
+  bio               String?
+  specialtyHeadline String? @db.VarChar(60)
+  visitPrice        Int?
+  pricingLabel      String?
+  currency          String?
+  availableNow      Boolean @default(false)
 
   // Verificación y métricas
   kycStatus     VerificationStatus @default(UNVERIFIED)
@@ -389,10 +390,10 @@ model Subscription {
   currentPeriodEnd   DateTime
   trialEnd           DateTime?
 
-  provider           String?   // "MERCADOPAGO"
-  providerSubId      String?   // id de la suscripción en MP
-  lastPaymentStatus  String?   // approved | pending | rejected
-  lastPaymentId String? //
+  provider          String? // "MERCADOPAGO"
+  providerSubId     String? // id de la suscripción en MP
+  lastPaymentStatus String? // approved | pending | rejected
+  lastPaymentId     String? //
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt

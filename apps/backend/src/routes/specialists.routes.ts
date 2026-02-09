@@ -481,10 +481,11 @@ router.get('/search', async (req, res) => {
         id: true,
         userId: true,
         kycStatus: true,
+        specialtyHeadline: true,
         avatarUrl: true,
         availability: true,
         availableNow: true,
-        pricingLabel: true, // ✅ NUEVO
+        pricingLabel: true,
         backgroundCheck: { select: { status: true } },
         user: { select: { status: true } },
       },
@@ -629,6 +630,7 @@ router.get('/search', async (req, res) => {
           visible,
           availableNow, // pill (incluye horario)
           pricingLabel: prof?.pricingLabel ?? null,
+          specialtyHeadline: (prof as any)?.specialtyHeadline ?? null,
         };
       }),
     );
@@ -1112,6 +1114,7 @@ const AvailabilitySchema = z.object({
 
 const PatchMeSchema = z.object({
   bio: z.string().max(1000).optional(),
+  specialtyHeadline: z.string().max(60).optional().nullable(),
   available: z.boolean().optional(),
   radiusKm: z.coerce.number().int().min(0).max(30).optional(),
   visitPrice: z.coerce.number().int().min(0).max(10_000_000).optional(),
@@ -1219,6 +1222,7 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
       profile: {
         name: `${profile.user?.name ?? ''} ${profile.user?.surname ?? ''}`.trim(),
         bio: profile.bio ?? '',
+        specialtyHeadline: (profile as any).specialtyHeadline ?? null,
         available,
         availableNow,
         radiusKm: profile.radiusKm ?? 10,
@@ -1340,9 +1344,10 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
       create: {
         userId,
         bio: data.bio ?? '',
+        specialtyHeadline: data.specialtyHeadline ?? null,
         radiusKm: data.radiusKm ?? null,
         visitPrice: data.visitPrice ?? null,
-        pricingLabel: data.pricingLabel ?? null, // ✅ NUEVO
+        pricingLabel: data.pricingLabel ?? null,
         availability: nextAvail as any,
         kycStatus: 'PENDING',
         avatarUrl: data.avatarUrl ?? null,
@@ -1352,9 +1357,13 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
       },
       update: {
         ...(data.bio !== undefined ? { bio: data.bio } : {}),
+        ...(data.specialtyHeadline !== undefined
+          ? { specialtyHeadline: data.specialtyHeadline }
+          : {}),
+
         ...(data.radiusKm !== undefined ? { radiusKm: data.radiusKm } : {}),
         ...(data.visitPrice !== undefined ? { visitPrice: data.visitPrice } : {}),
-        ...(data.pricingLabel !== undefined ? { pricingLabel: data.pricingLabel } : {}), // ✅ NUEVO
+        ...(data.pricingLabel !== undefined ? { pricingLabel: data.pricingLabel } : {}),
         availability: nextAvail as any,
         ...(data.avatarUrl !== undefined ? { avatarUrl: data.avatarUrl } : {}),
         ...(data.centerLat !== undefined ? { centerLat: data.centerLat } : {}),

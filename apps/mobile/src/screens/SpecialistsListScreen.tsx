@@ -47,6 +47,7 @@ type SpecialistRow = {
   verified: boolean;
   distanceKm: number;
   name?: string;
+  specialtyHeadline?: string | null;
   avatarUrl?: string | null;
   enabled?: boolean;
   kycStatus?: 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'REJECTED';
@@ -473,6 +474,11 @@ export default function SpecialistsListScreen() {
               style={[styles.statusDotInline, { backgroundColor: online ? '#22c55e' : '#ef4444' }]}
             />
           </View>
+          {s.specialtyHeadline ? (
+            <Text style={styles.headline} numberOfLines={2}>
+              {s.specialtyHeadline}
+            </Text>
+          ) : null}
 
           <View style={styles.row}>
             <Ionicons name="star" size={14} color="#ffd166" />
@@ -662,6 +668,11 @@ const styles = StyleSheet.create({
 
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   name: { color: '#E9FEFF', fontWeight: '900', fontSize: 18, flexShrink: 1 },
+  headline: {
+    color: 'rgba(233,254,255,0.92)',
+    fontWeight: '800',
+    marginTop: 2,
+  },
 
   statusDotInline: {
     width: 10,

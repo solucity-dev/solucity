@@ -240,7 +240,7 @@ async function syncSearchIndexForUser(userId: string) {
 
   const centerLat = spec.centerLat ?? 0;
   const centerLng = spec.centerLng ?? 0;
-  const radiusKm = spec.radiusKm ?? 20;
+  const radiusKm = spec.radiusKm ?? 30;
 
   // availableNow solo true si está VERIFIED
   const userOk = spec.user?.status !== 'BLOCKED';
@@ -1160,7 +1160,7 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
           bio: '',
           available: false,
           availableNow: false,
-          radiusKm: 10,
+          radiusKm: 30,
           visitPrice: 0,
           pricingLabel: null,
           availability: { days: [1, 2, 3, 4, 5], start: '09:00', end: '18:00' },
@@ -1225,7 +1225,7 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
         specialtyHeadline: (profile as any).specialtyHeadline ?? null,
         available,
         availableNow,
-        radiusKm: profile.radiusKm ?? 10,
+        radiusKm: profile.radiusKm ?? 30,
         visitPrice: profile.visitPrice ?? 0,
         pricingLabel: (profile as any).pricingLabel ?? null, // ✅ NUEVO
         availability: avail ?? ({ days: [1, 2, 3, 4, 5], start: '09:00', end: '18:00' } as any),

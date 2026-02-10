@@ -46,6 +46,9 @@ type SpecProfile = {
   radiusKm: number | null;
   visitPrice: number | null;
 
+  // ✅ NUEVO: especificación corta del rubro (headline)
+  specialtyHeadline?: string | null;
+
   pricingLabel?: string | null;
 
   availability: { days: number[]; start: string; end: string; enabled?: boolean };
@@ -226,6 +229,7 @@ export default function SpecialistHome() {
   const availabilitySnapRef = useRef<string>(''); // guardamos JSON string
   const priceRadiusSnapRef = useRef<string>(''); // guardamos JSON string
   const specialtiesSnapRef = useRef<string>(''); // guardamos JSON string
+  const headlineSnapRef = useRef<string>(''); // ✅ snapshot especificación rubro
 
   const [profile, setProfile] = useState<SpecProfile | null>(null);
 
@@ -251,6 +255,8 @@ export default function SpecialistHome() {
 
   const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>([]);
   const categoriesLoadedOnceRef = useRef(false);
+  // ✅ evita doble recarga (mount + focus inmediato)
+  const didInitialLoadRef = useRef(false);
 
   // ✅ Si ya cargó el catálogo real, limpiamos specialties inválidos que pudieron venir del fallback
   useEffect(() => {
@@ -292,6 +298,7 @@ export default function SpecialistHome() {
 
   // form fields
   const [bio, setBio] = useState('');
+  const [headline, setHeadline] = useState('');
   const [availableNow, setAvailableNow] = useState(true); // switch (intención)
   const [start, setStart] = useState('09:00');
   const [end, setEnd] = useState('18:00');
@@ -319,7 +326,7 @@ export default function SpecialistHome() {
 
   // tarifa y radio
   const [price, setPrice] = useState<string>('0');
-  const [radius, setRadius] = useState<string>('10');
+  const [radius, setRadius] = useState<string>('30');
 
   // etiqueta precio
   const [pricingLabel, setPricingLabel] = useState<string>('');
@@ -375,8 +382,6 @@ export default function SpecialistHome() {
         .filter((x: any) => !!x?.slug);
 
       if (__DEV__) {
-        console.log('[/categories] raw keys:', Object.keys(res?.data ?? {}));
-        console.log('[/categories] raw sample:', res?.data);
         console.log('[/categories] flat length:', flat.length);
         console.log('[/categories] flat sample:', flat.slice(0, 5));
       }
@@ -518,6 +523,7 @@ export default function SpecialistHome() {
 
         setProfile(p);
         setBio(p.bio ?? '');
+        setHeadline((p.specialtyHeadline ?? '').trim());
 
         // si todavía no viene (backend viejo), fallback a p.available
         setAvailableNow(
@@ -537,12 +543,13 @@ export default function SpecialistHome() {
         setAvatar(p.avatarUrl ?? null);
 
         setPrice(String(p.visitPrice ?? 0));
-        setRadius(String(p.radiusKm ?? 10));
+        setRadius(String(p.radiusKm ?? 30));
 
         setPricingLabel((p.pricingLabel ?? '').trim());
         // ✅ actualizar snapshots (baseline) SOLO cuando viene del backend
         const bioBase = p.bio ?? '';
         bioSnapRef.current = bioBase;
+        headlineSnapRef.current = (p.specialtyHeadline ?? '').trim();
 
         const availBase = {
           days: p.availability?.days ?? [1, 2, 3, 4, 5],
@@ -553,7 +560,7 @@ export default function SpecialistHome() {
 
         const priceBase = {
           visitPrice: p.visitPrice ?? 0,
-          radiusKm: p.radiusKm ?? 10,
+          radiusKm: p.radiusKm ?? 30,
           pricingLabel: (p.pricingLabel ?? '').trim(),
         };
         priceRadiusSnapRef.current = JSON.stringify(priceBase);
@@ -637,6 +644,9 @@ export default function SpecialistHome() {
   useEffect(() => {
     if (!token) return;
 
+    // ✅ marcamos que ya hicimos el primer load (para que Focus no duplique)
+    didInitialLoadRef.current = true;
+
     loadCategories();
     reloadProfileAndSubscription({ silent: false });
 
@@ -653,6 +663,13 @@ export default function SpecialistHome() {
   useFocusEffect(
     useCallback(() => {
       if (!token) return;
+
+      // ✅ si acaba de montar y ya hizo el load inicial, evitamos doble fetch
+      if (didInitialLoadRef.current) {
+        didInitialLoadRef.current = false;
+        return;
+      }
+
       reloadProfileAndSubscription({ silent: true });
       loadCategories();
     }, [token, reloadProfileAndSubscription, loadCategories]),
@@ -678,6 +695,20 @@ export default function SpecialistHome() {
     const u = absoluteUrl(avatar);
     return u ? { uri: u } : require('../assets/avatar-placeholder.png');
   }, [avatar]);
+
+  // ✅ evita recalcular reduce en cada render
+  const computedRating = useMemo(() => {
+    const avg =
+      profile?.ratingAvg != null && !Number.isNaN(profile.ratingAvg)
+        ? profile.ratingAvg
+        : reviews.length
+          ? reviews.reduce((acc, r) => acc + r.score, 0) / reviews.length
+          : 0;
+
+    const count = profile?.ratingCount != null ? profile.ratingCount : reviews.length;
+
+    return { avg, count };
+  }, [profile?.ratingAvg, profile?.ratingCount, reviews]);
 
   const statsDone = profile?.stats?.done ?? 0;
   const statsCanceled = profile?.stats?.canceled ?? 0;
@@ -794,6 +825,27 @@ export default function SpecialistHome() {
     }
   }
 
+  async function saveHeadline() {
+    try {
+      setSaving(true);
+
+      const value = headline.trim();
+      // backend: max 60
+      const safe = value.length ? value.slice(0, 60) : null;
+
+      await api.patch('/specialists/me', { specialtyHeadline: safe });
+
+      setProfile((prev) => (prev ? { ...prev, specialtyHeadline: safe } : prev));
+      headlineSnapRef.current = safe ?? '';
+
+      Alert.alert('Listo', 'Especificación actualizada.');
+    } catch {
+      Alert.alert('Ups', 'No se pudo guardar la especificación.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   // saves
   async function saveBio() {
     try {
@@ -877,6 +929,17 @@ export default function SpecialistHome() {
         availability: { days, start, end },
       });
 
+      availabilitySnapRef.current = JSON.stringify({ days, start, end });
+
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              availability: { ...(prev.availability ?? {}), days, start, end },
+            }
+          : prev,
+      );
+
       Alert.alert('Listo', 'Disponibilidad actualizada.');
     } catch {
       Alert.alert('Ups', 'No se pudo guardar la disponibilidad.');
@@ -898,6 +961,8 @@ export default function SpecialistHome() {
 
       await api.patch('/specialists/specialties', { specialties: cleaned });
 
+      specialtiesSnapRef.current = JSON.stringify(Array.from(new Set(cleaned)).sort());
+
       Alert.alert('Listo', 'Rubros actualizados.');
     } catch (e: any) {
       const msg = e?.response?.data?.error ?? 'No se pudieron actualizar los rubros.';
@@ -912,7 +977,10 @@ export default function SpecialistHome() {
       setSaving(true);
 
       const visitPrice = Math.max(0, Math.floor(Number(price) || 0));
-      const radiusKm = Math.max(0, Number(radius) || 0);
+
+      // ⛔ clamp radio: 0 → 30 km
+      const radiusNum = Math.max(0, Number(radius) || 0);
+      const radiusKm = Math.min(30, radiusNum);
 
       const label = pricingLabel.trim();
       const pricingLabelSafe = label.length ? label.slice(0, 40) : null;
@@ -929,6 +997,14 @@ export default function SpecialistHome() {
             }
           : prev,
       );
+
+      setRadius(String(radiusKm));
+
+      priceRadiusSnapRef.current = JSON.stringify({
+        visitPrice,
+        radiusKm,
+        pricingLabel: (pricingLabelSafe ?? '').trim(),
+      });
 
       Alert.alert('Listo', 'Tarifa, etiqueta y radio actualizados.');
     } catch {
@@ -1100,6 +1176,10 @@ export default function SpecialistHome() {
     return bio !== bioSnapRef.current;
   }, [bio]);
 
+  const headlineDirty = useMemo(() => {
+    return headline.trim() !== headlineSnapRef.current;
+  }, [headline]);
+
   const availabilityDirty = useMemo(() => {
     const current = JSON.stringify({ days, start, end });
     return current !== availabilitySnapRef.current;
@@ -1186,14 +1266,8 @@ export default function SpecialistHome() {
               {/* ⭐ Rating */}
               <View style={styles.starsRow}>
                 {(() => {
-                  const avg =
-                    profile?.ratingAvg != null && !Number.isNaN(profile.ratingAvg)
-                      ? profile.ratingAvg
-                      : reviews.length
-                        ? reviews.reduce((acc, r) => acc + r.score, 0) / reviews.length
-                        : 0;
-
-                  const count = profile?.ratingCount != null ? profile.ratingCount : reviews.length;
+                  const avg = computedRating.avg;
+                  const count = computedRating.count;
 
                   return (
                     <>
@@ -1433,6 +1507,25 @@ export default function SpecialistHome() {
           {/* Tu perfil */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Tu perfil</Text>
+            <Text style={styles.subTitle}>Especificación del rubro</Text>
+            <TextInput
+              value={headline}
+              onChangeText={setHeadline}
+              placeholder="Ej: Instalación y reparación de aires"
+              placeholderTextColor="#9ec9cd"
+              style={styles.input}
+              maxLength={60}
+            />
+            <Text style={styles.muted}>Se muestra en el listado (máx. 60 caracteres).</Text>
+
+            <Pressable
+              onPress={saveHeadline}
+              disabled={!headlineDirty || saving}
+              style={[styles.btn, (!headlineDirty || saving) && styles.btnDisabled]}
+            >
+              <Text style={styles.btnT}>Guardar especificación</Text>
+            </Pressable>
+
             <Text style={styles.subTitle}>Biografía</Text>
             <TextInput
               value={bio}
@@ -1507,7 +1600,11 @@ export default function SpecialistHome() {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Cobertura y tarifa</Text>
 
-            <Text style={styles.subTitle}>Precio (general)</Text>
+            <Text style={styles.subTitle}>Precio base</Text>
+            <Text style={styles.muted}>
+              Es el valor que verán los clientes como referencia para tu servicio.
+            </Text>
+
             <TextInput
               value={price}
               onChangeText={setPrice}
@@ -1527,19 +1624,33 @@ export default function SpecialistHome() {
               maxLength={40}
             />
             <Text style={styles.muted}>
-              Esto se muestra en el listado como “Etiqueta: $precio”. (Máx. 40 caracteres)
+              Escribí a qué corresponde el precio. Ejemplos: “Por visita”, “Por hora”, “Desde”.
             </Text>
+            <View
+              style={{
+                marginTop: 8,
+                padding: 10,
+                borderRadius: 12,
+                backgroundColor: 'rgba(255,255,255,0.08)',
+              }}
+            >
+              <Text style={{ color: '#E9FEFF', fontWeight: '800' }}>
+                Vista previa: {pricingLabel.trim() || 'Etiqueta'} · ${price || '0'}
+              </Text>
+            </View>
 
             <Text style={[styles.subTitle, { marginTop: 10 }]}>Radio de trabajo (km)</Text>
             <TextInput
               value={radius}
               onChangeText={setRadius}
               keyboardType="numeric"
-              placeholder="10"
+              placeholder="30"
               placeholderTextColor="#9ec9cd"
               style={styles.input}
             />
-            <Text style={styles.muted}>Distancia máxima desde tu zona de cobertura.</Text>
+            <Text style={styles.muted}>
+              Distancia máxima desde tu ubicación actual. El radio máximo permitido es de 30 km.
+            </Text>
 
             <Pressable
               onPress={savePriceAndRadius}

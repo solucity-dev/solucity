@@ -3,7 +3,7 @@ import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -102,6 +102,9 @@ export default function ProfileScreen() {
   const auth = useAuth() as any;
   const signOut = auth?.signOut ?? auth?.logout ?? auth?.signOutAsync;
 
+  const mountedRef = useRef(true);
+  const requestIdRef = useRef(0);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -147,90 +150,108 @@ export default function ProfileScreen() {
   const isSpecialist = role === 'SPECIALIST';
   const isCustomer = role === 'CUSTOMER';
 
-  const loadProfile = async () => {
+  // ✅ Carga rápida: /auth/me bloqueante, extras background
+  const loadProfile = useCallback(async () => {
+    const myReqId = ++requestIdRef.current;
+
     try {
       setLoading(true);
       setError(null);
 
+      // 1) PERFIL BASE (rápido) ✅
       const res = await api.get<MeResponse>('/auth/me', {
         headers: { 'Cache-Control': 'no-cache' },
       });
 
+      if (!mountedRef.current || requestIdRef.current !== myReqId) return;
+
       const u = res.data.user;
       const r = u.role ?? null;
-      setRole(r);
 
+      setRole(r);
       setName(u.name ?? '');
       setSurname(u.surname ?? '');
       setEmail(u.email);
       setPhone(u.phone ?? '');
 
-      // reset
+      // reset extras
       setKycStatus(null);
       setBackgroundCheck(null);
+      setSubscription(null);
 
-      // Avatar preload por ROLE real
-      try {
-        if (r === 'SPECIALIST') {
-          const rr = await api.get<any>('/specialists/me', {
-            headers: { 'Cache-Control': 'no-cache' },
-          });
+      // ✅ liberamos UI apenas tenemos el perfil base
+      setLoading(false);
+
+      // 2) EXTRAS (background) ✅
+      if (r === 'SPECIALIST') {
+        setSubscriptionLoading(true);
+
+        const [specRes, subRes] = await Promise.allSettled([
+          api.get<any>('/specialists/me', { headers: { 'Cache-Control': 'no-cache' } }),
+          getMySubscription(),
+        ]);
+
+        if (!mountedRef.current || requestIdRef.current !== myReqId) return;
+
+        if (specRes.status === 'fulfilled') {
+          const rr = specRes.value;
           const p = rr.data?.profile ?? rr.data;
           setAvatarUrl(p?.avatarUrl ?? null);
-
-          // ✅ leemos KYC (si existe)
           setKycStatus((p?.kycStatus ?? null) as KycStatus | null);
           setBackgroundCheck((p?.backgroundCheck ?? null) as BackgroundCheckInfo);
-        } else if (r === 'CUSTOMER') {
-          const rr = await api.get<any>('/customers/me', {
-            headers: { 'Cache-Control': 'no-cache' },
-          });
-          const cust = rr.data?.profile ?? rr.data?.customer ?? rr.data;
-          const maybeAvatar =
-            cust?.avatarUrl ??
-            cust?.avatar_url ??
-            cust?.avatar ??
-            cust?.photoUrl ??
-            rr.data?.avatarUrl ??
-            rr.data?.profile?.avatarUrl ??
-            rr.data?.customer?.avatarUrl ??
-            null;
-          setAvatarUrl(maybeAvatar);
         } else {
+          if (__DEV__) console.log('[Profile] /specialists/me error', specRes.reason);
           setAvatarUrl(null);
         }
-      } catch (err) {
-        if (__DEV__) console.log('[Profile] avatar preload error', err);
+
+        if (subRes.status === 'fulfilled') {
+          setSubscription(subRes.value as SubscriptionInfo);
+        } else {
+          if (__DEV__) console.log('[Profile] subscription error', subRes.reason);
+          setSubscription(null);
+        }
+
+        setSubscriptionLoading(false);
+      } else if (r === 'CUSTOMER') {
+        const custRes = await api.get<any>('/customers/me', {
+          headers: { 'Cache-Control': 'no-cache' },
+        });
+
+        if (!mountedRef.current || requestIdRef.current !== myReqId) return;
+
+        const rr = custRes;
+        const cust = rr.data?.profile ?? rr.data?.customer ?? rr.data;
+        const maybeAvatar =
+          cust?.avatarUrl ??
+          cust?.avatar_url ??
+          cust?.avatar ??
+          cust?.photoUrl ??
+          rr.data?.avatarUrl ??
+          rr.data?.profile?.avatarUrl ??
+          rr.data?.customer?.avatarUrl ??
+          null;
+
+        setAvatarUrl(maybeAvatar);
+      } else {
         setAvatarUrl(null);
       }
-
-      // Suscripción (solo specialist)
-      if (r === 'SPECIALIST') {
-        try {
-          setSubscriptionLoading(true);
-          const sub = await getMySubscription();
-          setSubscription(sub);
-        } catch (e) {
-          if (__DEV__) console.log('[Profile] error cargando suscripción', e);
-          setSubscription(null);
-        } finally {
-          setSubscriptionLoading(false);
-        }
-      } else {
-        setSubscription(null);
-      }
     } catch (e: any) {
-      if (__DEV__) console.log('[Profile] /auth/me error', e?.response?.data ?? e);
+      if (__DEV__) console.log('[Profile] loadProfile error', e?.response?.data ?? e);
+
+      if (!mountedRef.current) return;
+
       setError(e?.message ?? 'No se pudo cargar el perfil');
-    } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     loadProfile();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [loadProfile]);
 
   const onSave = async () => {
     try {
@@ -541,7 +562,7 @@ export default function ProfileScreen() {
             <View style={styles.card}>
               <View style={styles.sectionHeader}>
                 <MDI name="account-check-outline" size={18} color="#E9FEFF" />
-                <Text style={styles.sectionTitle}>Verificación (KYC)</Text>
+                <Text style={styles.sectionTitle}>Verificación de Identidad</Text>
               </View>
 
               <ProfileRow

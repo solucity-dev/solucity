@@ -185,6 +185,32 @@ const HIDDEN_SPECIALTIES = new Set<string>([
   'plomeria', // legacy: existe en DB pero usamos "plomeria-gasista"
 ]);
 
+function isWithinAvailability(av?: { days?: number[]; start?: string; end?: string }) {
+  if (!av) return true;
+
+  const days = Array.isArray(av.days) ? av.days : [1, 2, 3, 4, 5];
+  const start = av.start || '09:00';
+  const end = av.end || '18:00';
+
+  const now = new Date();
+  const day = now.getDay(); // 0..6 (D..S)
+  if (!days.includes(day)) return false;
+
+  const [sh, sm] = start.split(':').map((n) => Number(n));
+  const [eh, em] = end.split(':').map((n) => Number(n));
+
+  const startMin = (sh || 0) * 60 + (sm || 0);
+  const endMin = (eh || 0) * 60 + (em || 0);
+
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  // rango normal
+  if (endMin >= startMin) return nowMin >= startMin && nowMin <= endMin;
+
+  // rango que cruza medianoche (ej 22:00–02:00)
+  return nowMin >= startMin || nowMin <= endMin;
+}
+
 const DAY_LABELS = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
 
 function Section({
@@ -242,7 +268,14 @@ export default function SpecialistHome() {
   // certificaciones
   const [certs, setCerts] = useState<CertItem[]>([]);
   const [certSavingBySlug, setCertSavingBySlug] = useState<Record<string, boolean>>({});
-  const [openCerts, setOpenCerts] = useState(true);
+  const [openCerts, setOpenCerts] = useState(false);
+  const [openPricing, setOpenPricing] = useState(false);
+  const [openAvailability, setOpenAvailability] = useState(false);
+  const [openPerfil, setOpenPerfil] = useState(false);
+  const [openRubros, setOpenRubros] = useState(false);
+  // ✅ Lazy-load certs (cargar solo al abrir el bloque la 1ra vez)
+  const certsLoadedOnceRef = useRef(false);
+  const [certsLoading, setCertsLoading] = useState(false);
 
   // catálogo rubros
   type CategoryOption = {
@@ -404,6 +437,25 @@ export default function SpecialistHome() {
     },
     [categoryOptions],
   );
+
+  // ✅ Lazy-load certs (cargar solo al abrir el bloque la 1ra vez)
+  const loadCertsOnce = useCallback(async () => {
+    if (certsLoadedOnceRef.current) return;
+
+    try {
+      certsLoadedOnceRef.current = true;
+      setCertsLoading(true);
+
+      const items = await listCertifications();
+      setCerts(items);
+    } catch (e) {
+      // si falla, permitimos reintento al volver a abrir
+      certsLoadedOnceRef.current = false;
+      if (__DEV__) console.log('[SpecialistHome] loadCertsOnce error', e);
+    } finally {
+      setCertsLoading(false);
+    }
+  }, []);
 
   function normalizeSpecialties(input: any): string[] {
     if (!input) return [];
@@ -588,11 +640,7 @@ export default function SpecialistHome() {
         if (!silent) setLoading(false);
       }
 
-      // 2) CERTS (background)
-      try {
-        const items = await listCertifications();
-        setCerts(items);
-      } catch {}
+      // 2) CERTS (lazy) -> ahora se cargan solo cuando abrís el bloque
 
       // 3) SUSCRIPCIÓN (background)
       try {
@@ -737,8 +785,17 @@ export default function SpecialistHome() {
   const canToggleAvailability =
     kycStatus === 'VERIFIED' && bgStatus === 'APPROVED' && subscriptionOk;
 
-  // ✅ La pill debe reflejar el switch (si está habilitado para togglear)
+  // 1) "visible" = aparece en búsquedas (SIN horario)
   const visibleEffective = canToggleAvailability && availableNow;
+
+  // 2) "availableNow" = visible + dentro del horario (CON horario)
+  const scheduleOk = isWithinAvailability({
+    days,
+    start,
+    end,
+  });
+
+  const availableNowEffective = visibleEffective && scheduleOk;
 
   // permisos para cámara / galería
   async function requestCamera() {
@@ -1040,16 +1097,18 @@ export default function SpecialistHome() {
 
   function renderSubscriptionMainText(sub: SubscriptionInfo) {
     if (sub.status === 'TRIALING') {
+      // ✅ Evitamos repetir el “Te quedan X días…” (eso ya lo mostramos abajo)
       if (typeof sub.daysRemaining === 'number') {
         if (sub.daysRemaining <= 0) return 'Tu prueba termina hoy.';
-        if (sub.daysRemaining === 1) return 'Te queda 1 día de prueba gratuita como especialista.';
-        return `Te quedan ${sub.daysRemaining} días de prueba gratuita como especialista.`;
+        return 'Tenés una prueba gratuita activa como especialista.';
       }
       return 'Tenés una prueba gratuita activa como especialista.';
     }
+
     if (sub.status === 'ACTIVE') {
       return 'Tu suscripción está activa. Seguís apareciendo en las búsquedas y podés recibir nuevos trabajos.';
     }
+
     if (sub.status === 'PAST_DUE') return 'Tu suscripción tiene un pago pendiente.';
     return 'Tu suscripción está inactiva.';
   }
@@ -1247,74 +1306,103 @@ export default function SpecialistHome() {
         </View>
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Resumen + avatar */}
-          <View style={styles.cardRow}>
-            <View style={styles.avatarBlock}>
-              <View style={styles.avatarWrap}>
-                <Image source={avatarSrc} style={styles.avatar} />
-              </View>
-              <Pressable style={styles.camFab} onPress={() => setPickerOpen(true)}>
-                <Ionicons name="camera" size={18} color="#0A5B63" />
-              </Pressable>
-            </View>
+          {/* Vista previa (como te ve el cliente en la lista) */}
+          <View style={styles.card}>
+            <Text style={[styles.muted, { marginBottom: 10, fontWeight: '800' }]}>
+              Vista previa — así te ven los clientes
+            </Text>
 
-            <View style={{ flex: 1 }}>
-              <Text style={styles.name} numberOfLines={1}>
-                {profile?.name || 'Especialista'}
-              </Text>
+            <View style={{ flexDirection: 'row', gap: 14 }}>
+              {/* Avatar */}
+              <View style={{ alignItems: 'center' }}>
+                <View style={styles.avatarWrap}>
+                  <Image source={avatarSrc} style={styles.avatar} />
+                </View>
 
-              {/* ⭐ Rating */}
-              <View style={styles.starsRow}>
-                {(() => {
-                  const avg = computedRating.avg;
-                  const count = computedRating.count;
-
-                  return (
-                    <>
-                      {[1, 2, 3, 4, 5].map((i) => (
-                        <Ionicons
-                          key={i}
-                          name="star"
-                          size={16}
-                          color={i <= Math.round(avg) ? '#FFD166' : '#4C7E84'}
-                        />
-                      ))}
-                      <Text style={styles.muted}> — ({count || 0})</Text>
-                    </>
-                  );
-                })()}
+                <Pressable style={styles.camFab} onPress={() => setPickerOpen(true)}>
+                  <Ionicons name="camera" size={18} color="#0A5B63" />
+                </Pressable>
               </View>
 
-              {profile?.kycStatus ? (
-                <Pressable
-                  onPress={() => (navigation as any).navigate('KycStatus')}
-                  style={{
-                    marginTop: 10,
-                    padding: 12,
-                    borderRadius: 16,
-                    backgroundColor: 'rgba(255,255,255,0.10)',
-                    borderWidth: 1,
-                    borderColor: 'rgba(233,254,255,0.18)',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-                    <Ionicons name="shield-checkmark-outline" size={18} color="#E9FEFF" />
-                    <Text style={{ color: '#E9FEFF', fontWeight: '800', flex: 1 }}>
-                      {profile.kycStatus === 'VERIFIED'
-                        ? 'Verificación de Identidad ✅'
-                        : profile.kycStatus === 'PENDING'
-                          ? 'Identidad en revisión'
-                          : profile.kycStatus === 'REJECTED'
-                            ? 'Identidad rechazada — reenviar'
-                            : 'Identidad pendiente — completar'}
+              {/* Info */}
+              <View style={{ flex: 1 }}>
+                {/* Nombre + dot disponibilidad */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {profile?.name || 'Especialista'}
+                  </Text>
+
+                  <View
+                    style={[
+                      styles.statusDotInline,
+                      { backgroundColor: visibleEffective ? '#22c55e' : '#ef4444' },
+                    ]}
+                  />
+                </View>
+
+                {/* Headline (lo que ve el cliente abajo del nombre) */}
+                {profile?.specialtyHeadline || headline.trim() ? (
+                  <Text style={styles.previewHeadline} numberOfLines={2}>
+                    {(profile?.specialtyHeadline ?? headline).trim()}
+                  </Text>
+                ) : null}
+
+                {/* Rating */}
+                <View style={styles.starsRow}>
+                  {(() => {
+                    const avg = computedRating.avg;
+                    const count = computedRating.count;
+
+                    return (
+                      <>
+                        {[1, 2, 3, 4, 5].map((i) => (
+                          <Ionicons
+                            key={i}
+                            name="star"
+                            size={16}
+                            color={i <= Math.round(avg) ? '#FFD166' : '#4C7E84'}
+                          />
+                        ))}
+                        <Text style={styles.muted}>
+                          {' '}
+                          — {avg ? avg.toFixed(1) : '0.0'} ({count || 0})
+                        </Text>
+                      </>
+                    );
+                  })()}
+                </View>
+
+                {/* Pills (similares a la lista del cliente) */}
+                <View style={styles.previewPillsRow}>
+                  <View
+                    style={[
+                      styles.previewPillSolid,
+                      visibleEffective ? styles.previewPillGood : styles.previewPillBad,
+                    ]}
+                  >
+                    <Ionicons name="time-outline" size={14} color="#E9FEFF" />
+                    <Text style={styles.previewPillSolidText}>
+                      {availableNowEffective ? 'Disponible' : 'No disponible'}
                     </Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color="#E9FEFF" />
-                </Pressable>
-              ) : null}
+
+                  {Number(price) > 0 ? (
+                    <View style={styles.previewPillSoft}>
+                      <Ionicons name="cash-outline" size={14} color="#E9FEFF" />
+                      <Text style={styles.previewPillSoftText}>
+                        {pricingLabel?.trim() || 'Tarifa'}: ${Number(price).toLocaleString('es-AR')}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {Number(radius) > 0 ? (
+                    <View style={styles.previewPillSoft}>
+                      <Ionicons name="navigate-outline" size={14} color="#E9FEFF" />
+                      <Text style={styles.previewPillSoftText}>Radio: {radius} km</Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
             </View>
           </View>
 
@@ -1402,7 +1490,7 @@ export default function SpecialistHome() {
               <View style={[styles.badge, visibleEffective ? styles.badgeOn : styles.badgeOff]}>
                 <View style={[styles.dot, visibleEffective ? styles.dotOn : styles.dotOff]} />
                 <Text style={[styles.badgeT, { color: visibleEffective ? '#063A40' : '#6F8C90' }]}>
-                  {visibleEffective ? 'Disponible' : 'No disponible'}
+                  {visibleEffective ? 'Visible' : 'No visible'}
                 </Text>
               </View>
             </View>
@@ -1438,6 +1526,35 @@ export default function SpecialistHome() {
                 <Text style={[styles.btnT, { color: '#FFE29B' }]}>Activar suscripción</Text>
               </Pressable>
             ) : null}
+            <Pressable
+              onPress={() => (navigation as any).navigate('KycStatus')}
+              style={{
+                marginTop: 10,
+                padding: 12,
+                borderRadius: 14,
+                backgroundColor: 'rgba(255,255,255,0.10)',
+                borderWidth: 1,
+                borderColor: 'rgba(233,254,255,0.18)',
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                <Ionicons name="shield-checkmark-outline" size={18} color="#E9FEFF" />
+                <Text style={{ color: '#E9FEFF', fontWeight: '800', flex: 1 }}>
+                  Verificación de identidad:{' '}
+                  {profile?.kycStatus === 'VERIFIED'
+                    ? 'Aprobada ✅'
+                    : profile?.kycStatus === 'PENDING'
+                      ? 'En revisión'
+                      : profile?.kycStatus === 'REJECTED'
+                        ? 'Rechazada — reenviar'
+                        : 'Pendiente — completar'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#E9FEFF" />
+            </Pressable>
 
             <View style={{ marginTop: 10 }}>
               <Pressable
@@ -1504,9 +1621,8 @@ export default function SpecialistHome() {
             </View>
           </View>
 
-          {/* Tu perfil */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Tu perfil</Text>
+          {/* Tu perfil (desplegable) */}
+          <Section title="Tu perfil" open={openPerfil} onToggle={() => setOpenPerfil((v) => !v)}>
             <Text style={styles.subTitle}>Especificación del rubro</Text>
             <TextInput
               value={headline}
@@ -1535,6 +1651,7 @@ export default function SpecialistHome() {
               multiline
               style={[styles.input, { minHeight: 110 }]}
             />
+
             <Pressable
               onPress={saveBio}
               disabled={!bioDirty || saving}
@@ -1542,12 +1659,14 @@ export default function SpecialistHome() {
             >
               <Text style={styles.btnT}>Guardar biografía</Text>
             </Pressable>
-          </View>
+          </Section>
 
-          {/* Disponibilidad */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Disponibilidad</Text>
-
+          {/* Disponibilidad (desplegable) */}
+          <Section
+            title="Disponibilidad"
+            open={openAvailability}
+            onToggle={() => setOpenAvailability((v) => !v)}
+          >
             <Text style={styles.subTitle}>Días</Text>
             <View style={styles.daysRow}>
               {DAY_LABELS.map((d, idx) => {
@@ -1594,12 +1713,14 @@ export default function SpecialistHome() {
             >
               <Text style={styles.btnT}>Guardar disponibilidad</Text>
             </Pressable>
-          </View>
+          </Section>
 
-          {/* Cobertura y tarifa */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Cobertura y tarifa</Text>
-
+          {/* Cobertura y tarifa (desplegable) */}
+          <Section
+            title="Cobertura y tarifa"
+            open={openPricing}
+            onToggle={() => setOpenPricing((v) => !v)}
+          >
             <Text style={styles.subTitle}>Precio base</Text>
             <Text style={styles.muted}>
               Es el valor que verán los clientes como referencia para tu servicio.
@@ -1626,6 +1747,7 @@ export default function SpecialistHome() {
             <Text style={styles.muted}>
               Escribí a qué corresponde el precio. Ejemplos: “Por visita”, “Por hora”, “Desde”.
             </Text>
+
             <View
               style={{
                 marginTop: 8,
@@ -1675,48 +1797,66 @@ export default function SpecialistHome() {
             >
               <Text style={[styles.btnT, { color: '#E9FEFF' }]}>Usar mi ubicación actual</Text>
             </Pressable>
-          </View>
+          </Section>
 
           {/* Rubros */}
-          <View style={styles.card}>
-            <View style={styles.cardHeaderRow}>
-              <Text style={styles.cardTitle}>Rubros</Text>
-              <Text style={styles.muted}>{specialties.length} seleccionados</Text>
-            </View>
+          <Section
+            title={`Rubros (${specialties.length})`}
+            open={openRubros}
+            onToggle={() => setOpenRubros((v) => !v)}
+          >
+            {/* ✅ Lazy: si está cerrado, NO renderiza los chips */}
+            {openRubros ? (
+              <>
+                <View style={styles.chipsWrap}>
+                  {chipSource.map((opt) => {
+                    const on = specialties.includes(opt.slug);
+                    return (
+                      <Pressable
+                        key={opt.slug}
+                        onPress={() => toggleSpecialty(opt.slug)}
+                        style={[styles.chip, on ? styles.chipOn : styles.chipOff]}
+                      >
+                        <Text style={[styles.chipT, { color: on ? '#063A40' : '#9ec9cd' }]}>
+                          {opt.name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
 
-            <View style={styles.chipsWrap}>
-              {chipSource.map((opt) => {
-                const on = specialties.includes(opt.slug);
-                return (
-                  <Pressable
-                    key={opt.slug}
-                    onPress={() => toggleSpecialty(opt.slug)}
-                    style={[styles.chip, on ? styles.chipOn : styles.chipOff]}
-                  >
-                    <Text style={[styles.chipT, { color: on ? '#063A40' : '#9ec9cd' }]}>
-                      {opt.name}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <Pressable
-              onPress={saveSpecialties}
-              disabled={!specialtiesDirty || saving}
-              style={[styles.btn, (!specialtiesDirty || saving) && styles.btnDisabled]}
-            >
-              <Text style={styles.btnT}>Guardar rubros</Text>
-            </Pressable>
-          </View>
+                <Pressable
+                  onPress={saveSpecialties}
+                  disabled={!specialtiesDirty || saving}
+                  style={[styles.btn, (!specialtiesDirty || saving) && styles.btnDisabled]}
+                >
+                  <Text style={styles.btnT}>Guardar rubros</Text>
+                </Pressable>
+              </>
+            ) : (
+              <Text style={styles.muted}>Tocá para seleccionar o editar tus rubros.</Text>
+            )}
+          </Section>
 
           {/* Matrículas */}
           <Section
-            title="Matrículas por rubro"
+            title="Títulos, licencias o matrículas por rubro"
             open={openCerts}
-            onToggle={() => setOpenCerts((v) => !v)}
+            onToggle={() => {
+              setOpenCerts((v) => {
+                const next = !v;
+                // ✅ si se está abriendo, cargamos certs (una sola vez)
+                if (next) loadCertsOnce();
+                return next;
+              });
+            }}
           >
-            {specialtiesRequiringCert.length ? (
+            {certsLoading ? (
+              <View style={{ paddingVertical: 10 }}>
+                <ActivityIndicator color="#E9FEFF" />
+                <Text style={[styles.muted, { marginTop: 8 }]}>Cargando certificados…</Text>
+              </View>
+            ) : specialtiesRequiringCert.length ? (
               <View style={{ gap: 10 }}>
                 {specialtiesRequiringCert.map((slug) => {
                   const c = findCert(slug);
@@ -2139,4 +2279,60 @@ const styles = StyleSheet.create({
   reviewMeta: { color: '#9ec9cd', fontSize: 11, marginLeft: 8, flexShrink: 1, textAlign: 'right' },
   reviewComment: { color: '#E9FEFF', fontSize: 13, marginTop: 2 },
   reviewService: { color: '#9ec9cd', fontSize: 11, marginTop: 4 },
+  statusDotInline: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: '#00333A',
+  },
+
+  previewHeadline: {
+    color: 'rgba(233,254,255,0.92)',
+    fontWeight: '800',
+    marginTop: 4,
+  },
+
+  previewPillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+
+  previewPillSoft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(233,254,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(233,254,255,0.25)',
+  },
+
+  previewPillSoftText: {
+    color: '#E9FEFF',
+    fontWeight: '800',
+  },
+
+  previewPillSolid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(233,254,255,0.25)',
+  },
+
+  previewPillSolidText: {
+    color: '#E9FEFF',
+    fontWeight: '900',
+  },
+
+  previewPillGood: { backgroundColor: 'rgba(34, 197, 94, 0.22)' },
+  previewPillBad: { backgroundColor: 'rgba(239, 68, 68, 0.18)' },
 });

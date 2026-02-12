@@ -1314,14 +1314,13 @@ export default function SpecialistHome() {
 
             <View style={{ flexDirection: 'row', gap: 14 }}>
               {/* Avatar */}
-              <View style={{ alignItems: 'center' }}>
+              <View style={styles.avatarBox}>
                 <View style={styles.avatarWrap}>
                   <Image source={avatarSrc} style={styles.avatar} />
+                  <Pressable style={styles.camFab} onPress={() => setPickerOpen(true)}>
+                    <Ionicons name="camera" size={18} color="#0A5B63" />
+                  </Pressable>
                 </View>
-
-                <Pressable style={styles.camFab} onPress={() => setPickerOpen(true)}>
-                  <Ionicons name="camera" size={18} color="#0A5B63" />
-                </Pressable>
               </View>
 
               {/* Info */}
@@ -1335,7 +1334,7 @@ export default function SpecialistHome() {
                   <View
                     style={[
                       styles.statusDotInline,
-                      { backgroundColor: visibleEffective ? '#22c55e' : '#ef4444' },
+                      { backgroundColor: availableNowEffective ? '#22c55e' : '#ef4444' },
                     ]}
                   />
                 </View>
@@ -1395,12 +1394,12 @@ export default function SpecialistHome() {
                     </View>
                   ) : null}
 
-                  {Number(radius) > 0 ? (
-                    <View style={styles.previewPillSoft}>
-                      <Ionicons name="navigate-outline" size={14} color="#E9FEFF" />
-                      <Text style={styles.previewPillSoftText}>Radio: {radius} km</Text>
-                    </View>
-                  ) : null}
+                  <View style={styles.previewPillSoft}>
+                    <Ionicons name="ribbon-outline" size={14} color="#E9FEFF" />
+                    <Text style={styles.previewPillSoftText}>
+                      {visibleEffective ? 'Habilitado' : 'No habilitado'}
+                    </Text>
+                  </View>
                 </View>
               </View>
             </View>
@@ -2335,4 +2334,5 @@ const styles = StyleSheet.create({
 
   previewPillGood: { backgroundColor: 'rgba(34, 197, 94, 0.22)' },
   previewPillBad: { backgroundColor: 'rgba(239, 68, 68, 0.18)' },
+  avatarBox: { alignItems: 'center' },
 });

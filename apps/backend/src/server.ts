@@ -12,6 +12,7 @@ import morgan from 'morgan';
 import './config/env';
 
 import { prisma } from './lib/prisma';
+import { ensureQaUsers } from './lib/qa';
 import { ensureUploadsStructure, uploadsRoot } from './lib/uploads';
 import { errorHandler, notFound } from './middlewares/error';
 import adminRoutes from './routes/admin.routes';
@@ -190,6 +191,21 @@ setInterval(() => {
 }, 60_000);
 
 /** ================== Boot ================== **/
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`API listening on http://0.0.0.0:${PORT}`);
-});
+async function boot() {
+  try {
+    if (process.env.QA_MODE === 'true') {
+      console.log('[QA] Mode enabled → ensuring demo users...');
+      await ensureQaUsers();
+      console.log('[QA] Demo users ready');
+    }
+
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`API listening on http://0.0.0.0:${PORT}`);
+    });
+  } catch (error) {
+    console.error('[BOOT ERROR]', error);
+    process.exit(1);
+  }
+}
+
+boot();

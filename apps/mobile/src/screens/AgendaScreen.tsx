@@ -1,4 +1,5 @@
 // apps/mobile/src/screens/AgendaScreen.tsx
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import dayjs from 'dayjs';
 import 'dayjs/locale/es';
@@ -87,6 +88,13 @@ export default function AgendaScreen() {
     incomingSection ? mapSectionToTab(incomingSection) : 'pending',
   );
 
+  // ✅ hint suave para indicar scroll de tabs (solo 1 vez al entrar)
+  const [showTabsHint, setShowTabsHint] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setShowTabsHint(false), 2600);
+    return () => clearTimeout(t);
+  }, []);
+
   // ✅ closed solo para Finalizados y Cancelados
   const isClosed = tab === 'finished' || tab === 'cancelled';
 
@@ -170,39 +178,108 @@ export default function AgendaScreen() {
 
   return (
     <LinearGradient colors={['#004d5d', '#003a47']} style={{ flex: 1 }}>
+      {/* Header tabs */}
       <View style={{ paddingTop: insets.top + 8, paddingBottom: 8 }}>
-        <FlatList
-          data={TABS}
-          keyExtractor={(i) => i.key}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 12, gap: 8 }}
-          renderItem={({ item }) => {
-            const active = item.key === tab;
-            return (
-              <Pressable
-                onPress={() => setTab(item.key)}
-                style={{
-                  paddingHorizontal: 14,
-                  paddingVertical: 8,
-                  borderRadius: 18,
-                  backgroundColor: active ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.18)',
-                }}
-              >
-                <Text
+        <View style={{ position: 'relative' }}>
+          {/* Fade izquierda */}
+          <LinearGradient
+            pointerEvents="none"
+            colors={['rgba(0,77,93,1)', 'rgba(0,77,93,0)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: 18,
+              zIndex: 2,
+            }}
+          />
+
+          {/* Fade derecha */}
+          <LinearGradient
+            pointerEvents="none"
+            colors={['rgba(0,77,93,0)', 'rgba(0,77,93,1)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={{
+              position: 'absolute',
+              right: 0,
+              top: 0,
+              bottom: 0,
+              width: 34,
+              zIndex: 2,
+            }}
+          />
+
+          {/* Hint flecha derecha */}
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              right: 6,
+              top: 0,
+              bottom: 0,
+              justifyContent: 'center',
+              zIndex: 3,
+              opacity: 0.85,
+            }}
+          >
+            <Ionicons name="chevron-forward" size={18} color="#E9FEFF" />
+          </View>
+
+          <FlatList
+            data={TABS}
+            keyExtractor={(i) => i.key}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{
+              paddingHorizontal: 12,
+              gap: 8,
+              paddingRight: 42, // ✅ deja lugar para que no quede tapado por el fade + flecha
+            }}
+            renderItem={({ item }) => {
+              const active = item.key === tab;
+              return (
+                <Pressable
+                  onPress={() => setTab(item.key)}
                   style={{
-                    color: active ? '#064e5b' : '#e8f5f7',
-                    fontWeight: active ? '700' : '500',
+                    paddingHorizontal: 14,
+                    paddingVertical: 8,
+                    borderRadius: 18,
+                    backgroundColor: active ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.18)',
                   }}
                 >
-                  {item.label}
-                </Text>
-              </Pressable>
-            );
-          }}
-        />
+                  <Text
+                    style={{
+                      color: active ? '#064e5b' : '#e8f5f7',
+                      fontWeight: active ? '700' : '500',
+                    }}
+                  >
+                    {item.label}
+                  </Text>
+                </Pressable>
+              );
+            }}
+          />
+        </View>
+
+        {showTabsHint && (
+          <Text
+            style={{
+              color: 'rgba(233,254,255,0.8)',
+              fontSize: 12,
+              marginTop: 6,
+              marginLeft: 12,
+            }}
+          >
+            Deslizá para ver más estados →
+          </Text>
+        )}
       </View>
 
+      {/* Content */}
       <View style={{ flex: 1, paddingHorizontal: 12, paddingBottom: 12 }}>
         {(isLoading || isFetching) && (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>

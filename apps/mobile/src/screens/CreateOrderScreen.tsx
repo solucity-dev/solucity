@@ -60,43 +60,147 @@ function safeJson(obj: any) {
   }
 }
 
-const LOCALITIES_RIO_CUARTO = [
-  // ✅ Río Cuarto / Gran Río Cuarto
+const LOCALITIES_CORDOBA_RAW = [
+  // ✅ Capital / Gran Córdoba
+  'Córdoba',
+  'Villa Allende',
+  'Unquillo',
+  'Mendiolaza',
+  'Saldán',
+  'La Calera',
+  'Malagueño',
+  'Carlos Paz',
+  'Bialet Massé',
+  'Tanti',
+  'Cosquín',
+  'Santa María de Punilla',
+  'Villa Santa Cruz del Lago',
+  'Icho Cruz',
+  'San Antonio de Arredondo',
+  'Mayu Sumaj',
+
+  // ✅ Sierras Chicas
+  'Río Ceballos',
+  'Salsipuedes',
+  'Agua de Oro',
+  'La Granja',
+  'Ascochinga',
+  'Jesús María',
+  'Colonia Caroya',
+  'Sinsacate',
+
+  // ✅ Punilla / Valle de Punilla
+  'La Falda',
+  'Huerta Grande',
+  'Villa Giardino',
+  'Capilla del Monte',
+  'San Marcos Sierras',
+  'Cruz del Eje',
+  'Villa de Soto',
+
+  // ✅ Traslasierra
+  'Villa Dolores',
+  'Mina Clavero',
+  'Nono',
+  'Villa Cura Brochero',
+  'Los Hornillos',
+  'Las Rabonas',
+  'San Javier y Yacanto',
+  'San Pedro',
+  'La Paz (Córdoba)',
+  'Salsacate',
+  'Taninga',
+  'Villa de las Rosas',
+
+  // ✅ Calamuchita
+  'Santa Rosa de Calamuchita',
+  'Villa General Belgrano',
+  'La Cumbrecita',
+  'Embalse',
+  'Almafuerte',
+  'Los Reartes',
+  'Villa Rumipal',
+  'Villa del Dique',
+  'Yacanto',
+  'Los Cóndores',
+
+  // ✅ Río Tercero / Tancacha / zona
+  'Río Tercero',
+  'Tancacha',
+  'Hernando',
+  'General Fotheringham',
+
+  // ✅ Centro / Villa María
+  'Villa María',
+  'Villa Nueva',
+  'Bell Ville',
+  'Justiniano Posse',
+  'Marcos Juárez',
+  'Leones',
+  'Morrison',
+  'Noetinger',
+  'Oliva',
+  'Oncativo',
+  'Río Segundo',
+  'Pilar (Córdoba)',
+
+  // ✅ San Francisco / Este
+  'San Francisco',
+  'Arroyito',
+  'Morteros',
+  'Brinkmann',
+  'Devoto',
+  'Freyre',
+  'La Francia',
+  'Balnearia',
+  'Miramar de Ansenuza',
+
+  // ✅ Norte
+  'Dean Funes',
+  'Villa del Totoral',
+  'Río Primero',
+  'Quilino',
+  'San José de la Dormida',
+
+  // ✅ Sur / Río Cuarto (tu base)
   'Río Cuarto',
   'Las Higueras',
   'Santa Catalina Holmberg',
-
-  // ✅ Zona sur / sierras
   'Sampacho',
   'Bulnes',
   'Coronel Moldes',
   'Chaján',
   'Achiras',
   'San Basilio',
-  'Suco',
   'La Cautiva',
-
-  // ✅ Zona oeste / ruta 8 / 36
   'Alcira Gigena',
   'Berrotarán',
   'Elena',
   'La Carlota',
   'Reducción',
-
-  // ✅ Zona norte / ruta 158
   'General Cabrera',
   'Carnerillo',
   'General Deheza',
-
-  // ✅ Zona este / ruta 35
   'Vicuña Mackenna',
   'Washington',
-
-  // ✅ Más cercanas (opcionales, pero útiles)
   'Adelia María',
-  'Tosquita',
-  'Pacheco de Melo',
-];
+
+  // ✅ Laboulaye / sur-este
+  'Laboulaye',
+  'General Levalle',
+  'Serrano',
+  'Jovita',
+  'Villa Huidobro',
+
+  // ✅ Villa de María / Noroeste
+  'Villa de María del Río Seco',
+  'Sebastián Elcano',
+] as const;
+
+// ✅ Dedupe + orden alfabético
+const LOCALITIES_CORDOBA = Array.from(new Set(LOCALITIES_CORDOBA_RAW)).sort((a, b) =>
+  a.localeCompare(b, 'es'),
+);
 
 export default function CreateOrderScreen() {
   const insets = useSafeAreaInsets();
@@ -167,9 +271,12 @@ export default function CreateOrderScreen() {
 
   // ========= Form state =========
   const [address, setAddress] = useState(paramAddress);
+  type PlaceMode = 'AT_HOME' | 'AT_SPECIALIST' | 'ONLINE';
+  const [placeMode, setPlaceMode] = useState<PlaceMode>('AT_HOME');
 
   const [locality, setLocality] = useState('Río Cuarto');
   const [localityOpen, setLocalityOpen] = useState(false);
+  const [localityQuery, setLocalityQuery] = useState('');
 
   useEffect(() => {
     if (!paramAddress && me?.defaultAddress?.formatted) {
@@ -201,6 +308,13 @@ export default function CreateOrderScreen() {
       ? `${pricingLabel}: $${visitPriceParam.toLocaleString('es-AR')}`
       : `${pricingLabel}: a consultar`;
   }, [pricingLabel, visitPriceParam]);
+
+  const filteredLocalities = useMemo(() => {
+    const q = localityQuery.trim().toLowerCase();
+    if (!q) return LOCALITIES_CORDOBA;
+
+    return LOCALITIES_CORDOBA.filter((x) => x.toLowerCase().includes(q));
+  }, [localityQuery]);
 
   function formatDate(d: Date) {
     return d.toLocaleDateString();
@@ -314,13 +428,23 @@ export default function CreateOrderScreen() {
       }
 
       const baseAddress = address.trim();
-      if (!baseAddress) {
+      const loc = (locality ?? '').trim();
+
+      // ✅ Dirección obligatoria SOLO si es a domicilio
+      if (placeMode === 'AT_HOME' && !baseAddress) {
         Alert.alert('Falta la dirección', 'Indicá dónde realizar el trabajo.');
         return;
       }
 
-      const loc = (locality ?? '').trim();
-      const typedFormatted = loc ? `${baseAddress}, ${loc}, Córdoba` : baseAddress;
+      // ✅ Armamos addressText según modalidad
+      const typedFormatted =
+        placeMode === 'AT_HOME'
+          ? loc
+            ? `${baseAddress}, ${loc}, Córdoba`
+            : baseAddress
+          : placeMode === 'AT_SPECIALIST'
+            ? `En local/oficina — ${loc ? `${loc}, Córdoba` : 'Córdoba'}`
+            : `Online — ${loc ? `${loc}, Córdoba` : 'Córdoba'}`;
 
       if (mode === 'schedule' && !scheduledAt) {
         Alert.alert('Faltan datos', 'Indicá fecha y hora o elegí “Ahora”.');
@@ -412,16 +536,28 @@ export default function CreateOrderScreen() {
       }
 
       // ========== locationId SOLO si corresponde ==========
+      // ✅ Solo tiene sentido enviar locationId si es a domicilio.
+      // Para "en local/oficina" u "online" dejamos locationId null.
       const defaultFormatted = me?.defaultAddress?.formatted?.trim() ?? '';
       const explicitLocationId = locationIdParam;
 
-      const hasManualAddress = typedFormatted.length > 0 && typedFormatted !== defaultFormatted;
+      let locationIdToSend: string | null = null;
 
-      const shouldSendLocationId =
-        !!explicitLocationId || (!hasManualAddress && typedFormatted === defaultFormatted);
+      if (placeMode === 'AT_HOME') {
+        const hasManualAddress = typedFormatted.length > 0 && typedFormatted !== defaultFormatted;
 
-      const locationIdToSend =
-        explicitLocationId ?? (shouldSendLocationId ? me?.defaultAddress?.id : null);
+        const shouldSendLocationId =
+          !!explicitLocationId || (!hasManualAddress && typedFormatted === defaultFormatted);
+
+        // ✅ Acá está el fix TS: nunca asignamos undefined
+        locationIdToSend = explicitLocationId
+          ? explicitLocationId
+          : shouldSendLocationId
+            ? (me?.defaultAddress?.id ?? null)
+            : null;
+      } else {
+        locationIdToSend = null;
+      }
 
       // subir fotos
       const photosWithRemote = await Promise.all(
@@ -444,6 +580,7 @@ export default function CreateOrderScreen() {
         specialistId: specialistIdParam,
         serviceId,
         categorySlug, // audit/log
+        placeMode, // ✅ NUEVO
         description: description || null,
         attachments,
         isUrgent: urgent || mode === 'now',
@@ -546,27 +683,76 @@ export default function CreateOrderScreen() {
             </Text>
           ) : null}
 
-          {/* Dirección */}
-          <Text style={styles.label}>Dirección</Text>
-          <View style={styles.inputRow}>
-            <MDI name="map-marker-outline" size={18} color="#06494F" />
-            <TextInput
-              placeholder="Veracruz 123, Córdoba"
-              placeholderTextColor="#7fa5a9"
-              value={address}
-              onChangeText={setAddress}
-              style={styles.input}
-              autoCapitalize="words"
-            />
-            <Pressable style={styles.linkBtn} onPress={() => {}}>
-              <Text style={styles.linkText}>EDITAR</Text>
-            </Pressable>
+          <Text style={styles.label}>¿Dónde se realiza?</Text>
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+            {[
+              { k: 'AT_HOME' as const, t: 'A domicilio' },
+              { k: 'AT_SPECIALIST' as const, t: 'En local/oficina' },
+              { k: 'ONLINE' as const, t: 'Online' },
+            ].map((opt) => {
+              const on = placeMode === opt.k;
+              return (
+                <Pressable
+                  key={opt.k}
+                  onPress={() => setPlaceMode(opt.k)}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 10,
+                    borderRadius: 12,
+                    alignItems: 'center',
+                    backgroundColor: on ? '#E9FEFF' : 'rgba(233,254,255,0.15)',
+                    borderWidth: 1,
+                    borderColor: 'rgba(233,254,255,0.35)',
+                  }}
+                >
+                  <Text
+                    style={{ fontWeight: '900', color: on ? '#06494F' : '#E9FEFF', fontSize: 12 }}
+                  >
+                    {opt.t}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
+
+          {/* Dirección */}
+          {placeMode === 'AT_HOME' ? (
+            <>
+              {/* Dirección */}
+              <Text style={styles.label}>Dirección</Text>
+              <View style={styles.inputRow}>
+                <MDI name="map-marker-outline" size={18} color="#06494F" />
+                <TextInput
+                  placeholder="Veracruz 123, Córdoba"
+                  placeholderTextColor="#7fa5a9"
+                  value={address}
+                  onChangeText={setAddress}
+                  style={styles.input}
+                  autoCapitalize="words"
+                />
+                <Pressable style={styles.linkBtn} onPress={() => {}}>
+                  <Text style={styles.linkText}>EDITAR</Text>
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            <Text style={{ color: 'rgba(233,254,255,0.85)', marginBottom: 8 }}>
+              {placeMode === 'AT_SPECIALIST'
+                ? 'El especialista te indicará su dirección (local/oficina) al confirmar.'
+                : 'La atención se realizará online. Coordinaremos por chat.'}
+            </Text>
+          )}
 
           {/* Localidad */}
           <Text style={[styles.label, { marginTop: 10 }]}>Localidad</Text>
 
-          <Pressable style={styles.inputRow} onPress={() => setLocalityOpen(true)}>
+          <Pressable
+            style={styles.inputRow}
+            onPress={() => {
+              setLocalityQuery('');
+              setLocalityOpen(true);
+            }}
+          >
             <MDI name="map-marker-radius-outline" size={18} color="#06494F" />
 
             <Text style={{ flex: 1, color: '#06494F', fontWeight: '800' }}>
@@ -602,12 +788,29 @@ export default function CreateOrderScreen() {
                   Elegir localidad
                 </Text>
 
+                <TextInput
+                  value={localityQuery}
+                  onChangeText={setLocalityQuery}
+                  placeholder="Buscar localidad…"
+                  placeholderTextColor="#7fa5a9"
+                  style={{
+                    backgroundColor: 'rgba(6,73,79,0.08)',
+                    borderRadius: 12,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    color: '#06494F',
+                    marginBottom: 10,
+                    fontWeight: '700',
+                  }}
+                />
+
                 <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
-                  {LOCALITIES_RIO_CUARTO.map((loc) => (
+                  {filteredLocalities.map((loc) => (
                     <Pressable
                       key={loc}
                       onPress={() => {
                         setLocality(loc);
+                        setLocalityQuery('');
                         setLocalityOpen(false);
                       }}
                       style={{
@@ -624,7 +827,10 @@ export default function CreateOrderScreen() {
                 </ScrollView>
 
                 <Pressable
-                  onPress={() => setLocalityOpen(false)}
+                  onPress={() => {
+                    setLocalityQuery('');
+                    setLocalityOpen(false);
+                  }}
                   style={{
                     marginTop: 8,
                     paddingVertical: 12,

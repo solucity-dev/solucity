@@ -249,7 +249,30 @@ export default function SpecialistHome() {
 
   // ✅ Loading real
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+
+  type SaveKey =
+    | 'bio'
+    | 'headline'
+    | 'availability'
+    | 'priceRadius'
+    | 'specialties'
+    | 'location'
+    | 'avatar';
+
+  const [savingBy, setSavingBy] = useState<Record<SaveKey, boolean>>({
+    bio: false,
+    headline: false,
+    availability: false,
+    priceRadius: false,
+    specialties: false,
+    location: false,
+    avatar: false,
+  });
+
+  const setSavingKey = useCallback((k: SaveKey, v: boolean) => {
+    setSavingBy((prev) => ({ ...prev, [k]: v }));
+  }, []);
+
   // ✅ Snapshots (baseline) para detectar cambios por bloque
   const bioSnapRef = useRef<string>('');
   const availabilitySnapRef = useRef<string>(''); // guardamos JSON string
@@ -369,6 +392,8 @@ export default function SpecialistHome() {
 
   // ubicación: auto-update una sola vez, sin bloquear
   const locationRequestedRef = useRef(false);
+  const locationAttemptRef = useRef(0);
+  const locationRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ✅ loading por rubro (solo el botón que se está subiendo)
   function setCertLoading(slug: string, v: boolean) {
@@ -378,7 +403,6 @@ export default function SpecialistHome() {
     return !!certSavingBySlug[slug];
   }
 
-  // ✅ Catálogo rubros: GET /categories (background)
   // ✅ Catálogo rubros: GET /categories (background)
   const loadCategories = useCallback(async () => {
     if (categoriesLoadedOnceRef.current) return;
@@ -497,10 +521,11 @@ export default function SpecialistHome() {
 
   // Ubicación: pedir permisos, obtener coords y guardarlas (no bloqueante)
   const updateLocationFromDevice = useCallback(
-    async (options?: { silent?: boolean }) => {
+    async (options?: { silent?: boolean }): Promise<boolean> => {
       const silent = options?.silent ?? true;
+
       try {
-        if (!silent) setSaving(true);
+        if (!silent) setSavingKey('location', true);
 
         const perm = await Location.getForegroundPermissionsAsync();
         if (perm.status !== 'granted') {
@@ -510,7 +535,7 @@ export default function SpecialistHome() {
               'Necesitamos acceder a tu ubicación para mostrarte en las búsquedas cercanas.',
             );
           }
-          return;
+          return false;
         }
 
         const pos = await Location.getCurrentPositionAsync({
@@ -542,16 +567,19 @@ export default function SpecialistHome() {
         if (!silent) {
           Alert.alert('Listo', 'Actualizamos tu ubicación para las búsquedas cercanas.');
         }
+
+        return true; // ✅ FALTABA
       } catch (e) {
         if (__DEV__) console.log('[updateLocationFromDevice] error', e);
         if (!silent) {
           Alert.alert('Ups', 'No pudimos actualizar tu ubicación. Probá de nuevo más tarde.');
         }
+        return false; // ✅ FALTABA
       } finally {
-        if (!silent) setSaving(false);
+        if (!silent) setSavingKey('location', false);
       }
     },
-    [uid], // ✅ esto soluciona el warning y evita stale closure
+    [uid, setSavingKey],
   );
 
   // ✅ PERFIL bloqueante / lo demás background
@@ -726,17 +754,38 @@ export default function SpecialistHome() {
   // ✅ pedir ubicación apenas entra el especialista (una vez por sesión y sin bloquear)
   useEffect(() => {
     if (!token) return;
-    if (locationRequestedRef.current) return;
 
-    // 👇 SOLO si el backend todavía no tiene centerLat/centerLng
     const missingCenter = !profile?.centerLat || !profile?.centerLng;
     if (!missingCenter) return;
 
-    locationRequestedRef.current = true;
+    // máximo 2 intentos en total
+    if (locationAttemptRef.current >= 2) return;
 
-    InteractionManager.runAfterInteractions(() => {
-      updateLocationFromDevice({ silent: true });
+    // evita repetir por renders
+    if (locationRequestedRef.current && locationAttemptRef.current >= 1) return;
+
+    locationRequestedRef.current = true;
+    locationAttemptRef.current += 1;
+
+    InteractionManager.runAfterInteractions(async () => {
+      const ok = await updateLocationFromDevice({ silent: true });
+
+      if (!ok && locationAttemptRef.current < 2) {
+        locationRetryTimeoutRef.current = setTimeout(() => {
+          if (!profile?.centerLat || !profile?.centerLng) {
+            updateLocationFromDevice({ silent: true });
+            locationAttemptRef.current += 1;
+          }
+        }, 2500);
+      }
     });
+
+    return () => {
+      if (locationRetryTimeoutRef.current) {
+        clearTimeout(locationRetryTimeoutRef.current);
+        locationRetryTimeoutRef.current = null;
+      }
+    };
   }, [token, profile?.centerLat, profile?.centerLng, updateLocationFromDevice]);
 
   const avatarSrc = useMemo(() => {
@@ -847,7 +896,7 @@ export default function SpecialistHome() {
   async function confirmAvatar() {
     if (!localUri) return;
     try {
-      setSaving(true);
+      setSavingKey('avatar', true);
       const manipulated = await ImageManipulator.manipulateAsync(
         localUri,
         [{ resize: { width: 1200 } }],
@@ -878,13 +927,13 @@ export default function SpecialistHome() {
           : 'No se pudo actualizar tu foto de perfil.';
       Alert.alert('Ups', msg);
     } finally {
-      setSaving(false);
+      setSavingKey('avatar', false);
     }
   }
 
   async function saveHeadline() {
     try {
-      setSaving(true);
+      setSavingKey('headline', true);
 
       const value = headline.trim();
       // backend: max 60
@@ -899,14 +948,14 @@ export default function SpecialistHome() {
     } catch {
       Alert.alert('Ups', 'No se pudo guardar la especificación.');
     } finally {
-      setSaving(false);
+      setSavingKey('headline', false);
     }
   }
 
   // saves
   async function saveBio() {
     try {
-      setSaving(true);
+      setSavingKey('bio', true);
       await api.patch('/specialists/me', { bio });
       setProfile((prev) => (prev ? { ...prev, bio } : prev));
       Alert.alert('Listo', 'Biografía actualizada.');
@@ -914,7 +963,7 @@ export default function SpecialistHome() {
     } catch {
       Alert.alert('Ups', 'No se pudo guardar.');
     } finally {
-      setSaving(false);
+      setSavingKey('bio', false);
     }
   }
 
@@ -981,7 +1030,7 @@ export default function SpecialistHome() {
 
   async function saveAvailability() {
     try {
-      setSaving(true);
+      setSavingKey('availability', true);
       await api.patch('/specialists/me', {
         availability: { days, start, end },
       });
@@ -1001,13 +1050,13 @@ export default function SpecialistHome() {
     } catch {
       Alert.alert('Ups', 'No se pudo guardar la disponibilidad.');
     } finally {
-      setSaving(false);
+      setSavingKey('availability', false);
     }
   }
 
   async function saveSpecialties() {
     try {
-      setSaving(true);
+      setSavingKey('specialties', true);
       const cleaned = Array.from(
         new Set(
           specialties
@@ -1025,13 +1074,13 @@ export default function SpecialistHome() {
       const msg = e?.response?.data?.error ?? 'No se pudieron actualizar los rubros.';
       Alert.alert('Ups', String(msg));
     } finally {
-      setSaving(false);
+      setSavingKey('specialties', false);
     }
   }
 
   async function savePriceAndRadius() {
     try {
-      setSaving(true);
+      setSavingKey('priceRadius', true);
 
       const visitPrice = Math.max(0, Math.floor(Number(price) || 0));
 
@@ -1067,7 +1116,7 @@ export default function SpecialistHome() {
     } catch {
       Alert.alert('Ups', 'No se pudo guardar la tarifa/radio.');
     } finally {
-      setSaving(false);
+      setSavingKey('priceRadius', false);
     }
   }
 
@@ -1622,26 +1671,39 @@ export default function SpecialistHome() {
 
           {/* Tu perfil (desplegable) */}
           <Section title="Tu perfil" open={openPerfil} onToggle={() => setOpenPerfil((v) => !v)}>
-            <Text style={styles.subTitle}>Especificación del rubro</Text>
+            <Text style={styles.subTitle}>¿En qué te especializás?</Text>
+
             <TextInput
               value={headline}
               onChangeText={setHeadline}
-              placeholder="Ej: Instalación y reparación de aires"
+              placeholder="Ej: Ingeniero civil · Cálculo estructural"
               placeholderTextColor="#9ec9cd"
               style={styles.input}
               maxLength={60}
             />
-            <Text style={styles.muted}>Se muestra en el listado (máx. 60 caracteres).</Text>
+
+            <Text style={styles.muted}>
+              Esto aparece debajo de tu nombre en el listado. Usalo para aclarar tu enfoque o
+              subespecialidad dentro del rubro (máx. 60 caracteres).
+            </Text>
 
             <Pressable
               onPress={saveHeadline}
-              disabled={!headlineDirty || saving}
-              style={[styles.btn, (!headlineDirty || saving) && styles.btnDisabled]}
+              disabled={!headlineDirty || savingBy.headline}
+              style={[styles.btn, (!headlineDirty || savingBy.headline) && styles.btnDisabled]}
             >
-              <Text style={styles.btnT}>Guardar especificación</Text>
+              {savingBy.headline ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <ActivityIndicator />
+                  <Text style={styles.btnT}>Guardando…</Text>
+                </View>
+              ) : (
+                <Text style={styles.btnT}>Guardar especificación</Text>
+              )}
             </Pressable>
 
             <Text style={styles.subTitle}>Biografía</Text>
+
             <TextInput
               value={bio}
               onChangeText={setBio}
@@ -1649,14 +1711,27 @@ export default function SpecialistHome() {
               placeholderTextColor="#9ec9cd"
               multiline
               style={[styles.input, { minHeight: 110 }]}
+              maxLength={300}
             />
+
+            <Text style={styles.muted}>
+              Contá tu experiencia, zona y tipo de trabajos que realizás. Máx. 300 caracteres (
+              {bio.length}/300).
+            </Text>
 
             <Pressable
               onPress={saveBio}
-              disabled={!bioDirty || saving}
-              style={[styles.btn, (!bioDirty || saving) && styles.btnDisabled]}
+              disabled={!bioDirty || savingBy.bio}
+              style={[styles.btn, (!bioDirty || savingBy.bio) && styles.btnDisabled]}
             >
-              <Text style={styles.btnT}>Guardar biografía</Text>
+              {savingBy.bio ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <ActivityIndicator />
+                  <Text style={styles.btnT}>Guardando…</Text>
+                </View>
+              ) : (
+                <Text style={styles.btnT}>Guardar biografía</Text>
+              )}
             </Pressable>
           </Section>
 
@@ -1707,10 +1782,20 @@ export default function SpecialistHome() {
 
             <Pressable
               onPress={saveAvailability}
-              disabled={!availabilityDirty || saving}
-              style={[styles.btn, (!availabilityDirty || saving) && styles.btnDisabled]}
+              disabled={!availabilityDirty || savingBy.availability}
+              style={[
+                styles.btn,
+                (!availabilityDirty || savingBy.availability) && styles.btnDisabled,
+              ]}
             >
-              <Text style={styles.btnT}>Guardar disponibilidad</Text>
+              {savingBy.availability ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <ActivityIndicator />
+                  <Text style={styles.btnT}>Guardando…</Text>
+                </View>
+              ) : (
+                <Text style={styles.btnT}>Guardar disponibilidad</Text>
+              )}
             </Pressable>
           </Section>
 
@@ -1775,14 +1860,25 @@ export default function SpecialistHome() {
 
             <Pressable
               onPress={savePriceAndRadius}
-              disabled={!priceRadiusDirty || saving}
-              style={[styles.btn, (!priceRadiusDirty || saving) && styles.btnDisabled]}
+              disabled={!priceRadiusDirty || savingBy.priceRadius}
+              style={[
+                styles.btn,
+                (!priceRadiusDirty || savingBy.priceRadius) && styles.btnDisabled,
+              ]}
             >
-              <Text style={styles.btnT}>Guardar tarifa y radio</Text>
+              {savingBy.priceRadius ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <ActivityIndicator />
+                  <Text style={styles.btnT}>Guardando…</Text>
+                </View>
+              ) : (
+                <Text style={styles.btnT}>Guardar tarifa y radio</Text>
+              )}
             </Pressable>
 
             <Pressable
               onPress={() => updateLocationFromDevice({ silent: false })}
+              disabled={savingBy.location}
               style={[
                 styles.btn,
                 {
@@ -1791,10 +1887,17 @@ export default function SpecialistHome() {
                   borderColor: '#E9FEFF',
                   marginTop: 8,
                 },
-                saving && styles.btnDisabled,
+                savingBy.location && styles.btnDisabled,
               ]}
             >
-              <Text style={[styles.btnT, { color: '#E9FEFF' }]}>Usar mi ubicación actual</Text>
+              {savingBy.location ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <ActivityIndicator />
+                  <Text style={[styles.btnT, { color: '#E9FEFF' }]}>Actualizando…</Text>
+                </View>
+              ) : (
+                <Text style={[styles.btnT, { color: '#E9FEFF' }]}>Usar mi ubicación actual</Text>
+              )}
             </Pressable>
           </Section>
 
@@ -1826,10 +1929,20 @@ export default function SpecialistHome() {
 
                 <Pressable
                   onPress={saveSpecialties}
-                  disabled={!specialtiesDirty || saving}
-                  style={[styles.btn, (!specialtiesDirty || saving) && styles.btnDisabled]}
+                  disabled={!specialtiesDirty || savingBy.specialties}
+                  style={[
+                    styles.btn,
+                    (!specialtiesDirty || savingBy.specialties) && styles.btnDisabled,
+                  ]}
                 >
-                  <Text style={styles.btnT}>Guardar rubros</Text>
+                  {savingBy.specialties ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <ActivityIndicator />
+                      <Text style={styles.btnT}>Guardando…</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.btnT}>Guardar rubros</Text>
+                  )}
                 </Pressable>
               </>
             ) : (
@@ -2027,10 +2140,10 @@ export default function SpecialistHome() {
               <View style={{ width: 10 }} />
               <Pressable
                 style={[styles.btn, { flex: 1 }]}
-                disabled={saving}
+                disabled={savingBy.avatar}
                 onPress={confirmAvatar}
               >
-                <Text style={styles.btnT}>{saving ? 'Subiendo…' : 'Usar foto'}</Text>
+                <Text style={styles.btnT}>{savingBy.avatar ? 'Subiendo…' : 'Usar foto'}</Text>
               </Pressable>
             </View>
           </View>

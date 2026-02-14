@@ -2,7 +2,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
@@ -92,12 +92,6 @@ export default function ChatThreadScreen() {
       params: { id: params.orderId },
     });
   }, [nav, params.orderId]);
-
-  // Autoscroll al final cuando hay mensajes nuevos
-  useEffect(() => {
-    if (!hasMessages) return;
-    flatListRef.current?.scrollToEnd({ animated: true });
-  }, [hasMessages, messages.length]);
 
   // ✅ Interceptamos el botón físico de "back" en Android
   useFocusEffect(
@@ -202,11 +196,18 @@ export default function ChatThreadScreen() {
           {!messagesQuery.isLoading && hasMessages && (
             <FlatList
               ref={flatListRef}
-              data={[...messages].reverse()}
+              data={messages}
+              inverted
               keyExtractor={(item) => item.id}
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ paddingBottom: 8, gap: 6 }}
-              onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+              initialNumToRender={15}
+              maxToRenderPerBatch={20}
+              windowSize={10}
+              removeClippedSubviews={Platform.OS === 'android'}
+              onContentSizeChange={() => {
+                flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+              }}
               renderItem={({ item }) => {
                 // Lado definido POR EL BACKEND
                 const isMine = (item as any).isMine === true;

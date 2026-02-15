@@ -1156,7 +1156,7 @@ export default function SpecialistHome() {
 
       await api.patch('/specialists/me', {
         serviceModes,
-        officeAddress: serviceModes.includes('OFFICE') ? { formatted: officeAddress.trim() } : null,
+        officeAddress: serviceModes.includes('OFFICE') ? officeAddress.trim() : null,
       });
 
       // ✅ recargo para que quede idéntico a lo que el backend guarda/devuelve

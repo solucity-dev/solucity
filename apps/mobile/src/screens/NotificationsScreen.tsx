@@ -113,6 +113,30 @@ export default function NotificationsScreen() {
     [ready, token],
   );
 
+  const markAllAsRead = useCallback(async () => {
+    if (!ready || !token) return;
+
+    // 🔥 Optimista: marcamos todas como leídas en UI
+    setItems((prev) =>
+      prev.map((n) => (n.readAt ? n : { ...n, readAt: new Date().toISOString() })),
+    );
+
+    try {
+      await api.post('/notifications/read-all', null, {
+        headers: { 'Cache-Control': 'no-cache' },
+      });
+    } catch (e: any) {
+      if (__DEV__) {
+        console.log('[Notifications] markAllAsRead error', e?.response?.status, e?.message);
+      }
+    }
+
+    // 🔥 Sync badge
+    try {
+      await Notifications.setBadgeCountAsync(0);
+    } catch {}
+  }, [ready, token]);
+
   useEffect(() => {
     loadNotifications();
   }, [loadNotifications]);
@@ -333,11 +357,18 @@ export default function NotificationsScreen() {
             color="#E9FEFF"
             onPress={() => navigation.goBack()}
           />
+
           <Text style={styles.headerTitle}>
             Notificaciones{unreadCount > 0 ? ` (${unreadCount})` : ''}
           </Text>
 
-          <View style={{ width: 26 }} />
+          {unreadCount > 0 ? (
+            <Pressable onPress={markAllAsRead} style={styles.markAllBtn}>
+              <Text style={styles.markAllText}>Marcar todas</Text>
+            </Pressable>
+          ) : (
+            <View style={{ width: 80 }} />
+          )}
         </View>
 
         <FlatList
@@ -406,4 +437,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   emptyText: { color: '#C2E7EB', textAlign: 'center', fontSize: 14 },
+
+  markAllBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+
+  markAllText: {
+    color: '#E9FEFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
 });

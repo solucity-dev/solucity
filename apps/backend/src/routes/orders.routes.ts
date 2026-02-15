@@ -311,6 +311,7 @@ const createOrderSimple = z.object({
 
   // ✅ CLAVE: si el mobile manda serviceId, lo respetamos
   serviceId: id.optional(),
+  serviceMode: z.enum(['HOME', 'OFFICE', 'ONLINE']).optional(),
 
   description: z.string().optional(),
   attachments: z.array(z.any()).optional(),
@@ -365,68 +366,6 @@ orders.post('/', auth, async (req, res) => {
       locationId = locationId ?? cust.defaultAddressId ?? null;
     }
 
-    // ✅ addressText: tomamos dirección manual directamente del body
-    const rawAddressInput = (req.body as any)?.address ?? (req.body as any)?.addressText;
-
-    const addressText =
-      typeof rawAddressInput === 'string'
-        ? rawAddressInput.trim()
-        : typeof rawAddressInput?.formatted === 'string'
-          ? rawAddressInput.formatted.trim()
-          : null;
-
-    // ⚠️ IMPORTANTE:
-    // NO creamos Address si ya viene locationId.
-    // Tu Address exige lat/lng, así que si no podemos geocodificar
-    // se guarda solamente en addressText.
-
-    let finalLocationId = locationId;
-
-    // 🔍 ÚNICO bloque de geocode
-    if (!finalLocationId && addressText) {
-      try {
-        const geo = await geocodeAddress(addressText);
-
-        if (geo) {
-          const formatted =
-            typeof geo.formatted === 'string' && geo.formatted.trim()
-              ? geo.formatted.trim()
-              : addressText; // 👈 fallback: usamos lo que escribió el usuario
-
-          // ✅ DEDUPE por placeId si existe (no rompe nada)
-          let addrId: string | null = null;
-
-          if (geo.placeId) {
-            const existing = await prisma.address.findFirst({
-              where: { placeId: geo.placeId },
-              select: { id: true },
-            });
-            if (existing) addrId = existing.id;
-          }
-
-          if (!addrId) {
-            const newAddr = await prisma.address.create({
-              data: {
-                formatted,
-                lat: geo.lat,
-                lng: geo.lng,
-                placeId: geo.placeId ?? null,
-              },
-              select: { id: true },
-            });
-            addrId = newAddr.id;
-          }
-
-          finalLocationId = addrId;
-
-          // ✅ NO borramos addressText: lo dejamos como respaldo
-        }
-      } catch (e) {
-        console.warn('[POST /orders] geocode failed', e);
-        // fallback: queda addressText plano
-      }
-    }
-
     // 2) serviceId + categorySlug (VALIDADO)
     const bodyCategorySlug = normalizeCategorySlug((req.body as any)?.categorySlug);
 
@@ -440,6 +379,113 @@ orders.post('/', auth, async (req, res) => {
 
     if (!specialistId) {
       return res.status(400).json({ ok: false, error: 'specialist_required' });
+    }
+
+    // ✅ NUEVO: modos de servicio del especialista (HOME / OFFICE / ONLINE)
+    const spec = await prisma.specialistProfile.findUnique({
+      where: { id: specialistId },
+      select: { serviceModes: true, officeAddressId: true },
+    });
+    if (!spec) return res.status(404).json({ ok: false, error: 'specialist_not_found' });
+
+    const modes = (spec.serviceModes as any as ('HOME' | 'OFFICE' | 'ONLINE')[]) ?? ['HOME'];
+
+    // Lo que eligió el cliente (si mandó)
+    const requestedMode =
+      parsed.mode === 'full'
+        ? ((parsed.data as any).serviceMode as 'HOME' | 'OFFICE' | 'ONLINE' | undefined)
+        : ((parsed.data as any).serviceMode as 'HOME' | 'OFFICE' | 'ONLINE' | undefined);
+
+    // ✅ Si el cliente no manda nada:
+    // - si el especialista tiene 1 solo modo, usamos ese
+    // - si tiene varios, default HOME (compat con flujo actual)
+    const finalServiceMode: 'HOME' | 'OFFICE' | 'ONLINE' =
+      requestedMode ?? (modes.length === 1 ? modes[0] : 'HOME');
+
+    // ✅ Validación: el modo debe estar habilitado en el especialista
+    if (!modes.includes(finalServiceMode)) {
+      return res.status(409).json({
+        ok: false,
+        error: 'service_mode_not_supported',
+        requested: finalServiceMode,
+        available: modes,
+      });
+    }
+
+    // ✅ OFFICE requiere officeAddressId cargada
+    if (finalServiceMode === 'OFFICE' && !spec.officeAddressId) {
+      return res.status(409).json({ ok: false, error: 'specialist_office_address_missing' });
+    }
+
+    // ✅ addressText: tomamos dirección manual directamente del body
+    const rawAddressInput = (req.body as any)?.address ?? (req.body as any)?.addressText;
+
+    let addressText =
+      typeof rawAddressInput === 'string'
+        ? rawAddressInput.trim()
+        : typeof rawAddressInput?.formatted === 'string'
+          ? rawAddressInput.formatted.trim()
+          : null;
+
+    // ⚠️ IMPORTANTE:
+    // - HOME: puede usar dirección del cliente (locationId o addressText + geocode)
+    // - OFFICE: NO usa dirección del cliente (usa officeAddressId del especialista)
+    // - ONLINE: NO usa dirección
+
+    let finalLocationId = locationId;
+
+    // ✅ MODO: OFFICE / ONLINE anulan address del cliente
+    if (finalServiceMode === 'OFFICE') {
+      finalLocationId = spec.officeAddressId ?? null;
+      addressText = null;
+    }
+
+    if (finalServiceMode === 'ONLINE') {
+      finalLocationId = null;
+      addressText = null;
+    }
+
+    // 🔍 Geocode solo aplica a HOME
+    if (finalServiceMode === 'HOME') {
+      if (!finalLocationId && addressText) {
+        try {
+          const geo = await geocodeAddress(addressText);
+
+          if (geo) {
+            const formatted =
+              typeof geo.formatted === 'string' && geo.formatted.trim()
+                ? geo.formatted.trim()
+                : addressText;
+
+            let addrId: string | null = null;
+
+            if (geo.placeId) {
+              const existing = await prisma.address.findFirst({
+                where: { placeId: geo.placeId },
+                select: { id: true },
+              });
+              if (existing) addrId = existing.id;
+            }
+
+            if (!addrId) {
+              const newAddr = await prisma.address.create({
+                data: {
+                  formatted,
+                  lat: geo.lat,
+                  lng: geo.lng,
+                  placeId: geo.placeId ?? null,
+                },
+                select: { id: true },
+              });
+              addrId = newAddr.id;
+            }
+
+            finalLocationId = addrId;
+          }
+        } catch (e) {
+          console.warn('[POST /orders] geocode failed', e);
+        }
+      }
     }
 
     // Resolver categoryId desde categorySlug (si viene)
@@ -596,6 +642,7 @@ orders.post('/', auth, async (req, res) => {
         customerId: customerId!,
         specialistId: specialistId ?? null,
         serviceId: serviceId!,
+        serviceMode: finalServiceMode,
         locationId: finalLocationId ?? null,
         addressText: addressText || null,
 
@@ -711,6 +758,7 @@ orders.get('/mine', auth, async (req: any, res) => {
         preferredAt: true,
         agreedPrice: true,
         addressText: true,
+        serviceMode: true,
 
         service: {
           select: {
@@ -763,6 +811,7 @@ orders.get('/mine', auth, async (req: any, res) => {
         scheduledAt: o.scheduledAt,
         preferredAt: o.preferredAt,
         price: o.agreedPrice ?? null,
+        serviceMode: (o as any).serviceMode ?? 'HOME',
 
         service: {
           id: o.service.id,
@@ -1620,6 +1669,13 @@ orders.get('/:id', auth, async (req, res) => {
 
     // ───────── DISTANCIA ─────────
     let distanceKm: number | null = null;
+    const sm = (order as any).serviceMode as 'HOME' | 'OFFICE' | 'ONLINE' | undefined;
+    if (sm === 'ONLINE') {
+      distanceKm = null;
+    } else {
+      // (dejás tu cálculo actual tal cual)
+    }
+
     const loc: any = order.location;
     const jobLat = loc && typeof loc.lat === 'number' ? (loc.lat as number) : null;
     const jobLng = loc && typeof loc.lng === 'number' ? (loc.lng as number) : null;
@@ -1707,6 +1763,7 @@ orders.get('/:id', auth, async (req, res) => {
       scheduledAt: order.scheduledAt,
       preferredAt: order.preferredAt,
       isUrgent: order.isUrgent,
+      serviceMode: (order as any).serviceMode ?? 'HOME',
       acceptDeadlineAt: order.status === 'PENDING' ? (order.acceptDeadlineAt ?? null) : null,
       price: order.agreedPrice ?? null,
       description: order.description ?? null,

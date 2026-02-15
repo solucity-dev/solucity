@@ -1126,6 +1126,22 @@ const PatchMeSchema = z.object({
   avatarUrl: z.union([urlLike, z.literal(null)]).optional(),
   centerLat: z.coerce.number().optional(),
   centerLng: z.coerce.number().optional(),
+
+  // ✅ NUEVO: modos de servicio del especialista
+  serviceModes: z
+    .array(z.enum(['HOME', 'OFFICE', 'ONLINE']))
+    .min(1)
+    .optional(),
+
+  // ✅ NUEVO: dirección de oficina (solo si incluye OFFICE)
+  officeAddress: z
+    .object({
+      formatted: z.string().min(5),
+      lat: z.number(),
+      lng: z.number(),
+      placeId: z.string().optional().nullable(),
+    })
+    .optional(),
 });
 
 /** GET /specialists/me */
@@ -1136,11 +1152,30 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
 
     const profile = await prisma.specialistProfile.findUnique({
       where: { userId },
-      include: {
-        user: { select: { name: true, surname: true } },
-        specialties: { include: { category: { select: { slug: true } } } },
+      select: {
+        id: true,
+        bio: true,
+        specialtyHeadline: true,
+        availableNow: true,
+        radiusKm: true,
+        visitPrice: true,
+        pricingLabel: true,
+        availability: true,
+        ratingAvg: true,
+        ratingCount: true,
+        badge: true,
+        kycStatus: true,
+        avatarUrl: true,
+        centerLat: true,
+        centerLng: true,
 
-        // ✅ NUEVO: antecedente penal (1 por especialista)
+        // ✅ NUEVO:
+        serviceModes: true,
+        officeAddressId: true,
+
+        user: { select: { name: true, surname: true } },
+        specialties: { select: { category: { select: { slug: true } } } },
+
         backgroundCheck: {
           select: {
             status: true,
@@ -1163,6 +1198,8 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
           radiusKm: 30,
           visitPrice: 0,
           pricingLabel: null,
+          serviceModes: ['HOME'],
+          officeAddressId: null,
           availability: { days: [1, 2, 3, 4, 5], start: '09:00', end: '18:00' },
           ratingAvg: null,
           ratingCount: null,
@@ -1209,7 +1246,7 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
 
     // 👉 toggle real (intención del user)
     // si no cumple requisitos (kyc/bg/user), lo mostramos false para evitar incoherencias
-    const availableNow = !!profile.availableNow;
+    const availableNow = safe.canToggle ? !!profile.availableNow : false;
 
     const ratingAvg = profile.ratingAvg ?? null;
     const ratingCount = profile.ratingCount ?? null;
@@ -1227,7 +1264,10 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
         availableNow,
         radiusKm: profile.radiusKm ?? 30,
         visitPrice: profile.visitPrice ?? 0,
-        pricingLabel: (profile as any).pricingLabel ?? null, // ✅ NUEVO
+        pricingLabel: (profile as any).pricingLabel ?? null,
+        serviceModes: (profile.serviceModes as any) ?? ['HOME'],
+        officeAddressId: profile.officeAddressId ?? null,
+
         availability: avail ?? ({ days: [1, 2, 3, 4, 5], start: '09:00', end: '18:00' } as any),
         ratingAvg,
         ratingCount,
@@ -1281,7 +1321,12 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
 
     const current = await prisma.specialistProfile.findUnique({
       where: { userId },
-      select: { availability: true, kycStatus: true },
+      select: {
+        availability: true,
+        kycStatus: true,
+        serviceModes: true,
+        officeAddressId: true,
+      },
     });
 
     const currentAvail = (current?.availability as any) ?? {
@@ -1330,6 +1375,58 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
     }
 
     let nextAvail = currentAvail;
+
+    // ✅ NUEVO: serviceModes + officeAddress (OFFICE)
+    let nextOfficeAddressId: string | null | undefined = undefined;
+
+    // Si mandan serviceModes, validamos reglas
+    if (data.serviceModes) {
+      const hasOffice = data.serviceModes.includes('OFFICE');
+
+      if (hasOffice) {
+        // si selecciona OFFICE, officeAddress es obligatoria
+        if (!data.officeAddress) {
+          return res.status(400).json({ ok: false, error: 'office_address_required' });
+        }
+
+        // Upsert Address por placeId si existe, sino create
+        const placeId = data.officeAddress.placeId ?? null;
+
+        if (placeId) {
+          const addr = await prisma.address.upsert({
+            where: { placeId },
+            update: {
+              formatted: data.officeAddress.formatted,
+              lat: data.officeAddress.lat,
+              lng: data.officeAddress.lng,
+            },
+            create: {
+              placeId,
+              formatted: data.officeAddress.formatted,
+              lat: data.officeAddress.lat,
+              lng: data.officeAddress.lng,
+            },
+            select: { id: true },
+          });
+          nextOfficeAddressId = addr.id;
+        } else {
+          const addr = await prisma.address.create({
+            data: {
+              placeId: null,
+              formatted: data.officeAddress.formatted,
+              lat: data.officeAddress.lat,
+              lng: data.officeAddress.lng,
+            },
+            select: { id: true },
+          });
+          nextOfficeAddressId = addr.id;
+        }
+      } else {
+        // si NO incluye OFFICE, limpiamos officeAddressId
+        nextOfficeAddressId = null;
+      }
+    }
+
     if (data.availability) nextAvail = { ...currentAvail, ...data.availability };
 
     // ✅ NO guardar enabled dentro de availability (evita inconsistencias)
@@ -1354,6 +1451,8 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
         centerLat: data.centerLat ?? null,
         centerLng: data.centerLng ?? null,
         availableNow: false,
+        serviceModes: (data.serviceModes as any) ?? ['HOME'],
+        officeAddressId: nextOfficeAddressId ?? null,
       },
       update: {
         ...(data.bio !== undefined ? { bio: data.bio } : {}),
@@ -1371,6 +1470,8 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
         ...(setAvailableNow !== undefined
           ? { availableNow: current?.kycStatus === 'VERIFIED' ? setAvailableNow : false }
           : {}),
+        ...(data.serviceModes !== undefined ? { serviceModes: data.serviceModes as any } : {}),
+        ...(nextOfficeAddressId !== undefined ? { officeAddressId: nextOfficeAddressId } : {}),
       },
       select: { id: true },
     });

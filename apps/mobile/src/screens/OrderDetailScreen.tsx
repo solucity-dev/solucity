@@ -63,6 +63,8 @@ type OrderDetail = {
   events: OrderEvent[];
   rating: { score: number; comment: string | null } | null;
   chatThreadId?: string | null;
+
+  serviceMode?: 'HOME' | 'OFFICE' | 'ONLINE';
 };
 
 type Resp = {
@@ -519,6 +521,11 @@ export default function OrderDetailScreen() {
   const isExpired = meta?.deadline === 'expired';
   const status = String(data?.status ?? 'PENDING').toUpperCase();
 
+  const serviceMode = String((data as any)?.serviceMode ?? 'HOME').toUpperCase();
+
+  const isModeOffice = serviceMode === 'OFFICE';
+  const isModeOnline = serviceMode === 'ONLINE';
+
   const isPending = status === 'PENDING';
   const isAssignedOrInProgress =
     status === 'ASSIGNED' || status === 'IN_PROGRESS' || status === 'PAUSED';
@@ -591,6 +598,12 @@ export default function OrderDetailScreen() {
     return `${Math.round(d)} km`;
   })();
 
+  // 🔥 Mostrar distancia solo si:
+  // - No es ONLINE
+  // - No está pendiente
+  // - Hay distancia válida
+  const shouldShowDistance = !isModeOnline && !isPending && distanceLabel !== 'No disponible';
+
   const deadlinePill = useMemo(() => {
     if (!meta || meta.deadline === 'none') return { text: 'Sin límite', style: styles.badgeSoft };
     if (meta.deadline === 'expired' || !meta.timeLeftMs || meta.timeLeftMs <= 0)
@@ -661,6 +674,12 @@ export default function OrderDetailScreen() {
       return '—';
     }
   })();
+
+  // 🔥 Mostrar dirección solo si:
+  // - NO está pendiente
+  // - NO es modalidad ONLINE
+  // - Existe dirección válida
+  const shouldShowAddress = !isPending && !isModeOnline && addressText !== '—';
 
   // ✅ Chat disponible por estado
   // ✅ Chat disponible si no está pendiente/cancelada y existe thread
@@ -972,10 +991,12 @@ export default function OrderDetailScreen() {
 
             <View style={{ height: 10 }} />
 
-            <View style={styles.row}>
-              <Ionicons name="location-outline" size={18} color="#E9FEFF" />
-              <Text style={styles.muted}>Distancia: {distanceLabel}</Text>
-            </View>
+            {shouldShowDistance && (
+              <View style={styles.row}>
+                <Ionicons name="location-outline" size={18} color="#E9FEFF" />
+                <Text style={styles.muted}>Distancia: {distanceLabel}</Text>
+              </View>
+            )}
 
             <View style={styles.row}>
               <MDI name="calendar-clock" size={18} color="#E9FEFF" />
@@ -995,13 +1016,22 @@ export default function OrderDetailScreen() {
               <MDI name="clipboard-text-outline" size={18} color="#E9FEFF" />
               <Text style={styles.muted}>Rubro: {rubroLabel}</Text>
             </View>
+            {isModeOnline ? (
+              <View style={styles.row}>
+                <Ionicons name="laptop-outline" size={18} color="#E9FEFF" />
+                <Text style={styles.muted}>Modalidad: Servicio Online</Text>
+              </View>
+            ) : shouldShowAddress ? (
+              <View style={styles.row}>
+                <Ionicons name="home-outline" size={18} color="#E9FEFF" />
+                <Text style={styles.muted}>
+                  {isModeOffice ? 'Dirección del local: ' : 'Dirección: '}
+                  {addressText}
+                </Text>
+              </View>
+            ) : null}
 
-            <View style={styles.row}>
-              <Ionicons name="home-outline" size={18} color="#E9FEFF" />
-              <Text style={styles.muted}>Dirección: {addressText}</Text>
-            </View>
-
-            {addressText !== '—' && (
+            {shouldShowAddress && (
               <Pressable
                 onPress={() => openInMaps(addressText)}
                 style={[styles.ctaAlt, { marginTop: 10 }]}

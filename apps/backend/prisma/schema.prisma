@@ -1,6 +1,3 @@
-// Solucity — schema.prisma (v1 eficiente, relaciones corregidas)
-// DB: PostgreSQL
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,9 +7,420 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/**
- * ===================== Enums =====================
- */
+model User {
+  id               String             @id @default(cuid())
+  phone            String?            @unique
+  email            String             @unique
+  name             String?
+  surname          String?
+  passwordHash     String
+  role             Role
+  status           UserStatus         @default(ACTIVE)
+  twoFactorEnabled Boolean            @default(false)
+  failedLoginCount Int                @default(0)
+  lastLoginAt      DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  chatMessages     ChatMessage[]      @relation("UserChatMessages")
+  customer         CustomerProfile?
+  notifications    Notification[]
+  orderEvents      OrderEvent[]       @relation("UserOrderEvents")
+  passwordsReset   PasswordReset[]
+  pushTokens       PushToken[]        @relation("UserPushTokens")
+  reviewsGiven     Rating[]           @relation("UserReviews")
+  refreshTokens    RefreshToken[]
+  specialist       SpecialistProfile?
+  termsAcceptances TermsAcceptance[]
+  preferences      UserPreference?
+
+  @@index([status])
+  @@index([lastLoginAt])
+}
+
+model CustomerProfile {
+  id               String         @id @default(cuid())
+  userId           String         @unique
+  defaultAddressId String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  avatarUrl        String?
+  defaultAddress   Address?       @relation("CustomerDefaultAddress", fields: [defaultAddressId], references: [id])
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders           ServiceOrder[] @relation("CustomerOrders")
+}
+
+model SpecialistProfile {
+  id                String                     @id @default(cuid())
+  userId            String                     @unique
+  bio               String?
+  visitPrice        Int?
+  currency          String?
+  availableNow      Boolean                    @default(false)
+  kycStatus         VerificationStatus         @default(UNVERIFIED)
+  points            Int                        @default(0)
+  badge             Badge                      @default(BRONZE)
+  ratingAvg         Float                      @default(0)
+  ratingCount       Int                        @default(0)
+  statsFinished     Int                        @default(0)
+  statsCanceled     Int                        @default(0)
+  centerLat         Float?
+  centerLng         Float?
+  radiusKm          Float?
+  availability      Json?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  avatarUrl         String?
+  pricingLabel      String?
+  specialtyHeadline String?                    @db.VarChar(60)
+  officeAddressId   String?                    @unique
+  kycSubmissions    KycSubmission[]
+  orders            ServiceOrder[]             @relation("SpecialistOrders")
+  backgroundCheck   SpecialistBackgroundCheck?
+  certifications    SpecialistCertification[]
+  officeAddress     Address?                   @relation("SpecialistOfficeAddress", fields: [officeAddressId], references: [id])
+  serviceModes ServiceMode[]
+  user              User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  searchIndex       SpecialistSearchIndex?
+  specialties       SpecialistSpecialty[]
+  subscription      Subscription?
+
+  @@index([badge, ratingAvg, points], map: "idx_spec_rank")
+  @@index([availableNow])
+}
+
+/// *
+/// * puente especialista↔categoría (rubro)
+model SpecialistSpecialty {
+  id           String            @id @default(cuid())
+  specialistId String
+  categoryId   String
+  category     ServiceCategory   @relation(fields: [categoryId], references: [id])
+  specialist   SpecialistProfile @relation(fields: [specialistId], references: [id], onDelete: Cascade)
+
+  @@unique([specialistId, categoryId])
+  @@index([categoryId])
+}
+
+model ServiceCategoryGroup {
+  id         String            @id @default(cuid())
+  name       String            @unique
+  slug       String            @unique
+  isActive   Boolean           @default(true)
+  sortOrder  Int?
+  icon       String?
+  color      String?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  categories ServiceCategory[]
+}
+
+model ServiceCategory {
+  id                    String                    @id @default(cuid())
+  groupId               String
+  name                  String
+  slug                  String                    @unique
+  isActive              Boolean                   @default(true)
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  requiresCertification Boolean                   @default(false)
+  services              Service[]
+  group                 ServiceCategoryGroup      @relation(fields: [groupId], references: [id])
+  certifications        SpecialistCertification[]
+  specs                 SpecialistSpecialty[]
+
+  @@unique([groupId, name])
+  @@index([groupId])
+}
+
+model Service {
+  id          String          @id @default(cuid())
+  categoryId  String
+  name        String
+  description String?
+  basePoints  Int             @default(0)
+  slaHours    Int             @default(0)
+  basePrice   Int?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  category    ServiceCategory @relation(fields: [categoryId], references: [id])
+  orders      ServiceOrder[]
+
+  @@unique([categoryId, name])
+  @@index([categoryId])
+}
+
+model Address {
+  id                String             @id @default(cuid())
+  formatted         String
+  lat               Float
+  lng               Float
+  placeId           String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  customerDefaults  CustomerProfile[]  @relation("CustomerDefaultAddress")
+  orderLocations    ServiceOrder[]     @relation("OrderLocation")
+  specialistOffices SpecialistProfile? @relation("SpecialistOfficeAddress")
+
+  @@index([lat, lng])
+  @@unique([placeId])
+}
+
+model ServiceOrder {
+  id                       String             @id @default(cuid())
+  customerId               String
+  specialistId             String?
+  serviceId                String
+  locationId               String?
+  status                   OrderStatus        @default(PENDING)
+  description              String?
+  attachments              Json?
+  scheduledAt              DateTime?
+  preferredAt              DateTime?
+  isUrgent                 Boolean            @default(false)
+  autoCancelAt             DateTime?
+  acceptDeadlineAt         DateTime?
+  acceptDeadlineExtendedAt DateTime?
+  agreedPrice              Int?
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+  addressText              String?
+  chatThread               ChatThread?
+  events                   OrderEvent[]
+  rating                   Rating?
+  customer                 CustomerProfile    @relation("CustomerOrders", fields: [customerId], references: [id])
+  location                 Address?           @relation("OrderLocation", fields: [locationId], references: [id])
+  service                  Service            @relation(fields: [serviceId], references: [id])
+  specialist               SpecialistProfile? @relation("SpecialistOrders", fields: [specialistId], references: [id])
+  serviceMode ServiceMode @default(HOME)
+
+  @@index([status, scheduledAt], map: "idx_order_status_sched")
+  @@index([customerId, status], map: "idx_order_customer")
+  @@index([specialistId, status], map: "idx_order_specialist")
+  @@index([status, acceptDeadlineAt], map: "idx_serviceOrder_status_deadline")
+}
+
+model OrderEvent {
+  id        String       @id @default(cuid())
+  orderId   String
+  actorId   String
+  type      String
+  payload   Json?
+  createdAt DateTime     @default(now())
+  actor     User         @relation("UserOrderEvents", fields: [actorId], references: [id])
+  order     ServiceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+}
+
+model Rating {
+  orderId    String       @id
+  reviewerId String
+  score      Int
+  comment    String?
+  tags       Json?
+  createdAt  DateTime     @default(now())
+  order      ServiceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  reviewer   User         @relation("UserReviews", fields: [reviewerId], references: [id])
+}
+
+model ChatThread {
+  id        String        @id @default(cuid())
+  orderId   String        @unique
+  createdAt DateTime      @default(now())
+  messages  ChatMessage[]
+  order     ServiceOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model ChatMessage {
+  id          String     @id @default(cuid())
+  threadId    String
+  senderId    String
+  body        String
+  attachments Json?
+  deliveredAt DateTime?
+  readAt      DateTime?
+  createdAt   DateTime   @default(now())
+  sender      User       @relation("UserChatMessages", fields: [senderId], references: [id])
+  thread      ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+model Subscription {
+  id                 String             @id @default(cuid())
+  specialistId       String             @unique
+  status             SubscriptionStatus @default(TRIALING)
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  trialEnd           DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @default(now()) @updatedAt
+  lastPaymentStatus  String?
+  provider           String?
+  providerSubId      String?
+  lastPaymentId      String?
+  specialist         SpecialistProfile  @relation(fields: [specialistId], references: [id], onDelete: Cascade)
+
+  @@index([specialistId, status])
+}
+
+model TermsAcceptance {
+  id         String   @id @default(cuid())
+  userId     String
+  version    String
+  ip         String?
+  userAgent  String?
+  acceptedAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, version])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  userAgent String?
+  ip        String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String
+  otp       String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model UserPreference {
+  id            String  @id @default(cuid())
+  userId        String  @unique
+  theme         String?
+  notifications Json?
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SpecialistSearchIndex {
+  id            String            @id @default(cuid())
+  specialistId  String            @unique
+  groupSlugs    String[]
+  categorySlugs String[]
+  centerLat     Float
+  centerLng     Float
+  radiusKm      Float
+  ratingAvg     Float
+  ratingCount   Int
+  badge         Badge
+  visitPrice    Int?
+  availableNow  Boolean
+  verified      Boolean
+  updatedAt     DateTime          @updatedAt
+  specialist    SpecialistProfile @relation(fields: [specialistId], references: [id], onDelete: Cascade)
+
+  @@index([badge, ratingAvg, ratingCount], map: "idx_ssi_rank")
+  @@index([centerLat, centerLng], map: "idx_ssi_geo")
+  @@index([availableNow])
+}
+
+model EmailOtp {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now())
+  email     String
+  code      String
+  expiresAt DateTime
+  usedAt    DateTime?
+  attempts  Int       @default(0)
+
+  @@index([email])
+  @@index([expiresAt])
+}
+
+model KycSubmission {
+  id              String             @id @default(cuid())
+  specialistId    String
+  dniFrontUrl     String
+  dniBackUrl      String
+  selfieUrl       String
+  status          VerificationStatus @default(PENDING)
+  reviewerId      String?
+  rejectionReason String?
+  createdAt       DateTime           @default(now())
+  reviewedAt      DateTime?
+  specialist      SpecialistProfile  @relation(fields: [specialistId], references: [id], onDelete: Cascade)
+
+  @@index([specialistId, status])
+}
+
+model SpecialistCertification {
+  id              String            @id @default(cuid())
+  specialistId    String
+  categoryId      String
+  fileUrl         String
+  number          String?
+  issuer          String?
+  expiresAt       DateTime?
+  status          CertStatus        @default(PENDING)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  rejectionReason String?
+  reviewedAt      DateTime?
+  reviewerId      String?
+  category        ServiceCategory   @relation(fields: [categoryId], references: [id])
+  specialist      SpecialistProfile @relation(fields: [specialistId], references: [id])
+
+  @@unique([specialistId, categoryId], name: "specialistId_categoryId")
+}
+
+model PushToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  platform  String?
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation("UserPushTokens", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model SpecialistBackgroundCheck {
+  id              String                @id @default(cuid())
+  specialistId    String                @unique
+  fileUrl         String
+  status          BackgroundCheckStatus @default(PENDING)
+  reviewerId      String?
+  rejectionReason String?
+  reviewedAt      DateTime?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  specialist      SpecialistProfile     @relation(fields: [specialistId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
 
 enum Role {
   ADMIN
@@ -35,9 +443,9 @@ enum OrderStatus {
   CONFIRMED_BY_CLIENT
   REJECTED_BY_CLIENT
   CANCELLED_BY_CUSTOMER
-  CANCELLED_BY_SPECIALIST
   CANCELLED_AUTO
   CLOSED
+  CANCELLED_BY_SPECIALIST
 }
 
 enum VerificationStatus {
@@ -73,496 +481,8 @@ enum BackgroundCheckStatus {
   REJECTED
 }
 
-/**
- * ===================== Core: Identidad =====================
- */
-
-model User {
-  id               String     @id @default(cuid())
-  // Cambiar a opcional:
-  phone            String?    @unique
-  // Cambiar a requerido:
-  email            String     @unique
-  name             String?
-  surname          String?
-  passwordHash     String
-  role             Role
-  status           UserStatus @default(ACTIVE)
-  twoFactorEnabled Boolean    @default(false)
-  failedLoginCount Int        @default(0)
-  lastLoginAt      DateTime?
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
-
-  specialist       SpecialistProfile?
-  customer         CustomerProfile?
-  refreshTokens    RefreshToken[]
-  termsAcceptances TermsAcceptance[]
-  preferences      UserPreference?
-  passwordsReset   PasswordReset[]
-  notifications    Notification[]
-
-  pushTokens PushToken[] @relation("UserPushTokens")
-
-  orderEvents  OrderEvent[]  @relation("UserOrderEvents")
-  reviewsGiven Rating[]      @relation("UserReviews")
-  chatMessages ChatMessage[] @relation("UserChatMessages")
-
-  @@index([status])
-  @@index([lastLoginAt])
-}
-
-model CustomerProfile {
-  id               String   @id @default(cuid())
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId           String   @unique
-  defaultAddress   Address? @relation("CustomerDefaultAddress", fields: [defaultAddressId], references: [id])
-  defaultAddressId String?
-
-  avatarUrl String?
-
-  orders    ServiceOrder[] @relation("CustomerOrders")
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
-}
-
-model SpecialistProfile {
-  id     String @id @default(cuid())
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId String @unique
-
-  bio               String?
-  specialtyHeadline String? @db.VarChar(60)
-  visitPrice        Int?
-  pricingLabel      String?
-  currency          String?
-  availableNow      Boolean @default(false)
-
-  // Verificación y métricas
-  kycStatus     VerificationStatus @default(UNVERIFIED)
-  points        Int                @default(0)
-  badge         Badge              @default(BRONZE)
-  ratingAvg     Float              @default(0)
-  ratingCount   Int                @default(0)
-  statsFinished Int                @default(0)
-  statsCanceled Int                @default(0)
-
-  // Cobertura y disponibilidad
-  centerLat    Float?
-  centerLng    Float?
-  radiusKm     Float?
-  availability Json?
-
-  // Rubros
-  specialties SpecialistSpecialty[]
-
-  // 🔹 Back-relations necesarios
-  kycSubmissions  KycSubmission[]
-  certifications  SpecialistCertification[]
-  backgroundCheck SpecialistBackgroundCheck?
-
-  // Operativa
-  orders       ServiceOrder[]         @relation("SpecialistOrders")
-  subscription Subscription?
-  searchIndex  SpecialistSearchIndex?
-
-  avatarUrl String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([badge, ratingAvg, points], map: "idx_spec_rank")
-  @@index([availableNow])
-}
-
-/**
- * puente especialista↔categoría (rubro)
- */
-model SpecialistSpecialty {
-  id           String            @id @default(cuid())
-  specialist   SpecialistProfile @relation(fields: [specialistId], references: [id], onDelete: Cascade)
-  specialistId String
-  category     ServiceCategory   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  categoryId   String
-
-  @@unique([specialistId, categoryId])
-  @@index([categoryId])
-}
-
-/**
- * ===================== Catálogo =====================
- */
-
-model ServiceCategoryGroup {
-  id        String  @id @default(cuid())
-  name      String  @unique
-  slug      String  @unique
-  isActive  Boolean @default(true)
-  sortOrder Int?
-  icon      String?
-  color     String?
-
-  categories ServiceCategory[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model ServiceCategory {
-  id       String               @id @default(cuid())
-  group    ServiceCategoryGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  groupId  String
-  name     String
-  slug     String               @unique
-  isActive Boolean              @default(true)
-
-  requiresCertification Boolean @default(false)
-
-  services Service[]
-  specs    SpecialistSpecialty[]
-
-  // 🔹 Back-relation para certificaciones por rubro
-  certifications SpecialistCertification[] // 👈 NUEVO
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([groupId, name])
-  @@index([groupId])
-}
-
-model Service {
-  id          String          @id @default(cuid())
-  category    ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  categoryId  String
-  name        String
-  description String?
-  basePoints  Int             @default(0)
-  slaHours    Int             @default(0)
-  basePrice   Int?
-
-  orders ServiceOrder[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([categoryId, name])
-  @@index([categoryId])
-}
-
-/**
- * ===================== Address (con back-relations) =====================
- */
-
-model Address {
-  id        String  @id @default(cuid())
-  formatted String
-  lat       Float
-  lng       Float
-  placeId   String?
-
-  // back-relations
-  customerDefaults CustomerProfile[] @relation("CustomerDefaultAddress")
-  orderLocations   ServiceOrder[]    @relation("OrderLocation")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([lat, lng])
-}
-
-/**
- * ===================== Operación (órdenes) =====================
- */
-
-model ServiceOrder {
-  id           String             @id @default(cuid())
-  customer     CustomerProfile    @relation("CustomerOrders", fields: [customerId], references: [id], onDelete: Restrict)
-  customerId   String
-  specialist   SpecialistProfile? @relation("SpecialistOrders", fields: [specialistId], references: [id])
-  specialistId String?
-  service      Service            @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  serviceId    String
-  location     Address?           @relation("OrderLocation", fields: [locationId], references: [id])
-  locationId   String?
-
-  addressText String?
-
-  status                   OrderStatus @default(PENDING)
-  description              String?
-  attachments              Json?
-  scheduledAt              DateTime?
-  preferredAt              DateTime?
-  isUrgent                 Boolean     @default(false)
-  autoCancelAt             DateTime?
-  acceptDeadlineAt         DateTime?
-  acceptDeadlineExtendedAt DateTime?
-  agreedPrice              Int?
-
-  events     OrderEvent[]
-  rating     Rating?
-  chatThread ChatThread?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([status, scheduledAt], map: "idx_order_status_sched")
-  @@index([customerId, status], map: "idx_order_customer")
-  @@index([specialistId, status], map: "idx_order_specialist")
-  @@index([status, acceptDeadlineAt], name: "idx_serviceOrder_status_deadline")
-}
-
-model OrderEvent {
-  id        String       @id @default(cuid())
-  order     ServiceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderId   String
-  actor     User         @relation("UserOrderEvents", fields: [actorId], references: [id], onDelete: Restrict)
-  actorId   String
-  type      String
-  payload   Json?
-  createdAt DateTime     @default(now())
-
-  @@index([orderId, createdAt])
-}
-
-model Rating {
-  order      ServiceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderId    String       @id
-  reviewer   User         @relation("UserReviews", fields: [reviewerId], references: [id], onDelete: Restrict)
-  reviewerId String
-  score      Int
-  comment    String?
-  tags       Json?
-  createdAt  DateTime     @default(now())
-}
-
-/**
- * ===================== Comunicación =====================
- */
-
-model ChatThread {
-  id        String        @id @default(cuid())
-  order     ServiceOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderId   String        @unique
-  messages  ChatMessage[]
-  createdAt DateTime      @default(now())
-}
-
-model ChatMessage {
-  id          String     @id @default(cuid())
-  thread      ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  threadId    String
-  sender      User       @relation("UserChatMessages", fields: [senderId], references: [id], onDelete: Restrict)
-  senderId    String
-  body        String
-  attachments Json?
-  deliveredAt DateTime?
-  readAt      DateTime?
-  createdAt   DateTime   @default(now())
-
-  @@index([threadId, createdAt])
-}
-
-model Notification {
-  id        String    @id @default(cuid())
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-  type      String
-  title     String
-  body      String
-  data      Json?
-  readAt    DateTime?
-  createdAt DateTime  @default(now())
-
-  @@index([userId, readAt])
-}
-
-/**
- * ===================== Suscripciones =====================
- */
-
-model Subscription {
-  id                 String             @id @default(cuid())
-  specialist         SpecialistProfile  @relation(fields: [specialistId], references: [id], onDelete: Cascade)
-  specialistId       String             @unique
-  status             SubscriptionStatus @default(TRIALING)
-  currentPeriodStart DateTime
-  currentPeriodEnd   DateTime
-  trialEnd           DateTime?
-
-  provider          String? // "MERCADOPAGO"
-  providerSubId     String? // id de la suscripción en MP
-  lastPaymentStatus String? // approved | pending | rejected
-  lastPaymentId     String? //
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
-
-  @@index([specialistId, status])
-}
-
-/**
- * ===================== Auth & Preferencias =====================
- */
-
-model TermsAcceptance {
-  id         String   @id @default(cuid())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId     String
-  version    String
-  ip         String?
-  userAgent  String?
-  acceptedAt DateTime @default(now())
-
-  @@index([userId, version])
-}
-
-model RefreshToken {
-  id        String   @id @default(cuid())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-  token     String   @unique
-  userAgent String?
-  ip        String?
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  @@index([userId, expiresAt])
-}
-
-model PasswordReset {
-  id        String    @id @default(cuid())
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-  otp       String
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
-
-  @@index([userId, expiresAt])
-}
-
-model UserPreference {
-  id            String  @id @default(cuid())
-  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId        String  @unique
-  theme         String? // "light" | "dark" | "system"
-  notifications Json?
-}
-
-/**
- * ===================== Proyección de búsqueda =====================
- */
-/**
- * Para listados rápidos sin joins (se actualiza por jobs)
- */
-
-model SpecialistSearchIndex {
-  id           String            @id @default(cuid())
-  specialist   SpecialistProfile @relation(fields: [specialistId], references: [id], onDelete: Cascade)
-  specialistId String            @unique
-
-  groupSlugs    String[] // ej: ["construccion","mantenimiento"]
-  categorySlugs String[] // ej: ["plomero","electricista"]
-  centerLat     Float
-  centerLng     Float
-  radiusKm      Float
-  ratingAvg     Float
-  ratingCount   Int
-  badge         Badge
-  visitPrice    Int?
-  availableNow  Boolean
-  verified      Boolean // derivado: kycStatus == VERIFIED o credencial válida
-
-  updatedAt DateTime @updatedAt
-
-  @@index([badge, ratingAvg, ratingCount], map: "idx_ssi_rank")
-  @@index([centerLat, centerLng], map: "idx_ssi_geo")
-  @@index([availableNow])
-}
-
-model EmailOtp {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
-
-  email     String
-  code      String // 6 dígitos
-  expiresAt DateTime
-  usedAt    DateTime?
-  attempts  Int       @default(0)
-
-  @@index([email])
-  @@index([expiresAt])
-}
-
-// schema.prisma (agrega al final)
-model KycSubmission {
-  id              String             @id @default(cuid())
-  specialist      SpecialistProfile  @relation(fields: [specialistId], references: [id], onDelete: Cascade)
-  specialistId    String
-  dniFrontUrl     String
-  dniBackUrl      String
-  selfieUrl       String
-  status          VerificationStatus @default(PENDING) // usa tu enum
-  reviewerId      String?
-  rejectionReason String?
-  createdAt       DateTime           @default(now())
-  reviewedAt      DateTime?
-
-  @@index([specialistId, status])
-}
-
-model SpecialistCertification {
-  id           String            @id @default(cuid())
-  specialist   SpecialistProfile @relation(fields: [specialistId], references: [id])
-  specialistId String
-
-  category   ServiceCategory @relation(fields: [categoryId], references: [id])
-  categoryId String
-
-  fileUrl   String
-  number    String?
-  issuer    String?
-  expiresAt DateTime?
-
-  status          CertStatus @default(PENDING)
-  reviewerId      String?
-  rejectionReason String?
-  reviewedAt      DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([specialistId, categoryId], name: "specialistId_categoryId")
-}
-
-model PushToken {
-  id        String   @id @default(cuid())
-  user      User     @relation("UserPushTokens", fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-  token     String   @unique
-  platform  String?
-  enabled   Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-}
-
-model SpecialistBackgroundCheck {
-  id           String            @id @default(cuid())
-  specialistId String            @unique
-  specialist   SpecialistProfile @relation(fields: [specialistId], references: [id], onDelete: Cascade)
-
-  fileUrl String
-  status  BackgroundCheckStatus @default(PENDING)
-
-  reviewerId      String? // admin userId
-  rejectionReason String?
-  reviewedAt      DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([status])
+enum ServiceMode {
+  HOME
+  OFFICE
+  ONLINE
 }

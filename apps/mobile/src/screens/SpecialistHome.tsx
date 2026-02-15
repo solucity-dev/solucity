@@ -282,6 +282,11 @@ export default function SpecialistHome() {
 
   const [profile, setProfile] = useState<SpecProfile | null>(null);
 
+  // 🔥 Modalidad de servicio
+  const [serviceModes, setServiceModes] = useState<('HOME' | 'OFFICE' | 'ONLINE')[]>([]);
+
+  const [officeAddress, setOfficeAddress] = useState('');
+
   // avatar
   const [avatar, setAvatar] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -602,6 +607,18 @@ export default function SpecialistHome() {
         }
 
         setProfile(p);
+        // 🔥 Cargar modalidades del backend
+        if (Array.isArray((p as any).serviceModes)) {
+          setServiceModes((p as any).serviceModes);
+        } else {
+          setServiceModes(['HOME']); // fallback seguro
+        }
+
+        // 🔥 Cargar dirección del local si existe
+        if ((p as any).officeAddress?.formatted) {
+          setOfficeAddress((p as any).officeAddress.formatted);
+        }
+
         setBio(p.bio ?? '');
         setHeadline((p.specialtyHeadline ?? '').trim());
 
@@ -1120,12 +1137,41 @@ export default function SpecialistHome() {
     }
   }
 
+  async function saveServiceModes() {
+    try {
+      if (!serviceModes.length) {
+        Alert.alert('Seleccioná al menos una modalidad.');
+        return;
+      }
+
+      if (serviceModes.includes('OFFICE') && !officeAddress.trim()) {
+        Alert.alert('Debés cargar la dirección de tu local.');
+        return;
+      }
+
+      await api.patch('/specialists/me', {
+        serviceModes,
+        officeAddress: serviceModes.includes('OFFICE') ? officeAddress.trim() : null,
+      });
+
+      Alert.alert('Listo', 'Modalidades actualizadas.');
+    } catch {
+      Alert.alert('Ups', 'No se pudo guardar.');
+    }
+  }
+
   function toggleDay(idx: number) {
     setDays((prev) => (prev.includes(idx) ? prev.filter((d) => d !== idx) : [...prev, idx].sort()));
   }
   function toggleSpecialty(slug: string) {
     setSpecialties((prev) =>
       prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug],
+    );
+  }
+
+  function toggleServiceMode(mode: 'HOME' | 'OFFICE' | 'ONLINE') {
+    setServiceModes((prev) =>
+      prev.includes(mode) ? prev.filter((m) => m !== mode) : [...prev, mode],
     );
   }
 
@@ -1900,6 +1946,82 @@ export default function SpecialistHome() {
               )}
             </Pressable>
           </Section>
+
+          {/* Modalidad de servicio */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Modalidad de servicio</Text>
+
+            <View style={{ marginTop: 12, gap: 10 }}>
+              <Pressable
+                onPress={() => toggleServiceMode('HOME')}
+                style={[
+                  styles.chip,
+                  serviceModes.includes('HOME') ? styles.chipOn : styles.chipOff,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.chipT,
+                    { color: serviceModes.includes('HOME') ? '#063A40' : '#9ec9cd' },
+                  ]}
+                >
+                  A domicilio
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => toggleServiceMode('OFFICE')}
+                style={[
+                  styles.chip,
+                  serviceModes.includes('OFFICE') ? styles.chipOn : styles.chipOff,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.chipT,
+                    { color: serviceModes.includes('OFFICE') ? '#063A40' : '#9ec9cd' },
+                  ]}
+                >
+                  En oficina / local
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => toggleServiceMode('ONLINE')}
+                style={[
+                  styles.chip,
+                  serviceModes.includes('ONLINE') ? styles.chipOn : styles.chipOff,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.chipT,
+                    { color: serviceModes.includes('ONLINE') ? '#063A40' : '#9ec9cd' },
+                  ]}
+                >
+                  Online
+                </Text>
+              </Pressable>
+            </View>
+
+            {serviceModes.includes('OFFICE') && (
+              <>
+                <Text style={[styles.subTitle, { marginTop: 12 }]}>Dirección del local</Text>
+
+                <TextInput
+                  value={officeAddress}
+                  onChangeText={setOfficeAddress}
+                  placeholder="Dirección completa de tu local"
+                  placeholderTextColor="#9ec9cd"
+                  style={styles.input}
+                />
+              </>
+            )}
+
+            <Pressable style={styles.btn} onPress={saveServiceModes}>
+              <Text style={styles.btnT}>Guardar modalidades</Text>
+            </Pressable>
+          </View>
 
           {/* Rubros */}
           <Section

@@ -274,6 +274,9 @@ export default function CreateOrderScreen() {
   type PlaceMode = 'AT_HOME' | 'AT_SPECIALIST' | 'ONLINE';
   const [placeMode, setPlaceMode] = useState<PlaceMode>('AT_HOME');
 
+  // 🔥 NUEVO: modos reales del especialista (desde backend)
+  const [availableModes, setAvailableModes] = useState<('HOME' | 'OFFICE' | 'ONLINE')[]>([]);
+
   const [locality, setLocality] = useState('Río Cuarto');
   const [localityOpen, setLocalityOpen] = useState(false);
   const [localityQuery, setLocalityQuery] = useState('');
@@ -283,6 +286,45 @@ export default function CreateOrderScreen() {
       setAddress(me.defaultAddress.formatted);
     }
   }, [me?.defaultAddress?.formatted, paramAddress]);
+
+  // 🔥 NUEVO: siempre cargar serviceModes del especialista
+  useEffect(() => {
+    if (!specialistIdParam || !categorySlugParam) return;
+
+    let mounted = true;
+
+    (async () => {
+      try {
+        const qs = `?categorySlug=${encodeURIComponent(categorySlugParam)}`;
+        const spec = await api.get(`/specialists/${specialistIdParam}${qs}`);
+
+        if (!mounted) return;
+
+        const modesFromBackend: ('HOME' | 'OFFICE' | 'ONLINE')[] =
+          Array.isArray(spec.data?.serviceModes) && spec.data.serviceModes.length
+            ? spec.data.serviceModes
+            : ['HOME'];
+
+        setAvailableModes(modesFromBackend);
+
+        // autoselección si solo tiene 1 modo
+        if (modesFromBackend.length === 1) {
+          const only = modesFromBackend[0];
+          if (only === 'HOME') setPlaceMode('AT_HOME');
+          if (only === 'OFFICE') setPlaceMode('AT_SPECIALIST');
+          if (only === 'ONLINE') setPlaceMode('ONLINE');
+        }
+      } catch (e) {
+        if (__DEV__) {
+          console.log('[CreateOrder] error loading serviceModes', e);
+        }
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [specialistIdParam, categorySlugParam]);
 
   const [desc, setDesc] = useState('');
   const [urgent, setUrgent] = useState(false);
@@ -438,13 +480,7 @@ export default function CreateOrderScreen() {
 
       // ✅ Armamos addressText según modalidad
       const typedFormatted =
-        placeMode === 'AT_HOME'
-          ? loc
-            ? `${baseAddress}, ${loc}, Córdoba`
-            : baseAddress
-          : placeMode === 'AT_SPECIALIST'
-            ? `En local/oficina — ${loc ? `${loc}, Córdoba` : 'Córdoba'}`
-            : `Online — ${loc ? `${loc}, Córdoba` : 'Córdoba'}`;
+        placeMode === 'AT_HOME' ? (loc ? `${baseAddress}, ${loc}, Córdoba` : baseAddress) : null;
 
       if (mode === 'schedule' && !scheduledAt) {
         Alert.alert('Faltan datos', 'Indicá fecha y hora o elegí “Ahora”.');
@@ -544,10 +580,12 @@ export default function CreateOrderScreen() {
       let locationIdToSend: string | null = null;
 
       if (placeMode === 'AT_HOME') {
-        const hasManualAddress = typedFormatted.length > 0 && typedFormatted !== defaultFormatted;
+        const safeTyped = typedFormatted ?? '';
+
+        const hasManualAddress = safeTyped.length > 0 && safeTyped !== defaultFormatted;
 
         const shouldSendLocationId =
-          !!explicitLocationId || (!hasManualAddress && typedFormatted === defaultFormatted);
+          !!explicitLocationId || (!hasManualAddress && safeTyped === defaultFormatted);
 
         // ✅ Acá está el fix TS: nunca asignamos undefined
         locationIdToSend = explicitLocationId
@@ -580,12 +618,13 @@ export default function CreateOrderScreen() {
         specialistId: specialistIdParam,
         serviceId,
         categorySlug, // audit/log
-        placeMode, // ✅ NUEVO
+        serviceMode:
+          placeMode === 'AT_HOME' ? 'HOME' : placeMode === 'AT_SPECIALIST' ? 'OFFICE' : 'ONLINE',
         description: description || null,
         attachments,
         isUrgent: urgent || mode === 'now',
         ...(locationIdToSend ? { locationId: locationIdToSend } : {}),
-        addressText: typedFormatted || null,
+        ...(typedFormatted ? { addressText: typedFormatted } : {}),
       };
 
       if (mode === 'now') payload.preferredAt = new Date().toISOString();
@@ -686,33 +725,38 @@ export default function CreateOrderScreen() {
           <Text style={styles.label}>¿Dónde se realiza?</Text>
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
             {[
-              { k: 'AT_HOME' as const, t: 'A domicilio' },
-              { k: 'AT_SPECIALIST' as const, t: 'En local/oficina' },
-              { k: 'ONLINE' as const, t: 'Online' },
-            ].map((opt) => {
-              const on = placeMode === opt.k;
-              return (
-                <Pressable
-                  key={opt.k}
-                  onPress={() => setPlaceMode(opt.k)}
-                  style={{
-                    flex: 1,
-                    paddingVertical: 10,
-                    borderRadius: 12,
-                    alignItems: 'center',
-                    backgroundColor: on ? '#E9FEFF' : 'rgba(233,254,255,0.15)',
-                    borderWidth: 1,
-                    borderColor: 'rgba(233,254,255,0.35)',
-                  }}
-                >
-                  <Text
-                    style={{ fontWeight: '900', color: on ? '#06494F' : '#E9FEFF', fontSize: 12 }}
+              availableModes.includes('HOME') && { k: 'AT_HOME' as const, t: 'A domicilio' },
+              availableModes.includes('OFFICE') && {
+                k: 'AT_SPECIALIST' as const,
+                t: 'En local/oficina',
+              },
+              availableModes.includes('ONLINE') && { k: 'ONLINE' as const, t: 'Online' },
+            ]
+              .filter(Boolean)
+              .map((opt: any) => {
+                const on = placeMode === opt.k;
+                return (
+                  <Pressable
+                    key={opt.k}
+                    onPress={() => setPlaceMode(opt.k)}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 10,
+                      borderRadius: 12,
+                      alignItems: 'center',
+                      backgroundColor: on ? '#E9FEFF' : 'rgba(233,254,255,0.15)',
+                      borderWidth: 1,
+                      borderColor: 'rgba(233,254,255,0.35)',
+                    }}
                   >
-                    {opt.t}
-                  </Text>
-                </Pressable>
-              );
-            })}
+                    <Text
+                      style={{ fontWeight: '900', color: on ? '#06494F' : '#E9FEFF', fontSize: 12 }}
+                    >
+                      {opt.t}
+                    </Text>
+                  </Pressable>
+                );
+              })}
           </View>
 
           {/* Dirección */}

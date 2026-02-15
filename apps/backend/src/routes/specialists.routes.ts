@@ -1141,10 +1141,11 @@ const PatchMeSchema = z.object({
   officeAddress: z
     .object({
       formatted: z.string().min(5),
-      lat: z.number(),
-      lng: z.number(),
+      lat: z.coerce.number(),
+      lng: z.coerce.number(),
       placeId: z.string().optional().nullable(),
     })
+    .nullable()
     .optional(),
 });
 
@@ -1384,12 +1385,11 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
     let nextOfficeAddressId: string | null | undefined = undefined;
 
     // Si mandan serviceModes, validamos reglas
-    if (data.serviceModes) {
+    if (data.serviceModes !== undefined) {
       const hasOffice = data.serviceModes.includes('OFFICE');
 
       if (hasOffice) {
-        // si selecciona OFFICE, officeAddress es obligatoria
-        if (!data.officeAddress) {
+        if (!data.officeAddress || !data.officeAddress.formatted) {
           return res.status(400).json({ ok: false, error: 'office_address_required' });
         }
 

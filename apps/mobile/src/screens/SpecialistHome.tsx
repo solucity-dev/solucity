@@ -257,7 +257,8 @@ export default function SpecialistHome() {
     | 'priceRadius'
     | 'specialties'
     | 'location'
-    | 'avatar';
+    | 'avatar'
+    | 'serviceModes';
 
   const [savingBy, setSavingBy] = useState<Record<SaveKey, boolean>>({
     bio: false,
@@ -267,6 +268,7 @@ export default function SpecialistHome() {
     specialties: false,
     location: false,
     avatar: false,
+    serviceModes: false,
   });
 
   const setSavingKey = useCallback((k: SaveKey, v: boolean) => {
@@ -304,6 +306,7 @@ export default function SpecialistHome() {
   // ✅ Lazy-load certs (cargar solo al abrir el bloque la 1ra vez)
   const certsLoadedOnceRef = useRef(false);
   const [certsLoading, setCertsLoading] = useState(false);
+  const [openServiceModes, setOpenServiceModes] = useState(false);
 
   // catálogo rubros
   type CategoryOption = {
@@ -1149,14 +1152,23 @@ export default function SpecialistHome() {
         return;
       }
 
+      setSavingKey('serviceModes', true);
+
       await api.patch('/specialists/me', {
         serviceModes,
-        officeAddress: serviceModes.includes('OFFICE') ? officeAddress.trim() : null,
+        officeAddress: serviceModes.includes('OFFICE') ? { formatted: officeAddress.trim() } : null,
       });
 
+      // ✅ recargo para que quede idéntico a lo que el backend guarda/devuelve
+      await reloadProfileAndSubscription({ silent: true });
+
       Alert.alert('Listo', 'Modalidades actualizadas.');
-    } catch {
-      Alert.alert('Ups', 'No se pudo guardar.');
+    } catch (e: any) {
+      const msg = e?.response?.data?.error ?? 'No se pudo guardar.';
+      if (__DEV__) console.log('[saveServiceModes] error', e?.response?.status, e?.response?.data);
+      Alert.alert('Ups', String(msg));
+    } finally {
+      setSavingKey('serviceModes', false);
     }
   }
 
@@ -1947,10 +1959,12 @@ export default function SpecialistHome() {
             </Pressable>
           </Section>
 
-          {/* Modalidad de servicio */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Modalidad de servicio</Text>
-
+          {/* Modalidad de servicio (desplegable) */}
+          <Section
+            title="Modalidad de servicio"
+            open={openServiceModes}
+            onToggle={() => setOpenServiceModes((v) => !v)}
+          >
             <View style={{ marginTop: 12, gap: 10 }}>
               <Pressable
                 onPress={() => toggleServiceMode('HOME')}
@@ -1958,6 +1972,7 @@ export default function SpecialistHome() {
                   styles.chip,
                   serviceModes.includes('HOME') ? styles.chipOn : styles.chipOff,
                 ]}
+                disabled={savingBy.serviceModes}
               >
                 <Text
                   style={[
@@ -1975,6 +1990,7 @@ export default function SpecialistHome() {
                   styles.chip,
                   serviceModes.includes('OFFICE') ? styles.chipOn : styles.chipOff,
                 ]}
+                disabled={savingBy.serviceModes}
               >
                 <Text
                   style={[
@@ -1992,6 +2008,7 @@ export default function SpecialistHome() {
                   styles.chip,
                   serviceModes.includes('ONLINE') ? styles.chipOn : styles.chipOff,
                 ]}
+                disabled={savingBy.serviceModes}
               >
                 <Text
                   style={[
@@ -2014,14 +2031,26 @@ export default function SpecialistHome() {
                   placeholder="Dirección completa de tu local"
                   placeholderTextColor="#9ec9cd"
                   style={styles.input}
+                  editable={!savingBy.serviceModes}
                 />
               </>
             )}
 
-            <Pressable style={styles.btn} onPress={saveServiceModes}>
-              <Text style={styles.btnT}>Guardar modalidades</Text>
+            <Pressable
+              style={[styles.btn, savingBy.serviceModes && styles.btnDisabled]}
+              onPress={saveServiceModes}
+              disabled={savingBy.serviceModes}
+            >
+              {savingBy.serviceModes ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <ActivityIndicator />
+                  <Text style={styles.btnT}>Guardando…</Text>
+                </View>
+              ) : (
+                <Text style={styles.btnT}>Guardar modalidades</Text>
+              )}
             </Pressable>
-          </View>
+          </Section>
 
           {/* Rubros */}
           <Section

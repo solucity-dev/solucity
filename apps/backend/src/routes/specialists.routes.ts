@@ -488,6 +488,8 @@ router.get('/search', async (req, res) => {
         pricingLabel: true,
         backgroundCheck: { select: { status: true } },
         user: { select: { status: true } },
+        serviceModes: true,
+        officeAddressId: true,
       },
     });
 
@@ -627,6 +629,8 @@ router.get('/search', async (req, res) => {
 
           kycStatus: prof?.kycStatus ?? 'UNVERIFIED',
           avatarUrl: prof?.avatarUrl ?? null,
+          serviceModes: (prof as any)?.serviceModes ?? ['HOME'],
+          officeAddressId: (prof as any)?.officeAddressId ?? null,
           visible,
           availableNow, // pill (incluye horario)
           pricingLabel: prof?.pricingLabel ?? null,
@@ -1470,7 +1474,10 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
         ...(setAvailableNow !== undefined
           ? { availableNow: current?.kycStatus === 'VERIFIED' ? setAvailableNow : false }
           : {}),
-        ...(data.serviceModes !== undefined ? { serviceModes: data.serviceModes as any } : {}),
+        ...(data.serviceModes !== undefined
+          ? { serviceModes: { set: data.serviceModes as any } }
+          : {}),
+
         ...(nextOfficeAddressId !== undefined ? { officeAddressId: nextOfficeAddressId } : {}),
       },
       select: { id: true },
@@ -1687,7 +1694,7 @@ router.get('/:id', async (req, res) => {
         user: { select: { status: true } },
         bio: true,
         visitPrice: true,
-        pricingLabel: true, // ✅ NUEVO
+        pricingLabel: true,
         currency: true,
         availableNow: true,
         kycStatus: true,
@@ -1699,7 +1706,9 @@ router.get('/:id', async (req, res) => {
         radiusKm: true,
         availability: true,
         avatarUrl: true,
-        backgroundCheck: { select: { status: true } }, // ✅ NUEVO
+        serviceModes: true,
+        officeAddressId: true,
+        backgroundCheck: { select: { status: true } },
         specialties: {
           select: {
             categoryId: true,
@@ -1931,7 +1940,7 @@ router.get('/:id', async (req, res) => {
       categoryEnabled,
       availableNow: safeAvailableNow,
       visitPrice: spec.visitPrice,
-      pricingLabel: spec.pricingLabel ?? null, // ✅ NUEVO
+      pricingLabel: spec.pricingLabel ?? null,
       currency: spec.currency,
       bio: spec.bio,
       centerLat: spec.centerLat,
@@ -1939,6 +1948,8 @@ router.get('/:id', async (req, res) => {
       radiusKm: spec.radiusKm,
       distanceKm,
       availability: spec.availability,
+      serviceModes: (spec as any).serviceModes ?? ['HOME'],
+      officeAddressId: (spec as any).officeAddressId ?? null,
       specialties: spec.specialties.map((s) => ({
         id: s.category.id,
         name: s.category.name,

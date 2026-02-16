@@ -356,6 +356,15 @@ orders.post('/', auth, async (req, res) => {
     let locationId: string | null =
       parsed.mode === 'full' ? (parsed.data.locationId ?? null) : null;
 
+    const rawAddressInput = (req.body as any)?.address ?? (req.body as any)?.addressText;
+
+    let addressText =
+      typeof rawAddressInput === 'string'
+        ? rawAddressInput.trim()
+        : typeof rawAddressInput?.formatted === 'string'
+          ? rawAddressInput.formatted.trim()
+          : null;
+
     if (!customerId) {
       const cust = await prisma.customerProfile.findUnique({
         where: { userId: uid },
@@ -363,7 +372,7 @@ orders.post('/', auth, async (req, res) => {
       });
       if (!cust) return res.status(400).json({ ok: false, error: 'user_not_customer' });
       customerId = cust.id;
-      locationId = locationId ?? cust.defaultAddressId ?? null;
+      locationId = locationId ?? (addressText ? null : (cust.defaultAddressId ?? null));
     }
 
     // 2) serviceId + categorySlug (VALIDADO)
@@ -416,16 +425,6 @@ orders.post('/', auth, async (req, res) => {
     if (finalServiceMode === 'OFFICE' && !spec.officeAddressId) {
       return res.status(409).json({ ok: false, error: 'specialist_office_address_missing' });
     }
-
-    // ✅ addressText: tomamos dirección manual directamente del body
-    const rawAddressInput = (req.body as any)?.address ?? (req.body as any)?.addressText;
-
-    let addressText =
-      typeof rawAddressInput === 'string'
-        ? rawAddressInput.trim()
-        : typeof rawAddressInput?.formatted === 'string'
-          ? rawAddressInput.formatted.trim()
-          : null;
 
     // ⚠️ IMPORTANTE:
     // - HOME: puede usar dirección del cliente (locationId o addressText + geocode)

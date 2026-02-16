@@ -56,7 +56,7 @@ type OrderDetail = {
     avatarUrl?: string | null;
   } | null;
 
-  address: { id?: string; formatted?: string | null } | string | null;
+  address: string | null;
   distanceKm?: number | null;
 
   attachments: any[];
@@ -521,8 +521,7 @@ export default function OrderDetailScreen() {
   const isExpired = meta?.deadline === 'expired';
   const status = String(data?.status ?? 'PENDING').toUpperCase();
 
-  const serviceMode = String((data as any)?.serviceMode ?? 'HOME').toUpperCase();
-
+  const serviceMode = data?.serviceMode ?? 'HOME';
   const isModeOffice = serviceMode === 'OFFICE';
   const isModeOnline = serviceMode === 'ONLINE';
 
@@ -644,35 +643,10 @@ export default function OrderDetailScreen() {
   }, [data]);
 
   const addressText = (() => {
-    const a: any = data?.address;
+    const a = data?.address;
     if (!a) return '—';
-
     if (typeof a === 'string') return a.trim() || '—';
-    if (typeof a.formatted === 'string' && a.formatted.trim()) return a.formatted.trim();
-
-    const candidates = [
-      a.address,
-      a.full,
-      a.text,
-      a.label,
-      a.display,
-      a.formattedAddress,
-      a.line1,
-    ].filter((x) => typeof x === 'string' && x.trim());
-
-    if (candidates.length) return candidates[0].trim();
-
-    const parts = [a.street, a.number, a.city, a.state, a.zip]
-      .filter((x) => typeof x === 'string' && x.trim())
-      .map((s: string) => s.trim());
-
-    if (parts.length) return parts.join(' ');
-
-    try {
-      return __DEV__ ? JSON.stringify(a) : '—';
-    } catch {
-      return '—';
-    }
+    return '—';
   })();
 
   // 🔥 Mostrar dirección solo si:

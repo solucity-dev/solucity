@@ -37,8 +37,8 @@ import {
 import { getMySubscription, type SubscriptionInfo } from '../lib/subscriptionApi';
 import { useNotifications } from '../notifications/NotificationsProvider';
 
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { SpecialistHomeStackParamList } from '../types';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 type SpecProfile = {
   bio: string;
@@ -1157,9 +1157,13 @@ export default function SpecialistHome() {
       if (lat && lng) {
         await api.patch('/specialists/me', {
           serviceModes,
-          officeAddress: officeAddress.trim(),
-          officeLat: lat,
-          officeLng: lng,
+          officeAddress: {
+            // ✅ AQUÍ: cambiar a objeto
+            formatted: officeAddress.trim(),
+            lat,
+            lng,
+            placeId: null, // opcional
+          },
         });
 
         Alert.alert('Listo', 'Modalidades de servicio guardadas correctamente.');
@@ -1167,7 +1171,7 @@ export default function SpecialistHome() {
         Alert.alert('Error', 'No se encontraron coordenadas para tu dirección de oficina.');
       }
     } catch (e) {
-      console.error(e); // Ahora puedes ver detalles del error en consola
+      console.error(e);
       Alert.alert('Error', 'No se pudo guardar la dirección de la oficina.');
     }
   }

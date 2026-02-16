@@ -1386,48 +1386,26 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
 
     // Si mandan serviceModes, validamos reglas
     if (data.serviceModes !== undefined) {
-      const officeAddress = data.officeAddress;
+      const includesOffice = data.serviceModes.includes('OFFICE');
 
-// Verificamos que la dirección esté presente en formato texto
-if (officeAddress && !officeAddress.formatted) {
-  return res.status(400).json({ ok: false, error: 'office_address_required' });
-}
+      if (includesOffice) {
+        if (!data.officeAddress) {
+          return res.status(400).json({ ok: false, error: 'office_address_required' });
+        }
 
-// Si hay placeId, se guarda como dirección en formato texto
-const placeId = officeAddress.placeId ?? null;
-if (placeId) {
-  const addr = await prisma.address.upsert({
-    where: { placeId },
-    update: {
-      formatted: officeAddress.formatted,
-      // Eliminamos lat y lng si no son necesarios
-      lat: officeAddress.lat ?? null,  // Opcional
-      lng: officeAddress.lng ?? null,  // Opcional
-    },
-    create: {
-      placeId,
-      formatted: officeAddress.formatted,
-      lat: officeAddress.lat ?? null,  // Opcional
-      lng: officeAddress.lng ?? null,  // Opcional
-    },
-    select: { id: true },
-  });
-  nextOfficeAddressId = addr.id;
-} else {
-  // Crear la dirección con solo el campo `formatted`
-  const addr = await prisma.address.create({
-    data: {
-      placeId: null,
-      formatted: officeAddress.formatted,
-      // lat y lng son opcionales
-      lat: officeAddress.lat ?? null,  // Opcional
-      lng: officeAddress.lng ?? null,  // Opcional
-    },
-    select: { id: true },
-  });
-  nextOfficeAddressId = addr.id;
-}
+        const officeAddress = data.officeAddress;
 
+        const addr = await prisma.address.create({
+          data: {
+            placeId: officeAddress.placeId ?? null,
+            formatted: officeAddress.formatted,
+            lat: officeAddress.lat ?? null,
+            lng: officeAddress.lng ?? null,
+          },
+          select: { id: true },
+        });
+
+        nextOfficeAddressId = addr.id;
       } else {
         // si NO incluye OFFICE, limpiamos officeAddressId
         nextOfficeAddressId = null;

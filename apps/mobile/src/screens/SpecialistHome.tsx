@@ -1142,33 +1142,37 @@ export default function SpecialistHome() {
 
   async function saveServiceModes() {
     try {
-      if (!serviceModes.length) {
-        Alert.alert('Seleccioná al menos una modalidad.');
+      if (!serviceModes.includes('OFFICE')) {
         return;
       }
 
-      if (serviceModes.includes('OFFICE') && !officeAddress.trim()) {
-        Alert.alert('Debés cargar la dirección de tu local.');
+      if (!officeAddress.trim()) {
+        Alert.alert('Debés cargar la dirección de tu oficina.');
         return;
       }
 
-      setSavingKey('serviceModes', true);
+      const lat = profile?.centerLat;
+      const lng = profile?.centerLng;
 
-      await api.patch('/specialists/me', {
-        serviceModes,
-        officeAddress: serviceModes.includes('OFFICE') ? officeAddress.trim() : null,
-      });
+      if (lat && lng) {
+        await api.patch('/specialists/me', {
+          serviceModes,
+          officeAddress: {
+            // ✅ AQUÍ: cambiar a objeto
+            formatted: officeAddress.trim(),
+            lat,
+            lng,
+            placeId: null, // opcional
+          },
+        });
 
-      // ✅ recargo para que quede idéntico a lo que el backend guarda/devuelve
-      await reloadProfileAndSubscription({ silent: true });
-
-      Alert.alert('Listo', 'Modalidades actualizadas.');
-    } catch (e: any) {
-      const msg = e?.response?.data?.error ?? 'No se pudo guardar.';
-      if (__DEV__) console.log('[saveServiceModes] error', e?.response?.status, e?.response?.data);
-      Alert.alert('Ups', String(msg));
-    } finally {
-      setSavingKey('serviceModes', false);
+        Alert.alert('Listo', 'Modalidades de servicio guardadas correctamente.');
+      } else {
+        Alert.alert('Error', 'No se encontraron coordenadas para tu dirección de oficina.');
+      }
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'No se pudo guardar la dirección de la oficina.');
     }
   }
 

@@ -1386,45 +1386,48 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
 
     // Si mandan serviceModes, validamos reglas
     if (data.serviceModes !== undefined) {
-      const hasOffice = data.serviceModes.includes('OFFICE');
+      const officeAddress = data.officeAddress;
 
-      if (hasOffice) {
-        if (!data.officeAddress || !data.officeAddress.formatted) {
-          return res.status(400).json({ ok: false, error: 'office_address_required' });
-        }
+// Verificamos que la dirección esté presente en formato texto
+if (officeAddress && !officeAddress.formatted) {
+  return res.status(400).json({ ok: false, error: 'office_address_required' });
+}
 
-        // Upsert Address por placeId si existe, sino create
-        const placeId = data.officeAddress.placeId ?? null;
+// Si hay placeId, se guarda como dirección en formato texto
+const placeId = officeAddress.placeId ?? null;
+if (placeId) {
+  const addr = await prisma.address.upsert({
+    where: { placeId },
+    update: {
+      formatted: officeAddress.formatted,
+      // Eliminamos lat y lng si no son necesarios
+      lat: officeAddress.lat ?? null,  // Opcional
+      lng: officeAddress.lng ?? null,  // Opcional
+    },
+    create: {
+      placeId,
+      formatted: officeAddress.formatted,
+      lat: officeAddress.lat ?? null,  // Opcional
+      lng: officeAddress.lng ?? null,  // Opcional
+    },
+    select: { id: true },
+  });
+  nextOfficeAddressId = addr.id;
+} else {
+  // Crear la dirección con solo el campo `formatted`
+  const addr = await prisma.address.create({
+    data: {
+      placeId: null,
+      formatted: officeAddress.formatted,
+      // lat y lng son opcionales
+      lat: officeAddress.lat ?? null,  // Opcional
+      lng: officeAddress.lng ?? null,  // Opcional
+    },
+    select: { id: true },
+  });
+  nextOfficeAddressId = addr.id;
+}
 
-        if (placeId) {
-          const addr = await prisma.address.upsert({
-            where: { placeId },
-            update: {
-              formatted: data.officeAddress.formatted,
-              lat: data.officeAddress.lat,
-              lng: data.officeAddress.lng,
-            },
-            create: {
-              placeId,
-              formatted: data.officeAddress.formatted,
-              lat: data.officeAddress.lat,
-              lng: data.officeAddress.lng,
-            },
-            select: { id: true },
-          });
-          nextOfficeAddressId = addr.id;
-        } else {
-          const addr = await prisma.address.create({
-            data: {
-              placeId: null,
-              formatted: data.officeAddress.formatted,
-              lat: data.officeAddress.lat,
-              lng: data.officeAddress.lng,
-            },
-            select: { id: true },
-          });
-          nextOfficeAddressId = addr.id;
-        }
       } else {
         // si NO incluye OFFICE, limpiamos officeAddressId
         nextOfficeAddressId = null;

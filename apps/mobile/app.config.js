@@ -3,7 +3,7 @@
 module.exports = {
   name: 'Solucity',
   slug: 'solucity',
-  version: '1.1.5',
+  version: '1.1.6',
   orientation: 'portrait',
   scheme: 'solucity',
 
@@ -31,7 +31,7 @@ module.exports = {
 
   android: {
     package: 'com.solucity.app',
-    versionCode: 31,
+    versionCode: 32,
     blockedPermissions: ['android.permission.RECORD_AUDIO'],
     googleServicesFile: './google-services.json',
     adaptiveIcon: {

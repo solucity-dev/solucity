@@ -400,10 +400,12 @@ orders.post('/', auth, async (req, res) => {
     const modes = (spec.serviceModes as any as ('HOME' | 'OFFICE' | 'ONLINE')[]) ?? ['HOME'];
 
     // Lo que eligió el cliente (si mandó)
-    const requestedMode =
-      parsed.mode === 'full'
-        ? ((parsed.data as any).serviceMode as 'HOME' | 'OFFICE' | 'ONLINE' | undefined)
-        : ((parsed.data as any).serviceMode as 'HOME' | 'OFFICE' | 'ONLINE' | undefined);
+    const requestedModeRaw = (req.body as any)?.serviceMode;
+
+    const requestedMode: 'HOME' | 'OFFICE' | 'ONLINE' | undefined =
+      requestedModeRaw === 'HOME' || requestedModeRaw === 'OFFICE' || requestedModeRaw === 'ONLINE'
+        ? requestedModeRaw
+        : undefined;
 
     // ✅ Si el cliente no manda nada:
     // - si el especialista tiene 1 solo modo, usamos ese

@@ -411,6 +411,13 @@ orders.post('/', auth, async (req, res) => {
     const finalServiceMode: 'HOME' | 'OFFICE' | 'ONLINE' =
       requestedMode ?? (modes.length === 1 ? modes[0] : 'HOME');
 
+    console.log('[POST /orders][SERVICE MODE DEBUG]', {
+      bodyServiceMode: (req.body as any)?.serviceMode,
+      requestedMode,
+      specialistModes: modes,
+      finalServiceMode,
+    });
+
     // ✅ Validación: el modo debe estar habilitado en el especialista
     if (!modes.includes(finalServiceMode)) {
       return res.status(409).json({

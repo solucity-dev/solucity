@@ -14,6 +14,7 @@ import { auth } from '../middlewares/auth';
 import { notifyBackgroundCheckStatus } from '../services/notifyBackgroundCheck';
 import { notifyKycStatus } from '../services/notifyKyc';
 import { canSpecialistBeVisible } from '../services/subscriptionGate';
+import { dbg, debugUploads } from '../utils/debug';
 
 /** ========= Storage local (MVP) ========= **/
 
@@ -27,13 +28,11 @@ ensureDir(kycDir);
 ensureDir(certsDir);
 ensureDir(backgroundChecksDir);
 
-const DEBUG_UPLOADS = process.env.NODE_ENV !== 'production' || process.env.DEBUG_UPLOADS === 'true';
-
-if (DEBUG_UPLOADS) {
-  console.log('[specialists.routes] uploadsRoot =', uploadsRoot);
-  console.log('[specialists.routes] kycDir =', kycDir);
-  console.log('[specialists.routes] certsDir =', certsDir);
-  console.log('[specialists.routes] backgroundChecksDir =', backgroundChecksDir);
+if (debugUploads) {
+  dbg(debugUploads, '[specialists.routes] uploadsRoot =', uploadsRoot);
+  dbg(debugUploads, '[specialists.routes] kycDir =', kycDir);
+  dbg(debugUploads, '[specialists.routes] certsDir =', certsDir);
+  dbg(debugUploads, '[specialists.routes] backgroundChecksDir =', backgroundChecksDir);
 }
 
 /** ========= Multer storages ========= **/
@@ -110,6 +109,7 @@ const uploadBackgroundCheck = multer({
 
 type MulterReq = Request & { file?: Express.Multer.File };
 type AuthReq = Request & { user?: { id: string; role: string } };
+const debugSpecialists = process.env.DEBUG_SPECIALISTS === '1';
 
 /** Util: normalizar URL absoluta a partir de /uploads/... */
 function toAbsoluteUrl(u: string): string {
@@ -365,7 +365,7 @@ router.get('/search', async (req, res) => {
   res.setHeader('Expires', '0');
   res.setHeader('Surrogate-Control', 'no-store');
 
-  console.log('[GET /specialists/search]', {
+  dbg(debugSpecialists, '[GET /specialists/search]', {
     category: req.query.category,
     lat: req.query.lat,
     lng: req.query.lng,
@@ -402,7 +402,10 @@ router.get('/search', async (req, res) => {
     category = CATEGORY_ALIASES[category] ?? category;
 
     if (rawCategory !== category) {
-      console.log('[GET /specialists/search][alias]', { rawCategory, mappedTo: category });
+      dbg(debugSpecialists, '[GET /specialists/search][alias]', {
+        rawCategory,
+        mappedTo: category,
+      });
     }
 
     const lat = Number(req.query.lat ?? NaN);
@@ -1323,7 +1326,17 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' });
 
-    const data = PatchMeSchema.parse(req.body);
+    dbg(debugSpecialists, '[PATCH /specialists/me] raw body:', req.body);
+
+    const parsed = PatchMeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      dbg(debugSpecialists, '[PATCH /specialists/me] zod error:', parsed.error.flatten());
+      return res
+        .status(400)
+        .json({ ok: false, error: 'invalid_input', details: parsed.error.flatten() });
+    }
+
+    const data = parsed.data;
 
     const current = await prisma.specialistProfile.findUnique({
       where: { userId },
@@ -1345,10 +1358,8 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
       // ✅ SUSCRIPCIÓN: si no está OK, no puede ponerse disponible
       const gate = await canSpecialistBeVisible(userId);
 
-      console.log('[DEBUG availability gate]', {
-        userId,
-        gate,
-      });
+      dbg(debugSpecialists, '[availability gate]', { userId, gate });
+
       if (!gate.ok) {
         return res.status(403).json({
           ok: false,
@@ -1388,6 +1399,10 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
     // Si mandan serviceModes, validamos reglas
     if (data.serviceModes !== undefined) {
       const includesOffice = data.serviceModes.includes('OFFICE');
+
+      dbg(debugSpecialists, '[PATCH /specialists/me] serviceModes:', data.serviceModes);
+      dbg(debugSpecialists, '[PATCH /specialists/me] includesOffice:', includesOffice);
+      dbg(debugSpecialists, '[PATCH /specialists/me] officeAddress:', data.officeAddress);
 
       if (includesOffice) {
         if (!data.officeAddress) {

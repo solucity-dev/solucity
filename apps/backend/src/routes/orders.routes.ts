@@ -17,7 +17,7 @@ import {
 import { deleteChatForOrder } from '../services/chatCleanup';
 import { geocodeAddress } from '../services/geocode';
 import { sendExpoPush } from '../services/pushExpo';
-import { debugOrderDetail, debugOrders } from '../utils/debug';
+import { dbg, debugOrderDetail, debugOrders } from '../utils/debug';
 import { haversineKm } from '../utils/distance';
 
 import type { Prisma } from '@prisma/client';
@@ -76,7 +76,13 @@ function normalizeCategorySlug(raw: any): string | null {
     'paseador-perros': 'paseador-de-perros',
   };
 
-  return CATEGORY_ALIASES[s] ?? s;
+  const mapped = CATEGORY_ALIASES[s] ?? s;
+
+  if (mapped !== s) {
+    dbg(debugOrders, '[orders][normalizeCategorySlug][alias]', { raw: s, mappedTo: mapped });
+  }
+
+  return mapped;
 }
 
 // Estados abiertos/cerrados
@@ -357,6 +363,14 @@ orders.post('/', auth, async (req, res) => {
   const uid = getActorUserId(req);
   if (!uid) return res.status(401).json({ ok: false, error: 'unauthorized' });
 
+  dbg(debugOrders, '[POST /orders] incoming', {
+    uid,
+    mode: parsed.mode,
+    bodyServiceMode: (req.body as any)?.serviceMode,
+    bodyCategorySlug: (req.body as any)?.categorySlug,
+    bodyAddress: (req.body as any)?.address ?? (req.body as any)?.addressText ?? null,
+  });
+
   try {
     // 1) customerId + ubicación por defecto si no viene
     let customerId: string | null =
@@ -429,14 +443,13 @@ orders.post('/', auth, async (req, res) => {
     const finalServiceMode: 'HOME' | 'OFFICE' | 'ONLINE' =
       requestedMode ?? (modes.length === 1 ? modes[0] : 'HOME');
 
-    if (debugOrders) {
-      console.log('[POST /orders][SERVICE MODE DEBUG]', {
-        bodyServiceMode: (req.body as any)?.serviceMode,
-        requestedMode,
-        specialistModes: modes,
-        finalServiceMode,
-      });
-    }
+    dbg(debugOrders, '[POST /orders][serviceMode]', {
+      bodyServiceMode: (req.body as any)?.serviceMode,
+      requestedMode,
+      specialistModes: modes,
+      finalServiceMode,
+      specialistOfficeAddressId: spec.officeAddressId ?? null,
+    });
 
     // ✅ Validación: el modo debe estar habilitado en el especialista
     if (!modes.includes(finalServiceMode)) {
@@ -470,6 +483,13 @@ orders.post('/', auth, async (req, res) => {
       finalLocationId = null;
       addressText = null;
     }
+
+    dbg(debugOrders, '[POST /orders][location resolution]', {
+      finalServiceMode,
+      finalLocationId,
+      addressText,
+      locality,
+    });
 
     // 🔍 Geocode solo aplica a HOME
     if (finalServiceMode === 'HOME') {
@@ -694,7 +714,7 @@ orders.post('/', auth, async (req, res) => {
         select: { id: true, category: { select: { slug: true, name: true } } },
       });
 
-      console.log('[POST /orders][FINAL]', {
+      dbg(debugOrders, '[POST /orders][FINAL]', {
         categorySlugBody: bodyCategorySlug,
         specialistId,
         serviceId,
@@ -702,6 +722,15 @@ orders.post('/', auth, async (req, res) => {
         serviceCategoryName: svcDebug?.category?.name,
       });
     }
+
+    dbg(debugOrders, '[POST /orders][persist]', {
+      customerId,
+      specialistId,
+      serviceId,
+      serviceMode: finalServiceMode,
+      locationId: finalLocationId,
+      addressText,
+    });
 
     // 4) crear
     const order = await prisma.serviceOrder.create({
@@ -1580,14 +1609,14 @@ orders.post('/:id/extend-deadline', auth, async (req, res) => {
 orders.get('/:id', auth, async (req, res) => {
   const t0 = Date.now();
 
-  const debug = debugOrderDetail;
-
   const t = (label: string, extra?: any) => {
-    if (debug) {
-      console.log('[OrderDetailAPI]', req.params.id, label, Date.now() - t0, 'ms', extra ?? '');
-    }
+    dbg(debugOrderDetail, '[OrderDetailAPI]', {
+      orderId: req.params.id,
+      label,
+      ms: Date.now() - t0,
+      ...(extra ? { extra } : {}),
+    });
   };
-
   t('start', { uid: getActorUserId(req), lat: req.query.lat, lng: req.query.lng });
 
   try {
@@ -1864,17 +1893,14 @@ orders.get('/:id', auth, async (req, res) => {
 
     if (sm2 === 'ONLINE') resolvedAddress = null;
 
-    // ✅ LOG (SIEMPRE ABAJO)
-    if (debugOrderDetail) {
-      console.log('[GET /orders/:id] address debug =', {
-        serviceMode: (order as any).serviceMode,
-        locationId: (order as any).locationId,
-        locationFormatted: order.location?.formatted,
-        addressText: order.addressText,
-        officeAddressFormatted: order.specialist?.officeAddress?.formatted,
-        resolvedAddress,
-      });
-    }
+    dbg(debugOrderDetail, '[GET /orders/:id][address]', {
+      serviceMode: (order as any).serviceMode,
+      locationId: (order as any).locationId,
+      locationFormatted: order.location?.formatted,
+      addressText: order.addressText,
+      officeAddressFormatted: order.specialist?.officeAddress?.formatted,
+      resolvedAddress,
+    });
 
     // ───────── PAYLOAD FINAL ─────────
     const payload = {

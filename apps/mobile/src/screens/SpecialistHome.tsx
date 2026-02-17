@@ -646,10 +646,10 @@ export default function SpecialistHome() {
         if ((p as any).officeAddress?.formatted) {
           const formatted = String((p as any).officeAddress.formatted);
 
-          // Guardamos el texto completo en el input (dirección completa)
-          setOfficeAddress(formatted);
+          // 🔥 Extraemos SOLO la calle (antes de la primera coma)
+          const streetOnly = formatted.split(',')[0].trim();
+          setOfficeAddress(streetOnly);
 
-          // Intentamos detectar localidad si coincide con una de Córdoba (heurística simple)
           const match = LOCALITIES_CORDOBA.find((loc) =>
             formatted.toLowerCase().includes(loc.toLowerCase()),
           );
@@ -1191,7 +1191,7 @@ export default function SpecialistHome() {
           return;
         }
 
-        const street = officeAddress.trim();
+        const street = officeAddress.split(',')[0].trim();
 
         if (!street) {
           Alert.alert('Debés cargar la dirección de tu oficina.');

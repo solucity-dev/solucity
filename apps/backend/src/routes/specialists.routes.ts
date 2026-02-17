@@ -1429,6 +1429,19 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
           });
         }
 
+        // ✅ NUEVO: Córdoba-only por COORDENADAS (blindado)
+        const lat = officeAddress.lat;
+        const lng = officeAddress.lng;
+
+        const inCordoba = lat >= -35.5 && lat <= -29.0 && lng >= -66.8 && lng <= -62.0;
+        if (!inCordoba) {
+          return res.status(400).json({
+            ok: false,
+            error: 'office_coords_outside_cordoba',
+            message: 'Las coordenadas de la oficina deben estar dentro de Córdoba.',
+          });
+        }
+
         // ✅ FIX: evitar crash por placeId @unique (duplicado)
         // - si hay placeId => upsert por placeId
         // - si no hay placeId => create normal
@@ -1439,13 +1452,13 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
             where: { placeId: officeAddress.placeId },
             create: {
               placeId: officeAddress.placeId,
-              formatted: officeAddress.formatted,
+              formatted,
               lat: officeAddress.lat,
               lng: officeAddress.lng,
             },
             update: {
               // dejamos que se actualice por si cambió el formatted o coords
-              formatted: officeAddress.formatted,
+              formatted,
               lat: officeAddress.lat,
               lng: officeAddress.lng,
             },
@@ -1457,7 +1470,7 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
           const created = await prisma.address.create({
             data: {
               placeId: null,
-              formatted: officeAddress!.formatted,
+              formatted,
               lat: officeAddress!.lat,
               lng: officeAddress!.lng,
             },

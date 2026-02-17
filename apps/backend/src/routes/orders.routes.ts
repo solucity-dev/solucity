@@ -1745,8 +1745,25 @@ orders.get('/:id', auth, async (req, res) => {
     let distanceKm: number | null = null;
 
     const loc: any = order.location;
-    const jobLat = loc && typeof loc.lat === 'number' ? (loc.lat as number) : null;
-    const jobLng = loc && typeof loc.lng === 'number' ? (loc.lng as number) : null;
+
+    // coords del trabajo (HOME normalmente)
+    const jobLat0 = loc && typeof loc.lat === 'number' ? (loc.lat as number) : null;
+    const jobLng0 = loc && typeof loc.lng === 'number' ? (loc.lng as number) : null;
+
+    const sm2 = ((order as any).serviceMode as 'HOME' | 'OFFICE' | 'ONLINE' | undefined) ?? 'HOME';
+
+    // ✅ coords efectivas del trabajo: si es OFFICE usamos coords de officeAddress (si existen)
+    const officeLat =
+      typeof order.specialist?.officeAddress?.lat === 'number'
+        ? order.specialist.officeAddress.lat
+        : null;
+    const officeLng =
+      typeof order.specialist?.officeAddress?.lng === 'number'
+        ? order.specialist.officeAddress.lng
+        : null;
+
+    const effectiveJobLat = sm2 === 'OFFICE' && officeLat != null ? officeLat : jobLat0;
+    const effectiveJobLng = sm2 === 'OFFICE' && officeLng != null ? officeLng : jobLng0;
 
     const specLat =
       typeof order.specialist?.centerLat === 'number'
@@ -1763,24 +1780,35 @@ orders.get('/:id', auth, async (req, res) => {
     const viewerLat = viewerLatRaw;
     const viewerLng = viewerLngRaw;
 
-    if (jobLat != null && jobLng != null) {
-      // 1️⃣ Caso ideal: tenemos ubicación del trabajo
+    if (effectiveJobLat != null && effectiveJobLng != null) {
       if (viewerLat != null && viewerLng != null) {
-        // Distancia trabajo ↔ usuario que está viendo
-        distanceKm = haversineKm(jobLat, jobLng, viewerLat, viewerLng);
+        distanceKm = haversineKm(effectiveJobLat, effectiveJobLng, viewerLat, viewerLng);
       } else if (specLat != null && specLng != null) {
-        // Fallback: trabajo ↔ centro del especialista
-        distanceKm = haversineKm(jobLat, jobLng, specLat, specLng);
+        distanceKm = haversineKm(effectiveJobLat, effectiveJobLng, specLat, specLng);
       }
     } else if (viewerLat != null && viewerLng != null && specLat != null && specLng != null) {
-      // 2️⃣ NUEVO: no hay jobLat/jobLng → usamos viewer ↔ especialista
+      // fallback: viewer ↔ centro del especialista
       distanceKm = haversineKm(viewerLat, viewerLng, specLat, specLng);
+    }
+
+    // ✅ Último fallback ultra seguro:
+    // Si por algún motivo no hay coords "efectivas" (OFFICE sin lat/lng),
+    // pero existe location (jobLat0/jobLng0), calculamos con eso.
+    if (distanceKm == null && viewerLat != null && viewerLng != null) {
+      if (jobLat0 != null && jobLng0 != null) {
+        distanceKm = haversineKm(jobLat0, jobLng0, viewerLat, viewerLng);
+      }
     }
 
     if (debugOrderDetail) {
       console.log('[GET /orders/:id] coords =', {
-        jobLat,
-        jobLng,
+        serviceMode: sm2,
+        jobLat0,
+        jobLng0,
+        officeLat,
+        officeLng,
+        effectiveJobLat,
+        effectiveJobLng,
         specLat,
         specLng,
         viewerLat,
@@ -1822,15 +1850,19 @@ orders.get('/:id', auth, async (req, res) => {
           ? order.addressText.trim()
           : null;
 
-    const sm2 = ((order as any).serviceMode as 'HOME' | 'OFFICE' | 'ONLINE' | undefined) ?? 'HOME';
+    if (sm2 === 'OFFICE') {
+      const officeFormatted =
+        typeof order.location?.formatted === 'string' && order.location.formatted.trim()
+          ? order.location.formatted.trim()
+          : typeof order.specialist?.officeAddress?.formatted === 'string' &&
+              order.specialist.officeAddress.formatted.trim()
+            ? order.specialist.officeAddress.formatted.trim()
+            : null;
 
-    // ✅ OFFICE usa directamente officeAddress (ya viene incluido en el include)
-    if (!resolvedAddress && sm2 === 'OFFICE') {
-      const officeFormatted = order.specialist?.officeAddress?.formatted;
-      if (typeof officeFormatted === 'string' && officeFormatted.trim()) {
-        resolvedAddress = officeFormatted.trim();
-      }
+      resolvedAddress = officeFormatted;
     }
+
+    if (sm2 === 'ONLINE') resolvedAddress = null;
 
     // ✅ LOG (SIEMPRE ABAJO)
     if (debugOrderDetail) {

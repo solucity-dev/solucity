@@ -11,6 +11,7 @@ import { signToken } from '../lib/jwt';
 import { prisma } from '../lib/prisma';
 import { ensureDir, uploadsRoot } from '../lib/uploads';
 import { auth } from '../middlewares/auth';
+import { geocodeAddress } from '../services/geocode';
 import { notifyBackgroundCheckStatus } from '../services/notifyBackgroundCheck';
 import { notifyKycStatus } from '../services/notifyKyc';
 import { canSpecialistBeVisible } from '../services/subscriptionGate';
@@ -1145,8 +1146,8 @@ const PatchMeSchema = z.object({
     .object({
       formatted: z.string().min(5),
       locality: z.string().min(2),
-      lat: z.coerce.number(),
-      lng: z.coerce.number(),
+      lat: z.coerce.number().optional(),
+      lng: z.coerce.number().optional(),
       placeId: z.string().optional().nullable(),
     })
     .nullable()
@@ -1412,42 +1413,43 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
         const officeAddress = data.officeAddress;
 
         const locality = String(officeAddress.locality ?? '').trim();
-        if (!locality) {
+        if (!locality)
           return res.status(400).json({ ok: false, error: 'office_locality_required' });
-        }
 
-        // ✅ Córdoba-only check (simple y efectivo)
-        const f0 = String(officeAddress.formatted ?? '').trim();
-        const f0Lower = f0.toLowerCase();
+        let formatted = String(officeAddress.formatted ?? '').trim();
+        if (!formatted)
+          return res.status(400).json({ ok: false, error: 'office_address_required' });
 
-        // Armamos un formatted consistente: "..., <localidad>, Córdoba"
-        // (si ya lo trae así, no duplicamos)
-        let formatted = f0;
-
+        // Normalización Córdoba + localidad
+        const f0Lower = formatted.toLowerCase();
         const hasCordoba = f0Lower.includes('córdoba') || f0Lower.includes('cordoba');
         const hasLocality = f0Lower.includes(locality.toLowerCase());
 
-        if (!hasLocality) {
-          formatted = `${formatted}, ${locality}`;
-        }
-        if (!hasCordoba) {
-          formatted = `${formatted}, Córdoba`;
+        if (!hasLocality) formatted = `${formatted}, ${locality}`;
+        if (!hasCordoba) formatted = `${formatted}, Córdoba, Argentina`;
+
+        // 1) Tomar coords si vienen
+        let lat = officeAddress.lat;
+        let lng = officeAddress.lng;
+
+        // 2) Si NO vienen coords, geocodificar
+        if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) {
+          const geo = await geocodeAddress(formatted);
+          // asumimos que geocodeAddress devuelve { lat, lng, formatted? } o similar
+          lat = geo?.lat;
+          lng = geo?.lng;
+
+          if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) {
+            return res.status(400).json({
+              ok: false,
+              error: 'office_geocode_failed',
+              message:
+                'No pudimos ubicar esa dirección. Probá agregando altura/barrio o una referencia.',
+            });
+          }
         }
 
-        // Extra: si por algún motivo el formatted NO termina teniendo Córdoba, cortamos
-        const formattedLower = formatted.toLowerCase();
-        if (!(formattedLower.includes('córdoba') || formattedLower.includes('cordoba'))) {
-          return res.status(400).json({
-            ok: false,
-            error: 'office_must_be_in_cordoba',
-            message: 'La dirección de oficina debe estar dentro de Córdoba.',
-          });
-        }
-
-        // ✅ NUEVO: Córdoba-only por COORDENADAS (blindado)
-        const lat = officeAddress.lat;
-        const lng = officeAddress.lng;
-
+        // Córdoba-only por coordenadas (tu check)
         const inCordoba = lat >= -35.5 && lat <= -29.0 && lng >= -66.8 && lng <= -62.0;
         if (!inCordoba) {
           return res.status(400).json({
@@ -1457,45 +1459,39 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
           });
         }
 
-        // ✅ FIX: evitar crash por placeId @unique (duplicado)
-        // - si hay placeId => upsert por placeId
-        // - si no hay placeId => create normal
-        let addrId: string;
+        // Upsert address (recomendación: NO usar upsert por placeId si placeId es null)
+        let addressId: string;
 
-        if (officeAddress?.placeId) {
-          const up = await prisma.address.upsert({
-            where: { placeId: officeAddress.placeId },
-            create: {
-              placeId: officeAddress.placeId,
-              formatted,
-              lat: officeAddress.lat,
-              lng: officeAddress.lng,
-            },
-            update: {
-              // dejamos que se actualice por si cambió el formatted o coords
-              formatted,
-              lat: officeAddress.lat,
-              lng: officeAddress.lng,
-            },
-            select: { id: true },
-          });
-
-          addrId = up.id;
-        } else {
-          const created = await prisma.address.create({
+        if (current?.officeAddressId) {
+          // ✅ Ya existe dirección → actualizar
+          const updatedAddress = await prisma.address.update({
+            where: { id: current.officeAddressId },
             data: {
-              placeId: null,
+              placeId: officeAddress.placeId ?? null,
               formatted,
-              lat: officeAddress!.lat,
-              lng: officeAddress!.lng,
+              lat,
+              lng,
             },
             select: { id: true },
           });
 
-          addrId = created.id;
+          addressId = updatedAddress.id;
+        } else {
+          // ✅ No existe → crear
+          const createdAddress = await prisma.address.create({
+            data: {
+              placeId: officeAddress.placeId ?? null,
+              formatted,
+              lat,
+              lng,
+            },
+            select: { id: true },
+          });
+
+          addressId = createdAddress.id;
         }
 
-        nextOfficeAddressId = addrId;
+        nextOfficeAddressId = addressId;
       } else {
         // si NO incluye OFFICE, limpiamos officeAddressId
         nextOfficeAddressId = null;

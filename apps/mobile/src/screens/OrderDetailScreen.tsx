@@ -389,6 +389,11 @@ export default function OrderDetailScreen() {
         service: r.data?.order?.service,
       });
 
+      devLog('[OrderDetail][address check]', {
+        address: r.data?.order?.address,
+        serviceMode: r.data?.order?.serviceMode,
+      });
+
       setMeta(r.data.meta);
       return r.data;
     } catch (e: any) {

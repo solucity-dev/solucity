@@ -1539,8 +1539,12 @@ orders.get('/:id', auth, async (req, res) => {
             centerLat: true,
             centerLng: true,
             user: { select: { name: true, surname: true } },
+
+            // ✅ NUEVO: traer dirección de oficina/local
+            officeAddress: { select: { formatted: true, lat: true, lng: true } },
           },
         },
+
         customer: {
           include: {
             user: { select: { name: true } },
@@ -1746,13 +1750,32 @@ orders.get('/:id', auth, async (req, res) => {
       .filter(Boolean);
 
     // ───────── DIRECCIÓN ─────────
-    // ✅ Legacy-safe: si existe location pero formatted viene vacío, usamos addressText
-    const resolvedAddress =
+    let resolvedAddress =
       typeof order.location?.formatted === 'string' && order.location.formatted.trim()
         ? order.location.formatted.trim()
         : typeof order.addressText === 'string' && order.addressText.trim()
           ? order.addressText.trim()
           : null;
+
+    const sm2 = ((order as any).serviceMode as 'HOME' | 'OFFICE' | 'ONLINE' | undefined) ?? 'HOME';
+
+    // ✅ OFFICE usa directamente officeAddress (ya viene incluido en el include)
+    if (!resolvedAddress && sm2 === 'OFFICE') {
+      const officeFormatted = order.specialist?.officeAddress?.formatted;
+      if (typeof officeFormatted === 'string' && officeFormatted.trim()) {
+        resolvedAddress = officeFormatted.trim();
+      }
+    }
+
+    // ✅ LOG (SIEMPRE ABAJO)
+    console.log('[GET /orders/:id] address debug =', {
+      serviceMode: (order as any).serviceMode,
+      locationId: (order as any).locationId,
+      locationFormatted: order.location?.formatted,
+      addressText: order.addressText,
+      officeAddressFormatted: order.specialist?.officeAddress?.formatted,
+      resolvedAddress,
+    });
 
     // ───────── PAYLOAD FINAL ─────────
     const payload = {

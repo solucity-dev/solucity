@@ -7,6 +7,7 @@ import {
   getOrCreateSubscriptionForSpecialist,
   handleMercadoPagoWebhook,
 } from '../services/subscriptionService';
+import { debugPayments } from '../utils/debug';
 
 import type { ParsedQs } from 'qs';
 
@@ -97,11 +98,15 @@ router.post('/mercadopago/webhook', async (req: Request, res: Response) => {
       (req.query as any)?.['data.id'] || (req.body as any)?.data?.id || (req.body as any)?.id;
 
     if (!paymentId) return res.status(200).send('ok_no_payment_id');
-    if (process.env.NODE_ENV !== 'production') {
+    if (debugPayments) {
+      const safeQuery =
+        req.query && Object.keys(req.query).length ? '[query present]' : '[no query]';
+      const safeBody = req.body && Object.keys(req.body).length ? '[body present]' : '[no body]';
+
       console.log('[MP webhook] incoming', {
-        query: req.query,
-        body: req.body,
         paymentId: String(paymentId),
+        safeQuery,
+        safeBody,
       });
     }
 
@@ -128,8 +133,10 @@ router.get('/return/success', async (req: Request, res: Response) => {
     const status = String(q.status || q.collection_status || '');
     const externalRef = String(q.external_reference || '');
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[MP return success]', { paymentId, status, externalRef, query: req.query });
+    if (debugPayments) {
+      const safeQuery =
+        req.query && Object.keys(req.query).length ? '[query present]' : '[no query]';
+      console.log('[MP return success]', { paymentId, status, externalRef, safeQuery });
     }
 
     // 🔁 Robustez: si viene paymentId, intentamos sincronizar igual que el webhook
@@ -191,8 +198,10 @@ router.get('/return/success', async (req: Request, res: Response) => {
  */
 router.get('/return/failure', async (req: Request, res: Response) => {
   try {
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[MP return failure]', { query: req.query });
+    if (debugPayments) {
+      const safeQuery =
+        req.query && Object.keys(req.query).length ? '[query present]' : '[no query]';
+      console.log('[MP return failure]', { safeQuery });
     }
 
     const deepLink = process.env.PUBLIC_APP_DEEPLINK || 'solucity://subscription';

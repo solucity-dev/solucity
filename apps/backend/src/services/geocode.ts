@@ -11,16 +11,16 @@ export type GeocodeResult = {
 const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
 
 // Acá fijamos ciudad base para el MVP
-const DEFAULT_CITY_CONTEXT = 'Río Cuarto, Córdoba, Argentina';
+const DEFAULT_CONTEXT = 'Córdoba, Argentina';
 
 export async function geocodeAddress(rawAddress: string): Promise<GeocodeResult | null> {
   const q = rawAddress.trim();
   if (!q) return null;
 
   // ✅ si el usuario no escribió ciudad/provincia, se la agregamos
-  const query = /rio\s*cuarto|c[oó]rdoba|argentina/i.test(q) ? q : `${q}, ${DEFAULT_CITY_CONTEXT}`;
+  const query = /c[oó]rdoba|argentina/i.test(q) ? q : `${q}, ${DEFAULT_CONTEXT}`;
 
-  const url = `${NOMINATIM_URL}?format=jsonv2&limit=1&addressdetails=1&q=${encodeURIComponent(query)}`;
+  const url = `${NOMINATIM_URL}?format=jsonv2&limit=1&addressdetails=1&countrycodes=ar&q=${encodeURIComponent(query)}`;
 
   const r = await fetch(url, {
     headers: {
@@ -35,15 +35,16 @@ export async function geocodeAddress(rawAddress: string): Promise<GeocodeResult 
   const hit = data?.[0];
   if (!hit) return null;
 
-  // ✅ filtro extra: solo aceptamos resultados en Río Cuarto
-  const city =
-    hit.address?.city ||
-    hit.address?.town ||
-    hit.address?.municipality ||
+  // ✅ filtro extra: solo aceptamos resultados dentro de la provincia de Córdoba
+  const state =
+    hit.address?.state ||
+    hit.address?.region ||
+    hit.address?.state_district ||
+    hit.address?.ISO3166_2_lvl4 ||
     hit.address?.county ||
     '';
 
-  if (!/rio\s*cuarto/i.test(String(city))) {
+  if (!/c[oó]rdoba/i.test(String(state))) {
     return null;
   }
 

@@ -210,6 +210,18 @@ function isWithinAvailability(av?: { days?: number[]; start?: string; end?: stri
   // rango que cruza medianoche (ej 22:00–02:00)
   return nowMin >= startMin || nowMin <= endMin;
 }
+const LOCALITIES_CORDOBA = [
+  'Río Cuarto',
+  'Córdoba',
+  'Villa Carlos Paz',
+  'San Francisco',
+  'Villa María',
+  'Alta Gracia',
+  'Jesús María',
+  'Río Tercero',
+  'Cosquín',
+  'La Falda',
+] as const;
 
 const DAY_LABELS = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
 
@@ -288,6 +300,19 @@ export default function SpecialistHome() {
   const [serviceModes, setServiceModes] = useState<('HOME' | 'OFFICE' | 'ONLINE')[]>([]);
 
   const [officeAddress, setOfficeAddress] = useState('');
+
+  // ✅ Localidad para oficina (opción B)
+  const [officeLocality, setOfficeLocality] = useState('Río Cuarto');
+  const [officeLocalityOpen, setOfficeLocalityOpen] = useState(false);
+  const [officeLocalityQuery, setOfficeLocalityQuery] = useState('');
+
+  // ✅ Copiamos el mismo filtrado que CreateOrder
+  const filteredOfficeLocalities = useMemo(() => {
+    const q = officeLocalityQuery.trim().toLowerCase();
+    if (!q) return LOCALITIES_CORDOBA;
+
+    return LOCALITIES_CORDOBA.filter((x) => x.toLowerCase().includes(q));
+  }, [officeLocalityQuery]);
 
   // avatar
   const [avatar, setAvatar] = useState<string | null>(null);
@@ -619,7 +644,16 @@ export default function SpecialistHome() {
 
         // 🔥 Cargar dirección del local si existe
         if ((p as any).officeAddress?.formatted) {
-          setOfficeAddress((p as any).officeAddress.formatted);
+          const formatted = String((p as any).officeAddress.formatted);
+
+          // Guardamos el texto completo en el input (dirección completa)
+          setOfficeAddress(formatted);
+
+          // Intentamos detectar localidad si coincide con una de Córdoba (heurística simple)
+          const match = LOCALITIES_CORDOBA.find((loc) =>
+            formatted.toLowerCase().includes(loc.toLowerCase()),
+          );
+          if (match) setOfficeLocality(match);
         }
 
         setBio(p.bio ?? '');
@@ -1012,7 +1046,10 @@ export default function SpecialistHome() {
 
     try {
       setAvailableNow(v);
-      await api.patch('/specialists/me', { available: v });
+      await api.patch('/specialists/me', {
+        available: v, // legacy
+        availableNow: v, // nuevo
+      });
 
       // ✅ asegura coherencia contra reglas server-side
       await reloadProfileAndSubscription({ silent: true });
@@ -1142,37 +1179,49 @@ export default function SpecialistHome() {
 
   async function saveServiceModes() {
     try {
-      if (!serviceModes.includes('OFFICE')) {
-        return;
-      }
+      setSavingKey('serviceModes', true);
 
-      if (!officeAddress.trim()) {
-        Alert.alert('Debés cargar la dirección de tu oficina.');
-        return;
-      }
+      // ✅ Siempre guardamos serviceModes
+      const payload: any = { serviceModes };
 
-      const lat = profile?.centerLat;
-      const lng = profile?.centerLng;
+      // ✅ Si incluye OFFICE, validamos dirección y la mandamos
+      if (serviceModes.includes('OFFICE')) {
+        if (!officeAddress.trim()) {
+          Alert.alert('Debés cargar la dirección de tu oficina.');
+          return;
+        }
 
-      if (lat && lng) {
-        await api.patch('/specialists/me', {
-          serviceModes,
-          officeAddress: {
-            // ✅ AQUÍ: cambiar a objeto
-            formatted: officeAddress.trim(),
-            lat,
-            lng,
-            placeId: null, // opcional
-          },
-        });
+        const street = officeAddress.trim();
 
-        Alert.alert('Listo', 'Modalidades de servicio guardadas correctamente.');
+        if (!street) {
+          Alert.alert('Debés cargar la dirección de tu oficina.');
+          return;
+        }
+
+        const formatted = officeLocality?.trim()
+          ? `${street}, ${officeLocality.trim()}, Córdoba, Argentina`
+          : `${street}, Córdoba, Argentina`;
+
+        payload.officeAddress = {
+          formatted,
+          placeId: null,
+        };
       } else {
-        Alert.alert('Error', 'No se encontraron coordenadas para tu dirección de oficina.');
+        // ✅ Si NO incluye OFFICE, limpiamos officeAddress (para no dejar basura)
+        payload.officeAddress = null;
       }
+
+      await api.patch('/specialists/me', payload);
+
+      Alert.alert('Listo', 'Modalidades guardadas correctamente.');
+
+      // opcional pero recomendado para refrescar profile y que no quede desync
+      await reloadProfileAndSubscription({ silent: true });
     } catch (e) {
       console.error(e);
-      Alert.alert('Error', 'No se pudo guardar la dirección de la oficina.');
+      Alert.alert('Error', 'No se pudieron guardar las modalidades.');
+    } finally {
+      setSavingKey('serviceModes', false);
     }
   }
 
@@ -2032,11 +2081,110 @@ export default function SpecialistHome() {
                 <TextInput
                   value={officeAddress}
                   onChangeText={setOfficeAddress}
-                  placeholder="Dirección completa de tu local"
+                  placeholder="Calle y número (ej: San Martín 123)"
                   placeholderTextColor="#9ec9cd"
                   style={styles.input}
                   editable={!savingBy.serviceModes}
                 />
+
+                <Text style={[styles.subTitle, { marginTop: 10 }]}>Localidad</Text>
+
+                <Pressable
+                  style={styles.input}
+                  onPress={() => {
+                    setOfficeLocalityQuery('');
+                    setOfficeLocalityOpen(true);
+                  }}
+                  disabled={savingBy.serviceModes}
+                >
+                  <Text style={{ color: '#E9FEFF', fontWeight: '800' }}>
+                    {officeLocality || 'Seleccionar localidad'}
+                  </Text>
+                </Pressable>
+
+                <Modal
+                  visible={officeLocalityOpen}
+                  transparent
+                  animationType="fade"
+                  onRequestClose={() => setOfficeLocalityOpen(false)}
+                >
+                  <View
+                    style={{
+                      flex: 1,
+                      backgroundColor: 'rgba(0,0,0,0.55)',
+                      justifyContent: 'center',
+                      padding: 16,
+                    }}
+                  >
+                    <View style={{ backgroundColor: '#E9FEFF', borderRadius: 16, padding: 14 }}>
+                      <Text
+                        style={{
+                          color: '#06494F',
+                          fontWeight: '900',
+                          fontSize: 16,
+                          marginBottom: 10,
+                        }}
+                      >
+                        Elegir localidad
+                      </Text>
+
+                      <TextInput
+                        value={officeLocalityQuery}
+                        onChangeText={setOfficeLocalityQuery}
+                        placeholder="Buscar localidad…"
+                        placeholderTextColor="#7fa5a9"
+                        style={{
+                          backgroundColor: 'rgba(6,73,79,0.08)',
+                          borderRadius: 12,
+                          paddingHorizontal: 12,
+                          paddingVertical: 10,
+                          color: '#06494F',
+                          marginBottom: 10,
+                          fontWeight: '700',
+                        }}
+                      />
+
+                      <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
+                        {filteredOfficeLocalities.map((loc) => (
+                          <Pressable
+                            key={loc}
+                            onPress={() => {
+                              setOfficeLocality(loc);
+                              setOfficeLocalityQuery('');
+                              setOfficeLocalityOpen(false);
+                            }}
+                            style={{
+                              paddingVertical: 12,
+                              paddingHorizontal: 10,
+                              borderRadius: 12,
+                              backgroundColor:
+                                loc === officeLocality ? 'rgba(6,73,79,0.10)' : 'transparent',
+                              marginBottom: 6,
+                            }}
+                          >
+                            <Text style={{ color: '#06494F', fontWeight: '800' }}>{loc}</Text>
+                          </Pressable>
+                        ))}
+                      </ScrollView>
+
+                      <Pressable
+                        onPress={() => {
+                          setOfficeLocalityQuery('');
+                          setOfficeLocalityOpen(false);
+                        }}
+                        style={{
+                          marginTop: 8,
+                          paddingVertical: 12,
+                          borderRadius: 12,
+                          alignItems: 'center',
+                          backgroundColor: '#06494F',
+                        }}
+                      >
+                        <Text style={{ color: '#E9FEFF', fontWeight: '900' }}>Cerrar</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </Modal>
               </>
             )}
 

@@ -1,4 +1,7 @@
+// apps/backend/src/services/pushExpo.ts
 import axios from 'axios';
+
+import { debugPush, errMsg } from '../utils/debug';
 
 export type ExpoMessage = {
   to: string;
@@ -30,11 +33,13 @@ function chunk<T>(arr: T[], size = 100) {
  */
 export async function sendExpoPush(messages: ExpoMessage[]) {
   const filtered = (messages ?? []).filter((m) => isExpoToken(m?.to));
-  if (filtered.length === 0) return { ok: true, sent: 0, tickets: [] as any[] };
+  if (filtered.length === 0)
+    return { ok: true, sent: 0, tickets: [] as any[], errors: [] as any[] };
 
   const chunks = chunk(filtered, 100);
   let sent = 0;
   const tickets: any[] = [];
+  const errors: any[] = [];
 
   for (const ch of chunks) {
     try {
@@ -49,27 +54,39 @@ export async function sendExpoPush(messages: ExpoMessage[]) {
 
       const payload = res.data;
 
-      if (process.env.NODE_ENV !== 'production') {
+      if (debugPush) {
         console.log('[expoPush] response', { status: res.status, count: ch.length });
       }
 
       if (payload?.data && Array.isArray(payload.data)) {
         tickets.push(...payload.data);
+
+        // separar tickets con error (Expo devuelve { status: "error", message, details })
+        for (const t of payload.data) {
+          if (t?.status === 'error') errors.push(t);
+        }
       }
 
       if (res.status < 200 || res.status >= 300) {
-        if (process.env.NODE_ENV !== 'production') {
+        if (debugPush) {
           console.warn('[expoPush] non-2xx', res.status, JSON.stringify(payload));
         }
       }
 
       sent += ch.length;
     } catch (e: any) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('[expoPush] send failed', e?.message);
+      if (debugPush) {
+        console.warn('[expoPush] send failed', errMsg(e));
       }
     }
   }
 
-  return { ok: true, sent, tickets };
+  if (debugPush && errors.length) {
+    console.warn('[expoPush] ticket errors', {
+      count: errors.length,
+      sample: errors.slice(0, 3),
+    });
+  }
+
+  return { ok: true, sent, tickets, errors };
 }

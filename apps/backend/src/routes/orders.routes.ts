@@ -17,6 +17,7 @@ import {
 import { deleteChatForOrder } from '../services/chatCleanup';
 import { geocodeAddress } from '../services/geocode';
 import { sendExpoPush } from '../services/pushExpo';
+import { debugOrderDetail, debugOrders } from '../utils/debug';
 import { haversineKm } from '../utils/distance';
 
 import type { Prisma } from '@prisma/client';
@@ -149,9 +150,8 @@ async function pushToUser(params: { userId: string; title: string; body: string;
 
   const toList = tokens.map((t) => t.token).filter(Boolean);
   if (!toList.length) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[push] no tokens for user', params.userId);
-    }
+    // opcional, normalmente lo dejamos apagado
+    // if (debugPush) console.log('[push] no tokens for user', params.userId);
     return;
   }
 
@@ -318,7 +318,15 @@ const createOrderSimple = z.object({
   scheduledAt: z.string().datetime().optional().nullable(),
   preferredAt: z.string().datetime().optional().nullable(),
   isUrgent: z.boolean().optional().default(false),
-  address: z.union([z.string(), z.object({ formatted: z.string().optional() })]).optional(),
+  address: z
+    .union([
+      z.string(),
+      z.object({
+        formatted: z.string().optional(),
+        locality: z.string().optional(),
+      }),
+    ])
+    .optional(),
 });
 
 /* ───────────────────────── Rutas ───────────────────────── */
@@ -364,6 +372,14 @@ orders.post('/', auth, async (req, res) => {
         : typeof rawAddressInput?.formatted === 'string'
           ? rawAddressInput.formatted.trim()
           : null;
+
+    // ✅ NUEVO: locality opcional desde address object
+    const locality =
+      rawAddressInput &&
+      typeof rawAddressInput === 'object' &&
+      typeof (rawAddressInput as any).locality === 'string'
+        ? (rawAddressInput as any).locality.trim()
+        : null;
 
     if (!customerId) {
       const cust = await prisma.customerProfile.findUnique({
@@ -413,12 +429,14 @@ orders.post('/', auth, async (req, res) => {
     const finalServiceMode: 'HOME' | 'OFFICE' | 'ONLINE' =
       requestedMode ?? (modes.length === 1 ? modes[0] : 'HOME');
 
-    console.log('[POST /orders][SERVICE MODE DEBUG]', {
-      bodyServiceMode: (req.body as any)?.serviceMode,
-      requestedMode,
-      specialistModes: modes,
-      finalServiceMode,
-    });
+    if (debugOrders) {
+      console.log('[POST /orders][SERVICE MODE DEBUG]', {
+        bodyServiceMode: (req.body as any)?.serviceMode,
+        requestedMode,
+        specialistModes: modes,
+        finalServiceMode,
+      });
+    }
 
     // ✅ Validación: el modo debe estar habilitado en el especialista
     if (!modes.includes(finalServiceMode)) {
@@ -456,6 +474,25 @@ orders.post('/', auth, async (req, res) => {
     // 🔍 Geocode solo aplica a HOME
     if (finalServiceMode === 'HOME') {
       if (!finalLocationId && addressText) {
+        // ✅ CAMBIO MÍNIMO 2: Normalizar dirección HOME ANTES del geocode
+        let full = addressText;
+
+        if (locality) {
+          const lowFull = full.toLowerCase();
+          const lowLoc = locality.toLowerCase();
+          if (!lowFull.includes(lowLoc)) {
+            full = `${full}, ${locality}`;
+          }
+        }
+
+        const low = full.toLowerCase();
+        const hasCordoba = low.includes('córdoba') || low.includes('cordoba');
+        if (!hasCordoba) {
+          full = `${full}, Córdoba`;
+        }
+
+        addressText = full;
+
         try {
           const geo = await geocodeAddress(addressText);
 
@@ -464,6 +501,18 @@ orders.post('/', auth, async (req, res) => {
               typeof geo.formatted === 'string' && geo.formatted.trim()
                 ? geo.formatted.trim()
                 : addressText;
+
+            // ✅ CAMBIO MÍNIMO 3: validar que el resultado esté dentro de Córdoba
+            const lowF = formatted.toLowerCase();
+            const okCordoba = lowF.includes('córdoba') || lowF.includes('cordoba');
+
+            if (!okCordoba) {
+              return res.status(409).json({
+                ok: false,
+                error: 'address_outside_cordoba',
+                message: 'La dirección debe estar dentro de Córdoba.',
+              });
+            }
 
             let addrId: string | null = null;
 
@@ -493,6 +542,16 @@ orders.post('/', auth, async (req, res) => {
         } catch (e) {
           console.warn('[POST /orders] geocode failed', e);
         }
+      }
+
+      // ✅ BLOQUE SEGURO: si es HOME, tiene que existir location sí o sí
+      if (!finalLocationId) {
+        return res.status(409).json({
+          ok: false,
+          error: 'address_not_geocoded',
+          message:
+            'No pudimos validar la dirección. Escribí calle, número y localidad dentro de Córdoba.',
+        });
       }
     }
 
@@ -629,7 +688,7 @@ orders.post('/', auth, async (req, res) => {
       .filter(Boolean);
 
     // (opcional) log definitivo, no rompe nada
-    if (process.env.NODE_ENV !== 'production') {
+    if (debugOrders) {
       const svcDebug = await prisma.service.findUnique({
         where: { id: serviceId! },
         select: { id: true, category: { select: { slug: true, name: true } } },
@@ -1411,18 +1470,22 @@ orders.post('/:id/cancel-by-specialist', auth, async (req, res) => {
     return res.status(403).json({ ok: false, error: 'only_assigned_specialist' });
   }
   // ✅ Permitimos rechazar también en PENDING (antes de aceptar)
-  console.log('[cancel-by-specialist][DEBUG]', {
-    orderId,
-    uid,
-    dbStatus: order.status,
-    specialistId: order.specialistId,
-    specialistUserId: order.specialist?.userId,
-    acceptDeadlineAt: order.acceptDeadlineAt,
-    now: new Date().toISOString(),
-  });
+  if (debugOrders) {
+    console.log('[cancel-by-specialist][DEBUG]', {
+      orderId,
+      uid,
+      dbStatus: order.status,
+      specialistId: order.specialistId,
+      specialistUserId: order.specialist?.userId,
+      acceptDeadlineAt: order.acceptDeadlineAt,
+      now: new Date().toISOString(),
+    });
+  }
 
   if (!['PENDING', 'ASSIGNED', 'IN_PROGRESS'].includes(order.status as OrderStatus)) {
-    console.log('[cancel-by-specialist][INVALID_STATE]', { orderId, dbStatus: order.status });
+    if (debugOrders) {
+      console.log('[cancel-by-specialist][INVALID_STATE]', { orderId, dbStatus: order.status });
+    }
     return res.status(409).json({ ok: false, error: 'invalid_state' });
   }
 
@@ -1517,7 +1580,7 @@ orders.post('/:id/extend-deadline', auth, async (req, res) => {
 orders.get('/:id', auth, async (req, res) => {
   const t0 = Date.now();
 
-  const debug = process.env.DEBUG_ORDER_DETAIL === '1';
+  const debug = debugOrderDetail;
 
   const t = (label: string, extra?: any) => {
     if (debug) {
@@ -1679,14 +1742,7 @@ orders.get('/:id', auth, async (req, res) => {
       (order as any).status = 'CANCELLED_AUTO';
     }
 
-    // ───────── DISTANCIA ─────────
     let distanceKm: number | null = null;
-    const sm = (order as any).serviceMode as 'HOME' | 'OFFICE' | 'ONLINE' | undefined;
-    if (sm === 'ONLINE') {
-      distanceKm = null;
-    } else {
-      // (dejás tu cálculo actual tal cual)
-    }
 
     const loc: any = order.location;
     const jobLat = loc && typeof loc.lat === 'number' ? (loc.lat as number) : null;
@@ -1721,7 +1777,7 @@ orders.get('/:id', auth, async (req, res) => {
       distanceKm = haversineKm(viewerLat, viewerLng, specLat, specLng);
     }
 
-    if (process.env.NODE_ENV !== 'production') {
+    if (debugOrderDetail) {
       console.log('[GET /orders/:id] coords =', {
         jobLat,
         jobLng,
@@ -1777,14 +1833,16 @@ orders.get('/:id', auth, async (req, res) => {
     }
 
     // ✅ LOG (SIEMPRE ABAJO)
-    console.log('[GET /orders/:id] address debug =', {
-      serviceMode: (order as any).serviceMode,
-      locationId: (order as any).locationId,
-      locationFormatted: order.location?.formatted,
-      addressText: order.addressText,
-      officeAddressFormatted: order.specialist?.officeAddress?.formatted,
-      resolvedAddress,
-    });
+    if (debugOrderDetail) {
+      console.log('[GET /orders/:id] address debug =', {
+        serviceMode: (order as any).serviceMode,
+        locationId: (order as any).locationId,
+        locationFormatted: order.location?.formatted,
+        addressText: order.addressText,
+        officeAddressFormatted: order.specialist?.officeAddress?.formatted,
+        resolvedAddress,
+      });
+    }
 
     // ───────── PAYLOAD FINAL ─────────
     const payload = {

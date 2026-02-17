@@ -276,6 +276,7 @@ export default function CreateOrderScreen() {
 
   // 🔥 NUEVO: modos reales del especialista (desde backend)
   const [availableModes, setAvailableModes] = useState<('HOME' | 'OFFICE' | 'ONLINE')[]>([]);
+  const [modesLoading, setModesLoading] = useState(false);
 
   const [locality, setLocality] = useState('Río Cuarto');
   const [localityOpen, setLocalityOpen] = useState(false);
@@ -295,6 +296,8 @@ export default function CreateOrderScreen() {
 
     (async () => {
       try {
+        setModesLoading(true);
+
         const qs = `?categorySlug=${encodeURIComponent(categorySlugParam)}`;
         const spec = await api.get(`/specialists/${specialistIdParam}${qs}`);
 
@@ -307,24 +310,31 @@ export default function CreateOrderScreen() {
 
         setAvailableModes(modesFromBackend);
 
-        // autoselección si solo tiene 1 modo
+        // ✅ autoselección si solo tiene 1 modo
         if (modesFromBackend.length === 1) {
           const only = modesFromBackend[0];
           if (only === 'HOME') setPlaceMode('AT_HOME');
           if (only === 'OFFICE') setPlaceMode('AT_SPECIALIST');
           if (only === 'ONLINE') setPlaceMode('ONLINE');
+          return;
+        }
+
+        // ✅ FIX: si el especialista NO tiene HOME, no dejamos AT_HOME por default
+        if (!modesFromBackend.includes('HOME') && placeMode === 'AT_HOME') {
+          if (modesFromBackend.includes('OFFICE')) setPlaceMode('AT_SPECIALIST');
+          else if (modesFromBackend.includes('ONLINE')) setPlaceMode('ONLINE');
         }
       } catch (e) {
-        if (__DEV__) {
-          console.log('[CreateOrder] error loading serviceModes', e);
-        }
+        if (__DEV__) console.log('[CreateOrder] error loading serviceModes', e);
+      } finally {
+        if (mounted) setModesLoading(false);
       }
     })();
 
     return () => {
       mounted = false;
     };
-  }, [specialistIdParam, categorySlugParam]);
+  }, [specialistIdParam, categorySlugParam, placeMode]);
 
   const [desc, setDesc] = useState('');
   const [urgent, setUrgent] = useState(false);
@@ -624,7 +634,7 @@ export default function CreateOrderScreen() {
         attachments,
         isUrgent: urgent || mode === 'now',
         ...(locationIdToSend ? { locationId: locationIdToSend } : {}),
-        ...(typedFormatted ? { addressText: typedFormatted } : {}),
+        ...(typedFormatted ? { address: typedFormatted, addressText: typedFormatted } : {}),
       };
 
       if (mode === 'now') payload.preferredAt = new Date().toISOString();
@@ -723,6 +733,13 @@ export default function CreateOrderScreen() {
           ) : null}
 
           <Text style={styles.label}>¿Dónde se realiza?</Text>
+
+          {modesLoading ? (
+            <Text style={{ color: 'rgba(233,254,255,0.85)', marginBottom: 8 }}>
+              Cargando modalidades…
+            </Text>
+          ) : null}
+
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
             {[
               availableModes.includes('HOME') && { k: 'AT_HOME' as const, t: 'A domicilio' },
@@ -738,6 +755,7 @@ export default function CreateOrderScreen() {
                 return (
                   <Pressable
                     key={opt.k}
+                    disabled={modesLoading}
                     onPress={() => setPlaceMode(opt.k)}
                     style={{
                       flex: 1,
@@ -747,6 +765,7 @@ export default function CreateOrderScreen() {
                       backgroundColor: on ? '#E9FEFF' : 'rgba(233,254,255,0.15)',
                       borderWidth: 1,
                       borderColor: 'rgba(233,254,255,0.35)',
+                      opacity: modesLoading ? 0.6 : 1,
                     }}
                   >
                     <Text
@@ -782,7 +801,7 @@ export default function CreateOrderScreen() {
           ) : (
             <Text style={{ color: 'rgba(233,254,255,0.85)', marginBottom: 8 }}>
               {placeMode === 'AT_SPECIALIST'
-                ? 'El especialista te indicará su dirección (local/oficina) al confirmar.'
+                ? 'La dirección del local/oficina se mostrará en el detalle del pedido cuando el especialista acepte.'
                 : 'La atención se realizará online. Coordinaremos por chat.'}
             </Text>
           )}

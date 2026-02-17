@@ -1141,6 +1141,7 @@ const PatchMeSchema = z.object({
   officeAddress: z
     .object({
       formatted: z.string().min(5),
+      locality: z.string().min(2),
       lat: z.coerce.number(),
       lng: z.coerce.number(),
       placeId: z.string().optional().nullable(),
@@ -1395,17 +1396,78 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
 
         const officeAddress = data.officeAddress;
 
-        const addr = await prisma.address.create({
-          data: {
-            placeId: officeAddress.placeId ?? null,
-            formatted: officeAddress.formatted,
-            lat: officeAddress.lat ?? null,
-            lng: officeAddress.lng ?? null,
-          },
-          select: { id: true },
-        });
+        const locality = String(officeAddress.locality ?? '').trim();
+        if (!locality) {
+          return res.status(400).json({ ok: false, error: 'office_locality_required' });
+        }
 
-        nextOfficeAddressId = addr.id;
+        // ✅ Córdoba-only check (simple y efectivo)
+        const f0 = String(officeAddress.formatted ?? '').trim();
+        const f0Lower = f0.toLowerCase();
+
+        // Armamos un formatted consistente: "..., <localidad>, Córdoba"
+        // (si ya lo trae así, no duplicamos)
+        let formatted = f0;
+
+        const hasCordoba = f0Lower.includes('córdoba') || f0Lower.includes('cordoba');
+        const hasLocality = f0Lower.includes(locality.toLowerCase());
+
+        if (!hasLocality) {
+          formatted = `${formatted}, ${locality}`;
+        }
+        if (!hasCordoba) {
+          formatted = `${formatted}, Córdoba`;
+        }
+
+        // Extra: si por algún motivo el formatted NO termina teniendo Córdoba, cortamos
+        const formattedLower = formatted.toLowerCase();
+        if (!(formattedLower.includes('córdoba') || formattedLower.includes('cordoba'))) {
+          return res.status(400).json({
+            ok: false,
+            error: 'office_must_be_in_cordoba',
+            message: 'La dirección de oficina debe estar dentro de Córdoba.',
+          });
+        }
+
+        // ✅ FIX: evitar crash por placeId @unique (duplicado)
+        // - si hay placeId => upsert por placeId
+        // - si no hay placeId => create normal
+        let addrId: string;
+
+        if (officeAddress?.placeId) {
+          const up = await prisma.address.upsert({
+            where: { placeId: officeAddress.placeId },
+            create: {
+              placeId: officeAddress.placeId,
+              formatted: officeAddress.formatted,
+              lat: officeAddress.lat,
+              lng: officeAddress.lng,
+            },
+            update: {
+              // dejamos que se actualice por si cambió el formatted o coords
+              formatted: officeAddress.formatted,
+              lat: officeAddress.lat,
+              lng: officeAddress.lng,
+            },
+            select: { id: true },
+          });
+
+          addrId = up.id;
+        } else {
+          const created = await prisma.address.create({
+            data: {
+              placeId: null,
+              formatted: officeAddress!.formatted,
+              lat: officeAddress!.lat,
+              lng: officeAddress!.lng,
+            },
+            select: { id: true },
+          });
+
+          addrId = created.id;
+        }
+
+        nextOfficeAddressId = addrId;
       } else {
         // si NO incluye OFFICE, limpiamos officeAddressId
         nextOfficeAddressId = null;

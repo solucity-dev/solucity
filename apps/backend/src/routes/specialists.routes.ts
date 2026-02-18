@@ -1145,7 +1145,10 @@ const PatchMeSchema = z.object({
   officeAddress: z
     .object({
       formatted: z.string().min(5),
-      locality: z.string().min(2),
+
+      // ✅ FIX: en mobile hoy NO lo estás mandando, entonces tiene que ser opcional
+      locality: z.string().min(2).optional().nullable(),
+
       lat: z.coerce.number().optional(),
       lng: z.coerce.number().optional(),
       placeId: z.string().optional().nullable(),
@@ -1412,20 +1415,28 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
 
         const officeAddress = data.officeAddress;
 
-        const locality = String(officeAddress.locality ?? '').trim();
-        if (!locality)
-          return res.status(400).json({ ok: false, error: 'office_locality_required' });
-
         let formatted = String(officeAddress.formatted ?? '').trim();
-        if (!formatted)
+        if (!formatted) {
           return res.status(400).json({ ok: false, error: 'office_address_required' });
+        }
 
-        // Normalización Córdoba + localidad
+        // ✅ FIX: si no viene locality, la inferimos desde el formatted
+        // Ej: "Fray Luis Beltrán 875, Río Cuarto, Córdoba, Argentina" -> locality = "Río Cuarto"
+        const parts = formatted
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const inferredLocality = String(officeAddress.locality ?? parts[1] ?? '').trim();
+
+        // Normalización Córdoba + (si existe) localidad
         const f0Lower = formatted.toLowerCase();
         const hasCordoba = f0Lower.includes('córdoba') || f0Lower.includes('cordoba');
-        const hasLocality = f0Lower.includes(locality.toLowerCase());
 
-        if (!hasLocality) formatted = `${formatted}, ${locality}`;
+        if (inferredLocality) {
+          const hasLocality = f0Lower.includes(inferredLocality.toLowerCase());
+          if (!hasLocality) formatted = `${formatted}, ${inferredLocality}`;
+        }
+
         if (!hasCordoba) formatted = `${formatted}, Córdoba, Argentina`;
 
         // 1) Tomar coords si vienen

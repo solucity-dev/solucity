@@ -1794,6 +1794,12 @@ orders.get('/:id', auth, async (req, res) => {
     const effectiveJobLat = sm2 === 'OFFICE' && officeLat != null ? officeLat : jobLat0;
     const effectiveJobLng = sm2 === 'OFFICE' && officeLng != null ? officeLng : jobLng0;
 
+    // ✅ NUEVO: coords del trabajo para que mobile abra Maps por lat/lng (evita búsquedas tipo "hoteles")
+    const jobLocation =
+      sm2 === 'ONLINE' || effectiveJobLat == null || effectiveJobLng == null
+        ? null
+        : { lat: effectiveJobLat, lng: effectiveJobLng };
+
     const specLat =
       typeof order.specialist?.centerLat === 'number'
         ? (order.specialist.centerLat as number)
@@ -1872,12 +1878,20 @@ orders.get('/:id', auth, async (req, res) => {
       .filter(Boolean);
 
     // ───────── DIRECCIÓN ─────────
+    // ✅ HOME: preferimos lo que escribió el cliente (más “limpio”)
+    // ✅ OFFICE: mostramos la dirección del especialista
     let resolvedAddress =
-      typeof order.location?.formatted === 'string' && order.location.formatted.trim()
-        ? order.location.formatted.trim()
-        : typeof order.addressText === 'string' && order.addressText.trim()
+      sm2 === 'HOME'
+        ? typeof order.addressText === 'string' && order.addressText.trim()
           ? order.addressText.trim()
-          : null;
+          : typeof order.location?.formatted === 'string' && order.location.formatted.trim()
+            ? order.location.formatted.trim()
+            : null
+        : typeof order.location?.formatted === 'string' && order.location.formatted.trim()
+          ? order.location.formatted.trim()
+          : typeof order.addressText === 'string' && order.addressText.trim()
+            ? order.addressText.trim()
+            : null;
 
     if (sm2 === 'OFFICE') {
       const officeFormatted =
@@ -1956,7 +1970,11 @@ orders.get('/:id', auth, async (req, res) => {
 
       // 👈 se expone la distancia calculada
       distanceKm,
+
+      // ✅ NUEVO: coords para abrir Maps correctamente
+      jobLocation,
     };
+
     t('before-response', { events: order.events?.length ?? 0, status: order.status });
     return res.json({
       ok: true,

@@ -59,6 +59,8 @@ type OrderDetail = {
   address: string | null;
   distanceKm?: number | null;
 
+  jobLocation?: { lat: number; lng: number } | null;
+
   attachments: any[];
   events: OrderEvent[];
   rating: { score: number; comment: string | null } | null;
@@ -99,6 +101,54 @@ function getErrorMessage(e: any) {
     return 'Error inesperado';
   }
 }
+
+const openInMapsCoords = async (lat: number, lng: number, label?: string) => {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    Alert.alert('Ubicación inválida', 'No hay coordenadas válidas para abrir en Maps.');
+    return;
+  }
+
+  const safeLabel = (label ?? '').trim();
+  const encodedLabel = encodeURIComponent(safeLabel);
+
+  // Preferimos "query=lat,lng(label)" para que muestre pin y no haga búsquedas raras
+  const webGoogle = safeLabel
+    ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}(${encodedLabel})`
+    : `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+
+  const webAlt = safeLabel
+    ? `https://maps.google.com/?q=${lat},${lng}(${encodedLabel})`
+    : `https://maps.google.com/?q=${lat},${lng}`;
+
+  const androidGeo = safeLabel
+    ? `geo:${lat},${lng}?q=${lat},${lng}(${encodedLabel})`
+    : `geo:${lat},${lng}?q=${lat},${lng}`;
+
+  const iosApple = safeLabel
+    ? `maps://?q=${encodedLabel}&ll=${lat},${lng}`
+    : `maps://?ll=${lat},${lng}`;
+
+  try {
+    await Linking.openURL(webGoogle);
+    return;
+  } catch {}
+
+  try {
+    if (Platform.OS === 'android') {
+      await Linking.openURL(androidGeo);
+      return;
+    }
+    await Linking.openURL(iosApple);
+    return;
+  } catch {}
+
+  try {
+    await Linking.openURL(webAlt);
+    return;
+  } catch {}
+
+  Alert.alert('No disponible', 'No se pudo abrir Maps en este dispositivo.');
+};
 
 const openInMaps = async (q: string) => {
   const query = (q ?? '').trim();
@@ -1012,7 +1062,15 @@ export default function OrderDetailScreen() {
 
             {shouldShowAddress && (
               <Pressable
-                onPress={() => openInMaps(addressText)}
+                onPress={() => {
+                  const jl = data?.jobLocation;
+                  if (jl?.lat != null && jl?.lng != null) {
+                    openInMapsCoords(jl.lat, jl.lng, addressText !== '—' ? addressText : undefined);
+                    return;
+                  }
+                  // fallback (si por algún motivo no vinieron coords)
+                  openInMaps(addressText);
+                }}
                 style={[styles.ctaAlt, { marginTop: 10 }]}
               >
                 <Text style={styles.ctaAltText}>Abrir en Google Maps</Text>

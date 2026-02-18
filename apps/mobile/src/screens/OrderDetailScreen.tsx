@@ -108,42 +108,49 @@ const openInMapsCoords = async (lat: number, lng: number, label?: string) => {
     return;
   }
 
-  const safeLabel = (label ?? '').trim();
+  const safeLabel = (label ?? '').replace(/\s+/g, ' ').trim();
   const encodedLabel = encodeURIComponent(safeLabel);
 
-  // Preferimos "query=lat,lng(label)" para que muestre pin y no haga búsquedas raras
-  const webGoogle = safeLabel
-    ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}(${encodedLabel})`
-    : `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+  // ✅ Android: navegación directa por coordenadas (evita “Coincidencias parciales”)
+  const androidNav = `google.navigation:q=${lat},${lng}`;
 
-  const webAlt = safeLabel
-    ? `https://maps.google.com/?q=${lat},${lng}(${encodedLabel})`
-    : `https://maps.google.com/?q=${lat},${lng}`;
-
+  // ✅ Android fallback: geo (también suele abrir directo)
   const androidGeo = safeLabel
-    ? `geo:${lat},${lng}?q=${lat},${lng}(${encodedLabel})`
+    ? `geo:${lat},${lng}?q=${lat},${lng}`
     : `geo:${lat},${lng}?q=${lat},${lng}`;
 
+  // ✅ Web: NO usar lat,lng(label) en query (eso te provoca parciales)
+  // Mejor abrir directo en “place” por coordenadas:
+  const webGoogle = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+
+  // ✅ iOS: Apple Maps
   const iosApple = safeLabel
-    ? `maps://?q=${encodedLabel}&ll=${lat},${lng}`
+    ? `maps://?ll=${lat},${lng}&q=${encodedLabel}`
     : `maps://?ll=${lat},${lng}`;
 
-  try {
-    await Linking.openURL(webGoogle);
-    return;
-  } catch {}
-
-  try {
-    if (Platform.OS === 'android') {
+  // 1) Android intent más confiable
+  if (Platform.OS === 'android') {
+    try {
+      await Linking.openURL(androidNav);
+      return;
+    } catch {}
+    try {
       await Linking.openURL(androidGeo);
       return;
-    }
-    await Linking.openURL(iosApple);
-    return;
-  } catch {}
+    } catch {}
+  }
 
+  // 2) iOS Apple Maps
+  if (Platform.OS === 'ios') {
+    try {
+      await Linking.openURL(iosApple);
+      return;
+    } catch {}
+  }
+
+  // 3) Web fallback
   try {
-    await Linking.openURL(webAlt);
+    await Linking.openURL(webGoogle);
     return;
   } catch {}
 
@@ -151,7 +158,9 @@ const openInMapsCoords = async (lat: number, lng: number, label?: string) => {
 };
 
 const openInMaps = async (q: string) => {
-  const query = (q ?? '').trim();
+  const raw = (q ?? '').replace(/\s+/g, ' ').trim();
+  const query = !raw ? '' : raw.toLowerCase().includes('argentina') ? raw : `${raw}, Argentina`;
+
   if (!query) {
     Alert.alert('Dirección vacía', 'No hay una dirección válida para abrir en Maps.');
     return;
@@ -704,11 +713,17 @@ export default function OrderDetailScreen() {
     return '—';
   })();
 
-  // 🔥 Mostrar dirección solo si:
+  // ✅ coords válidas aunque no haya address
+  const hasCoords = data?.jobLocation?.lat != null && data?.jobLocation?.lng != null;
+
+  // ✅ Mostrar dirección solo si:
   // - NO está pendiente
   // - NO es modalidad ONLINE
   // - Existe dirección válida
   const shouldShowAddress = !isPending && !isModeOnline && addressText !== '—';
+
+  // ✅ Mostrar botón Maps si hay dirección O coordenadas
+  const shouldShowMapsButton = !isPending && !isModeOnline && (addressText !== '—' || hasCoords);
 
   // ✅ Chat disponible por estado
   // ✅ Chat disponible si no está pendiente/cancelada y existe thread
@@ -1060,7 +1075,7 @@ export default function OrderDetailScreen() {
               </View>
             ) : null}
 
-            {shouldShowAddress && (
+            {shouldShowMapsButton && (
               <Pressable
                 onPress={() => {
                   const jl = data?.jobLocation;
@@ -1073,7 +1088,9 @@ export default function OrderDetailScreen() {
                 }}
                 style={[styles.ctaAlt, { marginTop: 10 }]}
               >
-                <Text style={styles.ctaAltText}>Abrir en Google Maps</Text>
+                <Text style={styles.ctaAltText}>
+                  {isModeOffice ? 'Abrir local en Google Maps' : 'Abrir en Google Maps'}
+                </Text>
               </Pressable>
             )}
 

@@ -7,13 +7,14 @@ import sharp from 'sharp';
 
 import { ensureDir, uploadsRoot } from '../lib/uploads';
 import { auth } from '../middlewares/auth';
+import { dbg, debugUploads, errMsg } from '../utils/debug';
 
 export const orderAttachments = Router();
 
 const uploadsDir = path.join(uploadsRoot, 'orders');
 ensureDir(uploadsDir);
 
-console.log('[orderAttachments] uploadsDir =', uploadsDir);
+dbg(debugUploads, '[orderAttachments] uploadsDir =', uploadsDir);
 
 // ✅ límites + mime types permitidos
 const upload = multer({
@@ -55,7 +56,7 @@ orderAttachments.post('/orders/attachments/upload', auth, (req, res) => {
       const url = `/uploads/orders/${filename}`;
       return res.json({ ok: true, url });
     } catch (e) {
-      console.error('[orderAttachments] upload error', e);
+      dbg(debugUploads, '[orderAttachments] upload error:', errMsg(e));
       return res.status(500).json({ ok: false, error: 'upload_error' });
     }
   });

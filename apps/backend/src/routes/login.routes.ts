@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { signToken } from '../lib/jwt';
 import { prisma } from '../lib/prisma';
+import { dbg, debugOrders, errMsg } from '../utils/debug';
 
 const router = Router();
 
@@ -69,7 +70,7 @@ router.post('/login', async (req, res) => {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ ok: false, error: 'invalid_input', details: err.flatten() });
     }
-    if (process.env.NODE_ENV !== 'production') console.error('POST /auth/login', err);
+    dbg(debugOrders, '[auth] POST /login error:', errMsg(err));
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });

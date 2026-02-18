@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { prisma } from '../lib/prisma';
 import { auth } from '../middlewares/auth';
+import { dbg, debugCustomers, errMsg } from '../utils/debug';
 
 export const customerLocationRoutes = Router();
 
@@ -80,7 +81,7 @@ customerLocationRoutes.patch('/me/location', auth, async (req, res) => {
       },
     });
   } catch (e) {
-    console.error('PATCH /customers/me/location', e);
+    dbg(debugCustomers, '[customers] PATCH /me/location failed:', errMsg(e));
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });

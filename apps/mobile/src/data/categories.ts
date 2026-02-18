@@ -64,8 +64,8 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     { id: 'soldador', title: 'Soldador', icon: { set: 'mdi', name: 'torch' } },
     {
       id: 'porcelanato-liquido',
-      title: 'Porcelanato liquido',
-      icon: { set: 'mdi', name: 'trowel' }, // si no existe, usá 'floor-plan' o 'format-paint'
+      title: 'Porcelanato líquido',
+      icon: { set: 'mdi', name: 'floor-plan' },
     },
     { id: 'vidrieria', title: 'Vidriería', icon: { set: 'mdi', name: 'glass-fragile' } },
     { id: 'aberturas', title: 'Aberturas', icon: { set: 'mdi', name: 'door' } },

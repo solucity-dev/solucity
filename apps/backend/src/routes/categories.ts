@@ -2,6 +2,7 @@
 import { Router } from 'express';
 
 import { prisma } from '../lib/prisma';
+import { dbg, debugSpecialists } from '../utils/debug'; // ✅ solo para debug opcional
 
 export const categories = Router();
 
@@ -22,11 +23,12 @@ categories.get('/', async (_req, res) => {
           id: true,
           name: true,
           slug: true,
-          // si tenés icon o algo, agregalo acá
         },
       },
     },
   });
+
+  dbg(debugSpecialists, '[categories] GET /categories -> groups:', data.length);
 
   res.json({ ok: true, groups: data });
 });

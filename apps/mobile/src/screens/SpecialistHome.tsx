@@ -15,13 +15,14 @@ import {
   InteractionManager,
   Modal,
   Pressable,
-  ScrollView,
+  ScrollView as RNScrollView,
   StyleSheet,
   Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../auth/AuthProvider';
@@ -642,11 +643,13 @@ export default function SpecialistHome() {
           setServiceModes(['HOME']); // fallback seguro
         }
 
-        // 🔥 Cargar dirección del local si existe
-        if ((p as any).officeAddress?.formatted) {
-          const formatted = String((p as any).officeAddress.formatted);
+        // 🔥 Cargar dirección del local si existe (soporta string u objeto)
+        const oa = (p as any).officeAddress;
 
-          // 🔥 Extraemos SOLO la calle (antes de la primera coma)
+        const formatted =
+          typeof oa === 'string' ? oa : typeof oa?.formatted === 'string' ? oa.formatted : null;
+
+        if (formatted) {
           const streetOnly = formatted.split(',')[0].trim();
           setOfficeAddress(streetOnly);
 
@@ -1465,7 +1468,15 @@ export default function SpecialistHome() {
           </Pressable>
         </View>
 
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <KeyboardAwareScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          enableOnAndroid
+          extraScrollHeight={16}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          enableAutomaticScroll
+        >
           {/* Vista previa (como te ve el cliente en la lista) */}
           <View style={styles.card}>
             <Text style={[styles.muted, { marginBottom: 10, fontWeight: '800' }]}>
@@ -2144,7 +2155,7 @@ export default function SpecialistHome() {
                         }}
                       />
 
-                      <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
+                      <RNScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
                         {filteredOfficeLocalities.map((loc) => (
                           <Pressable
                             key={loc}
@@ -2165,7 +2176,7 @@ export default function SpecialistHome() {
                             <Text style={{ color: '#06494F', fontWeight: '800' }}>{loc}</Text>
                           </Pressable>
                         ))}
-                      </ScrollView>
+                      </RNScrollView>
 
                       <Pressable
                         onPress={() => {
@@ -2371,7 +2382,7 @@ export default function SpecialistHome() {
               </View>
             )}
           </View>
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </SafeAreaView>
 
       {/* Pickers: hora */}

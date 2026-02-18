@@ -58,6 +58,10 @@ type SortBy = 'distance' | 'rating' | 'price';
 // ===== Config =====
 const RADIUS_KM_DEFAULT = 30;
 
+// ===== QA coords fija (Río Cuarto centro) =====
+const QA_EMAILS = new Set(['qa.customer@solucity.app', 'qa.specialist@solucity.app']);
+const QA_COORDS = { lat: -33.1232, lng: -64.3499 };
+
 // Cache en memoria (categoría + coords redondeadas + flags) -> resultados
 const resultsCache = new Map<string, { at: number; items: SpecialistRow[] }>();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos
@@ -108,6 +112,39 @@ export default function SpecialistsListScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<SpecialistRow[]>([]);
+  const [isQaUser, setIsQaUser] = useState(false);
+  const [qaResolved, setQaResolved] = useState(false); // ✅ ya sabemos si es QA o no
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        // ✅ trae el usuario actual para leer email
+        // Si tu endpoint no es /auth/me, reemplazalo por el correcto.
+        const me = await api.get('/auth/me');
+
+        const email = String(me.data?.user?.email ?? me.data?.email ?? '')
+          .trim()
+          .toLowerCase();
+
+        if (!alive) return;
+
+        const qa = QA_EMAILS.has(email);
+        setIsQaUser(qa);
+
+        if (__DEV__) console.log('[QA] email=', email, 'isQa=', qa);
+      } catch {
+        if (__DEV__) console.log('[QA] /auth/me failed, continuing normal');
+      } finally {
+        if (alive) setQaResolved(true); // ✅ pase lo que pase, ya resolvimos QA
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Filtros que impactan en backend
   const [onlyEnabled, setOnlyEnabled] = useState(false);
@@ -135,34 +172,43 @@ export default function SpecialistsListScreen() {
    * Pide permiso solo si hace falta, devuelve coords.
    * Si forceFresh=false y no se movió, reutiliza coords previas.
    */
-  const getCoordsSmart = useCallback(async (forceFresh: boolean) => {
-    const perm = await Location.getForegroundPermissionsAsync();
-    if (perm.status !== 'granted') {
-      const req = await Location.requestForegroundPermissionsAsync();
-      if (req.status !== 'granted') throw new Error('Permiso de ubicación denegado');
-    }
+  const getCoordsSmart = useCallback(
+    async (forceFresh: boolean) => {
+      // ✅ QA: coordenadas fijas SIEMPRE (no GPS, no permisos)
+      if (isQaUser) {
+        lastCoords.current = QA_COORDS;
+        return { coords: QA_COORDS, movedKm: Infinity };
+      }
 
-    if (!lastCoords.current) {
+      const perm = await Location.getForegroundPermissionsAsync();
+      if (perm.status !== 'granted') {
+        const req = await Location.requestForegroundPermissionsAsync();
+        if (req.status !== 'granted') throw new Error('Permiso de ubicación denegado');
+      }
+
+      if (!lastCoords.current) {
+        const pos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        lastCoords.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        return { coords: lastCoords.current, movedKm: Infinity };
+      }
+
       const pos = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
-      lastCoords.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      return { coords: lastCoords.current, movedKm: Infinity };
-    }
+      const fresh = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      const movedKm = haversineKm(lastCoords.current, fresh);
 
-    const pos = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
-    const fresh = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-    const movedKm = haversineKm(lastCoords.current, fresh);
+      if (!forceFresh && movedKm < MOVED_THRESHOLD_KM) {
+        return { coords: lastCoords.current, movedKm };
+      }
 
-    if (!forceFresh && movedKm < MOVED_THRESHOLD_KM) {
-      return { coords: lastCoords.current, movedKm };
-    }
-
-    lastCoords.current = fresh;
-    return { coords: fresh, movedKm };
-  }, []);
+      lastCoords.current = fresh;
+      return { coords: fresh, movedKm };
+    },
+    [isQaUser],
+  );
 
   const buildCacheKey = useCallback(
     (lat: number, lng: number) => {
@@ -188,6 +234,13 @@ export default function SpecialistsListScreen() {
         if (isRefresh) setRefreshing(true);
         else setLoading(true);
         setError(null);
+
+        if (!qaResolved) {
+          // no hagas nada todavía, pero NO dejes loading colgado
+          setLoading(false);
+          setRefreshing(false);
+          return;
+        }
 
         const { coords, movedKm } = await getCoordsSmart(isRefresh);
 
@@ -259,7 +312,7 @@ export default function SpecialistsListScreen() {
         setRefreshing(false);
       }
     },
-    [buildCacheKey, dbCategorySlug, getCoordsSmart, effectiveOnlyEnabled, priceMax],
+    [buildCacheKey, dbCategorySlug, getCoordsSmart, effectiveOnlyEnabled, priceMax, qaResolved],
   );
 
   // ✅ Refetch cuando la app vuelve al frente (background -> active)
@@ -285,6 +338,7 @@ export default function SpecialistsListScreen() {
 
       (async () => {
         try {
+          if (!qaResolved) return; // ✅ primero resolvé QA
           await getCoordsSmart(false);
           if (!alive) return;
 
@@ -304,7 +358,7 @@ export default function SpecialistsListScreen() {
       return () => {
         alive = false;
       };
-    }, [fetchData, getCoordsSmart]),
+    }, [fetchData, getCoordsSmart, qaResolved]),
   );
 
   const list = useMemo(() => {

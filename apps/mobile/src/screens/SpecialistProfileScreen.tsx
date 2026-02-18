@@ -268,12 +268,14 @@ export default function SpecialistProfileScreen() {
                     <Text style={styles.muted}>{distanceLabel(spec.distanceKm)}</Text>
                   </View>
 
-                  <View style={[styles.row, { marginTop: 4 }]}>
-                    <MDI name="shield-check-outline" size={16} color="#E9FEFF" />
-                    <Text style={styles.muted}>
-                      {spec.enabled ? 'Habilitado' : 'No habilitado'}
-                    </Text>
-                  </View>
+                  {/*
+<View style={[styles.row, { marginTop: 4 }]}>
+  <MDI name="shield-check-outline" size={16} color="#E9FEFF" />
+  <Text style={styles.muted}>
+    {spec.enabled ? 'Habilitado' : 'No habilitado'}
+  </Text>
+</View>
+*/}
                 </View>
               </View>
 

@@ -7,6 +7,7 @@ import { imageFileFilter } from '../lib/multerImage';
 import { prisma } from '../lib/prisma';
 import { ensureDir, resolveUploadsPath, safeUnlink, uploadsRoot } from '../lib/uploads';
 import { auth } from '../middlewares/auth';
+import { dbg, debugUploads, errMsg } from '../utils/debug';
 
 const router = Router();
 
@@ -45,7 +46,10 @@ router.post('/me/avatar', auth, upload.single('avatar'), async (req, res) => {
     // ✅ borrar avatar anterior (best-effort)
     if (specialist.avatarUrl?.startsWith('/uploads/avatars/')) {
       const prevPath = resolveUploadsPath(uploadsRoot, specialist.avatarUrl);
-      if (prevPath) safeUnlink(prevPath);
+      if (prevPath) {
+        dbg(debugUploads, '[specialist avatar] removing previous', specialist.avatarUrl);
+        safeUnlink(prevPath);
+      }
     }
 
     const avatarUrl = `/uploads/avatars/${req.file.filename}`;
@@ -57,7 +61,7 @@ router.post('/me/avatar', auth, upload.single('avatar'), async (req, res) => {
 
     return res.status(201).json({ ok: true, avatarUrl });
   } catch (e) {
-    console.error('[POST /specialists/me/avatar] error', e);
+    dbg(debugUploads, '[POST /specialists/me/avatar] error', errMsg(e));
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });

@@ -1,8 +1,9 @@
-//apps/backend/src/routes/customersMe.routes.ts
+// apps/backend/src/routes/customersMe.routes.ts
 import { Router } from 'express';
 
 import { prisma } from '../lib/prisma';
 import { auth } from '../middlewares/auth';
+import { dbg, debugCustomers, errMsg } from '../utils/debug';
 
 const router = Router();
 
@@ -14,15 +15,12 @@ router.get('/me', auth, async (req: any, res) => {
       return res.status(401).json({ ok: false, error: 'unauthorized' });
     }
 
-    const profile = await (prisma as any).customerProfile.findUnique({
+    const profile = await prisma.customerProfile.findUnique({
       where: { userId },
       select: {
         id: true,
         userId: true,
         avatarUrl: true,
-        // si tenés otros campos en tu modelo, podés agregarlos luego:
-        // phone: true,
-        // address: true,
       },
     });
 
@@ -32,7 +30,7 @@ router.get('/me', auth, async (req: any, res) => {
 
     return res.json({ ok: true, profile });
   } catch (e) {
-    console.error('[GET /customers/me] error', e);
+    dbg(debugCustomers, '[GET /customers/me] error', errMsg(e));
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });

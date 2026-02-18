@@ -7,9 +7,7 @@ import {
   getOrCreateSubscriptionForSpecialist,
   handleMercadoPagoWebhook,
 } from '../services/subscriptionService';
-import { debugPayments } from '../utils/debug';
-
-import type { ParsedQs } from 'qs';
+import { dbg, debugPayments, errMsg } from '../utils/debug';
 
 type AuthReq = Request & { user?: { id: string; role: string } };
 
@@ -52,9 +50,7 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
       },
     });
   } catch (e) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.error('GET /subscriptions/me', e);
-    }
+    dbg(debugPayments, 'GET /subscriptions/me error', errMsg(e));
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });
@@ -83,7 +79,7 @@ router.post('/pay/link', auth, async (req: AuthReq, res: Response) => {
       return res.status(500).json({ ok: false, error: 'public_backend_url_missing' });
     }
 
-    console.error('POST /subscriptions/pay/link', e);
+    dbg(debugPayments, 'POST /subscriptions/pay/link error', errMsg(e));
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });
@@ -98,22 +94,17 @@ router.post('/mercadopago/webhook', async (req: Request, res: Response) => {
       (req.query as any)?.['data.id'] || (req.body as any)?.data?.id || (req.body as any)?.id;
 
     if (!paymentId) return res.status(200).send('ok_no_payment_id');
-    if (debugPayments) {
-      const safeQuery =
-        req.query && Object.keys(req.query).length ? '[query present]' : '[no query]';
-      const safeBody = req.body && Object.keys(req.body).length ? '[body present]' : '[no body]';
 
-      console.log('[MP webhook] incoming', {
-        paymentId: String(paymentId),
-        safeQuery,
-        safeBody,
-      });
-    }
+    dbg(debugPayments, '[MP webhook] incoming', {
+      paymentId: String(paymentId),
+      safeQuery: req.query && Object.keys(req.query).length ? '[query present]' : '[no query]',
+      safeBody: req.body && Object.keys(req.body).length ? '[body present]' : '[no body]',
+    });
 
     await handleMercadoPagoWebhook(String(paymentId));
     return res.status(200).send('ok');
   } catch (e) {
-    console.error('POST /subscriptions/mercadopago/webhook', e);
+    dbg(debugPayments, 'POST /subscriptions/mercadopago/webhook error', errMsg(e));
     // Mercado Pago espera 200 para no reintentar eternamente
     return res.status(200).send('ok');
   }
@@ -126,27 +117,25 @@ router.post('/mercadopago/webhook', async (req: Request, res: Response) => {
  */
 router.get('/return/success', async (req: Request, res: Response) => {
   try {
-    const q = req.query as ParsedQs & Record<string, any>;
+    const q = (req.query ?? {}) as Record<string, any>;
 
     // MP suele mandar: payment_id, status, external_reference, preference_id, etc.
     const paymentId = String(q.payment_id || q.collection_id || '');
     const status = String(q.status || q.collection_status || '');
     const externalRef = String(q.external_reference || '');
 
-    if (debugPayments) {
-      const safeQuery =
-        req.query && Object.keys(req.query).length ? '[query present]' : '[no query]';
-      console.log('[MP return success]', { paymentId, status, externalRef, safeQuery });
-    }
+    dbg(debugPayments, '[MP return success]', {
+      paymentId,
+      status,
+      externalRef,
+      safeQuery: req.query && Object.keys(req.query).length ? '[query present]' : '[no query]',
+    });
 
     // 🔁 Robustez: si viene paymentId, intentamos sincronizar igual que el webhook
-    // (si el webhook falló o llegó tarde, esto salva el estado)
     if (paymentId) {
       await handleMercadoPagoWebhook(paymentId);
     }
 
-    // ✅ Página mínima (no 404) + botón para volver a la app
-    // Si tenés deep link, podés cambiar "solucity://subscription" por tu scheme real
     const deepLink = process.env.PUBLIC_APP_DEEPLINK || 'solucity://subscription';
 
     return res.status(200).setHeader('Content-Type', 'text/html; charset=utf-8')
@@ -181,14 +170,13 @@ router.get('/return/success', async (req: Request, res: Response) => {
     </div>
 
     <script>
-      // Intento de auto-abrir la app (no rompe nada si no está el scheme configurado)
       setTimeout(function(){ window.location.href = "${deepLink}"; }, 600);
     </script>
   </body>
 </html>`);
   } catch (e) {
-    console.error('GET /subscriptions/return/success', e);
-    return res.status(200).json({ ok: true }); // MP no necesita nada particular
+    dbg(debugPayments, 'GET /subscriptions/return/success error', errMsg(e));
+    return res.status(200).json({ ok: true });
   }
 });
 
@@ -198,11 +186,9 @@ router.get('/return/success', async (req: Request, res: Response) => {
  */
 router.get('/return/failure', async (req: Request, res: Response) => {
   try {
-    if (debugPayments) {
-      const safeQuery =
-        req.query && Object.keys(req.query).length ? '[query present]' : '[no query]';
-      console.log('[MP return failure]', { safeQuery });
-    }
+    dbg(debugPayments, '[MP return failure]', {
+      safeQuery: req.query && Object.keys(req.query).length ? '[query present]' : '[no query]',
+    });
 
     const deepLink = process.env.PUBLIC_APP_DEEPLINK || 'solucity://subscription';
 
@@ -232,7 +218,7 @@ router.get('/return/failure', async (req: Request, res: Response) => {
   </body>
 </html>`);
   } catch (e) {
-    console.error('GET /subscriptions/return/failure', e);
+    dbg(debugPayments, 'GET /subscriptions/return/failure error', errMsg(e));
     return res.status(200).json({ ok: true });
   }
 });

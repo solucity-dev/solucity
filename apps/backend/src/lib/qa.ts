@@ -4,11 +4,15 @@ import { prisma } from './prisma';
 const QA_CUSTOMER_EMAIL = 'qa.customer@solucity.app';
 const QA_SPECIALIST_EMAIL = 'qa.specialist@solucity.app';
 
-// Córdoba centro (ajustá si querés)
-const QA_CENTER = { lat: -31.4201, lng: -64.1888 };
+// Río Cuarto centro (aprox)
+const QA_CENTER = { lat: -33.1232, lng: -64.3499 };
 
 // ✅ radio "global" para que el QA specialist aparezca desde cualquier lugar
 const QA_RADIUS_KM = 20000;
+
+// ✅ Address estable para QA (usamos placeId como unique-key interna)
+const QA_PLACE_ID = 'QA_RC';
+const QA_FORMATTED = 'Río Cuarto, Córdoba, Argentina';
 
 function addDays(d: Date, days: number) {
   const x = new Date(d);
@@ -18,6 +22,25 @@ function addDays(d: Date, days: number) {
 
 export async function ensureQaUsers() {
   if (process.env.QA_MODE !== 'true') return;
+
+  // 0) Address QA fija (reutilizable)
+  //    OJO: esto asume que Address.placeId es unique o al menos usable en upsert.
+  //    Si NO es unique, te lo ajusto a findFirst+create/update.
+  const qaAddress = await prisma.address.upsert({
+    where: { placeId: QA_PLACE_ID },
+    create: {
+      placeId: QA_PLACE_ID,
+      formatted: QA_FORMATTED,
+      lat: QA_CENTER.lat,
+      lng: QA_CENTER.lng,
+    },
+    update: {
+      formatted: QA_FORMATTED,
+      lat: QA_CENTER.lat,
+      lng: QA_CENTER.lng,
+    },
+    select: { id: true },
+  });
 
   // 1) Customer demo
   await prisma.user.upsert({
@@ -29,13 +52,26 @@ export async function ensureQaUsers() {
       name: 'QA',
       surname: 'Customer',
       status: 'ACTIVE',
-      customer: { create: {} },
+      customer: { create: { defaultAddressId: qaAddress.id } },
     },
     update: {
       role: 'CUSTOMER',
       status: 'ACTIVE',
     },
   });
+
+  // ✅ Clavar defaultAddressId aunque el perfil ya existiera antes
+  const qaCustomerUser = await prisma.user.findUnique({
+    where: { email: QA_CUSTOMER_EMAIL },
+    select: { id: true },
+  });
+
+  if (qaCustomerUser?.id) {
+    await prisma.customerProfile.updateMany({
+      where: { userId: qaCustomerUser.id },
+      data: { defaultAddressId: qaAddress.id },
+    });
+  }
 
   // 2) Specialist demo (con todo para ser visible)
   const qaSpecUser = await prisma.user.upsert({
@@ -54,7 +90,7 @@ export async function ensureQaUsers() {
     },
   });
 
-  // 2.1) aseguramos profile
+  // 2.1) aseguramos profile + OFFICE listo
   const profile = await prisma.specialistProfile.upsert({
     where: { userId: qaSpecUser.id },
     create: {
@@ -64,24 +100,41 @@ export async function ensureQaUsers() {
       visitPrice: 15000,
       pricingLabel: 'Visita',
       currency: 'ARS',
-      availableNow: true, // 👈 toggle
-      kycStatus: 'VERIFIED', // 👈 gate KYC
+
+      // visibilidad / gates
+      availableNow: true, // toggle
+      kycStatus: 'VERIFIED',
+
+      // ubicación fija QA
       centerLat: QA_CENTER.lat,
       centerLng: QA_CENTER.lng,
-      radiusKm: QA_RADIUS_KM, // ✅ CLAVE (antes estaba 30)
-      availability: { days: [1, 2, 3, 4, 5, 6, 0], start: '00:00', end: '00:00' }, // 24hs
+      radiusKm: QA_RADIUS_KM,
+
+      // 24hs
+      availability: { days: [1, 2, 3, 4, 5, 6, 0], start: '00:00', end: '00:00' },
+
+      // ✅ nuevos: modos + officeAddress
+      serviceModes: ['HOME', 'OFFICE', 'ONLINE'] as any,
+      officeAddressId: qaAddress.id,
+
       avatarUrl: null,
     },
     update: {
       availableNow: true,
       kycStatus: 'VERIFIED',
+
       centerLat: QA_CENTER.lat,
       centerLng: QA_CENTER.lng,
-      radiusKm: QA_RADIUS_KM, // ✅ CLAVE (antes estaba 30)
+      radiusKm: QA_RADIUS_KM,
+
       visitPrice: 15000,
       pricingLabel: 'Visita',
       currency: 'ARS',
       availability: { days: [1, 2, 3, 4, 5, 6, 0], start: '00:00', end: '00:00' },
+
+      // ✅ asegurar OFFICE siempre listo
+      serviceModes: ['HOME', 'OFFICE', 'ONLINE'] as any,
+      officeAddressId: qaAddress.id,
     } as any,
     select: { id: true, userId: true },
   });
@@ -129,7 +182,6 @@ export async function ensureQaUsers() {
   });
 
   // 2.4) SearchIndex (tu /search prefiltra por SpecialistSearchIndex)
-  // OJO: groupSlugs/categorySlugs dependen de specialties.
   const anyCat = await prisma.serviceCategory.findFirst({
     where: { isActive: true },
     select: { id: true, slug: true, group: { select: { slug: true } } },
@@ -149,9 +201,12 @@ export async function ensureQaUsers() {
         specialistId: profile.id,
         groupSlugs: [anyCat.group.slug],
         categorySlugs: [anyCat.slug],
+
+        // ✅ alineado con profile + fijo QA
         centerLat: QA_CENTER.lat,
         centerLng: QA_CENTER.lng,
-        radiusKm: QA_RADIUS_KM, // ✅ CLAVE (antes 20000 hardcode, ahora constante)
+        radiusKm: QA_RADIUS_KM,
+
         ratingAvg: 5,
         ratingCount: 20,
         badge: 'GOLD',
@@ -162,9 +217,11 @@ export async function ensureQaUsers() {
       update: {
         groupSlugs: [anyCat.group.slug],
         categorySlugs: [anyCat.slug],
+
         centerLat: QA_CENTER.lat,
         centerLng: QA_CENTER.lng,
         radiusKm: QA_RADIUS_KM,
+
         ratingAvg: 5,
         ratingCount: 20,
         badge: 'GOLD',

@@ -7,6 +7,7 @@ import { imageFileFilter } from '../lib/multerImage';
 import { prisma } from '../lib/prisma';
 import { ensureDir, resolveUploadsPath, safeUnlink, uploadsRoot } from '../lib/uploads';
 import { auth } from '../middlewares/auth';
+import { dbg, debugUploads, errMsg } from '../utils/debug';
 
 const router = Router();
 
@@ -61,7 +62,7 @@ router.post('/', auth, upload.single('avatar'), async (req: any, res) => {
 
     return res.json({ ok: true, profile: updated });
   } catch (e) {
-    console.error('[POST /customers/me/avatar]', e);
+    dbg(debugUploads, '[customers avatar] upload failed:', errMsg(e));
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });

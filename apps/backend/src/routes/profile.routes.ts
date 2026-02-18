@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { prisma } from '../lib/prisma';
 import { auth } from '../middlewares/auth';
+import { dbg, debugNotifications, errMsg } from '../utils/debug';
 
 const router = Router();
 
@@ -51,9 +52,8 @@ router.patch('/profile', auth, async (req, res) => {
 
     return res.json({ ok: true, user });
   } catch (e) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.error('[PATCH /auth/profile] error', e);
-    }
+    dbg(debugNotifications, '[PATCH /auth/profile] error:', errMsg(e));
+
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });
@@ -104,9 +104,8 @@ router.patch('/password', auth, async (req, res) => {
 
     return res.json({ ok: true });
   } catch (e) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.error('[PATCH /auth/password] error', e);
-    }
+    dbg(debugNotifications, '[PATCH /auth/password] error:', errMsg(e));
+
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });

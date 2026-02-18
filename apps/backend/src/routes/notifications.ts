@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { prisma } from '../lib/prisma';
 import { auth } from '../middlewares/auth';
+import { dbg, debugNotifications, errMsg } from '../utils/debug';
 
 type AuthReq = Request & { user?: { id: string; role: string } };
 
@@ -49,7 +50,7 @@ router.get('/', auth, async (req: AuthReq, res: Response) => {
 
     return res.json({ ok: true, items });
   } catch (e) {
-    if (process.env.NODE_ENV !== 'production') console.error('GET /notifications', e);
+    dbg(debugNotifications, '[notifications] GET /', errMsg(e));
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });
@@ -71,8 +72,9 @@ router.post('/push-token', auth, async (req: AuthReq, res: Response) => {
 
     const { token, platform } = pushTokenSchema.parse(req.body);
     const tokenTail = token.slice(-8);
-    console.log(
-      `[push-token] upsert userId=${userId} platform=${platform ?? 'null'} tokenTail=${tokenTail}`,
+    dbg(
+      debugNotifications,
+      `[notifications] push-token upsert userId=${userId} platform=${platform ?? 'null'} tokenTail=${tokenTail}`,
     );
 
     // token es UNIQUE en schema.prisma
@@ -100,7 +102,7 @@ router.post('/push-token', auth, async (req: AuthReq, res: Response) => {
         details: err.flatten(),
       });
     }
-    if (process.env.NODE_ENV !== 'production') console.error('POST /notifications/push-token', err);
+    dbg(debugNotifications, '[notifications] POST /push-token', errMsg(err));
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });
@@ -123,7 +125,7 @@ router.post('/read-all', auth, async (req: AuthReq, res: Response) => {
 
     return res.json({ ok: true, count: result.count });
   } catch (e) {
-    if (process.env.NODE_ENV !== 'production') console.error('POST /notifications/read-all', e);
+    dbg(debugNotifications, '[notifications] POST /read-all', errMsg(e));
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });
@@ -140,7 +142,7 @@ router.get('/unread-count', auth, async (req: AuthReq, res: Response) => {
 
     return res.json({ ok: true, count });
   } catch (e) {
-    if (process.env.NODE_ENV !== 'production') console.error('GET /notifications/unread-count', e);
+    dbg(debugNotifications, '[notifications] GET /unread-count', errMsg(e));
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });
@@ -179,7 +181,7 @@ router.patch('/:id/read', auth, async (req: AuthReq, res: Response) => {
 
     return res.json({ ok: true, ...updated });
   } catch (e) {
-    if (process.env.NODE_ENV !== 'production') console.error('PATCH /notifications/:id/read', e);
+    dbg(debugNotifications, '[notifications] PATCH /:id/read', errMsg(e));
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });
@@ -225,7 +227,7 @@ router.post('/read-up-to', auth, async (req: AuthReq, res: Response) => {
         details: err.flatten(),
       });
     }
-    if (process.env.NODE_ENV !== 'production') console.error('POST /notifications/read-up-to', err);
+    dbg(debugNotifications, '[notifications] POST /read-up-to', errMsg(err));
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });

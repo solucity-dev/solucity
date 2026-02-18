@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { auth } from '../middlewares/auth';
 import { sendExpoPush } from '../services/pushExpo';
+import { dbg, debugNotifications, debugPush, errMsg } from '../utils/debug';
 
 export const chat = Router();
 
@@ -332,7 +333,7 @@ chat.post('/threads/:threadId/messages', auth, async (req, res) => {
       });
     }
   } catch (e) {
-    console.warn('[CHAT] failed to notify message', e);
+    dbg(debugNotifications || debugPush, '[chat] notify message failed:', errMsg(e));
   }
 
   return res.status(201).json({

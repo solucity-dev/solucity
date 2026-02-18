@@ -1,9 +1,10 @@
 // apps/backend/src/routes/seed.routes.ts
 import { Router } from 'express';
 
+import { isProd } from '../utils/debug';
+
 const router = Router();
 
-const isProd = process.env.NODE_ENV === 'production';
 const enabled = String(process.env.ENABLE_ADMIN_SEED ?? '').toLowerCase() === 'true';
 
 // ✅ En PROD: ocultar completamente, salvo que ENABLE_ADMIN_SEED=true
@@ -26,9 +27,13 @@ router.post('/', async (req, res) => {
     return res.status(401).json({ ok: false, error: 'unauthorized' });
   }
 
-  const { runSeed } = await import('../../prisma/seed.js');
-  const result = await runSeed();
-  return res.json({ ok: true, result });
+  try {
+    const { runSeed } = await import('../../prisma/seed.js');
+    const result = await runSeed();
+    return res.json({ ok: true, result });
+  } catch {
+    return res.status(500).json({ ok: false, error: 'seed_failed' });
+  }
 });
 
 export default router;

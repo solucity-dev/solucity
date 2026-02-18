@@ -3,6 +3,7 @@ import { Router } from 'express';
 
 import { prisma } from '../lib/prisma';
 import { auth } from '../middlewares/auth';
+import { dbg, debugOrders, errMsg } from '../utils/debug';
 
 const router = Router();
 
@@ -49,7 +50,7 @@ router.get('/me', auth, async (req, res) => {
       defaultAddress: base.customer?.defaultAddress ?? null,
     });
   } catch (e) {
-    if (process.env.NODE_ENV !== 'production') console.error('GET /auth/me', e);
+    dbg(debugOrders, '[auth] GET /me error:', errMsg(e));
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });

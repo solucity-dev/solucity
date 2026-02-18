@@ -9,6 +9,7 @@ import { notifyBackgroundCheckStatus } from '../services/notifyBackgroundCheck';
 import { notifyCertificationStatus } from '../services/notifyCertification';
 import { notifyKycStatus } from '../services/notifyKyc';
 import { sendExpoPush } from '../services/pushExpo';
+import { dbg, debugNotifications, debugPush, errMsg } from '../utils/debug';
 
 const adminRouter = Router();
 
@@ -116,7 +117,7 @@ async function notifyAccountStatusChange(params: {
       },
     });
   } catch (e) {
-    console.warn('[push] ACCOUNT_STATUS_CHANGED failed', e);
+    dbg(debugPush, '[push] ACCOUNT_STATUS_CHANGED failed', errMsg(e));
   }
 
   return notif.id;
@@ -180,7 +181,7 @@ adminRouter.patch('/users/:userId/status', async (req, res) => {
     reason: reason ?? null,
     adminId,
   }).catch((e) => {
-    console.warn('[admin] notifyAccountStatusChange failed', e);
+    dbg(debugNotifications, '[admin] notifyAccountStatusChange failed', errMsg(e));
     return null;
   });
 
@@ -1030,7 +1031,7 @@ adminRouter.patch('/kyc/:submissionId/approve', async (req, res) => {
   try {
     await notifyKycStatus({ userId, status: 'VERIFIED', submissionId });
   } catch (e) {
-    console.warn('[admin] notifyKycStatus VERIFIED failed', e);
+    dbg(debugNotifications, '[admin] notifyKycStatus VERIFIED failed', errMsg(e));
   }
 
   return res.json({ ok: true, submissionId, status: 'VERIFIED' });
@@ -1085,7 +1086,7 @@ adminRouter.patch('/kyc/:submissionId/reject', async (req, res) => {
       submissionId,
     });
   } catch (e) {
-    console.warn('[admin] notifyKycStatus REJECTED failed', e);
+    dbg(debugNotifications, '[admin] notifyKycStatus REJECTED failed', errMsg(e));
   }
 
   return res.json({ ok: true, submissionId, status: 'REJECTED' });
@@ -1103,9 +1104,8 @@ async function pushToUser(params: { userId: string; title: string; body: string;
 
   const toList = tokens.map((t) => t.token).filter(Boolean);
   if (!toList.length) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[push] no tokens for user', params.userId);
-    }
+    dbg(debugPush, '[push] no tokens for user', params.userId);
+
     return;
   }
 
@@ -1243,7 +1243,7 @@ adminRouter.patch('/background-checks/:id/approve', async (req, res) => {
       fileUrl: bg.fileUrl ?? null,
     });
   } catch (e) {
-    console.warn('[admin] notifyBackgroundCheckStatus APPROVED failed', e);
+    dbg(debugNotifications, '[admin] notifyBackgroundCheckStatus APPROVED failed', errMsg(e));
   }
 
   return res.json({ ok: true, id, status: 'APPROVED' });
@@ -1298,7 +1298,7 @@ adminRouter.patch('/background-checks/:id/reject', async (req, res) => {
       fileUrl: bg.fileUrl ?? null,
     });
   } catch (e) {
-    console.warn('[admin] notifyBackgroundCheckStatus REJECTED failed', e);
+    dbg(debugNotifications, '[admin] notifyBackgroundCheckStatus REJECTED failed', errMsg(e));
   }
 
   return res.json({ ok: true, id, status: 'REJECTED', rejectionReason: parsed.data.reason });
@@ -1371,7 +1371,7 @@ adminRouter.post('/background-checks/:id/request-update', async (req, res) => {
       },
     });
   } catch (e) {
-    console.warn('[push] BACKGROUND_CHECK_REVIEW_REQUEST failed', e);
+    dbg(debugPush, '[push] BACKGROUND_CHECK_REVIEW_REQUEST failed', errMsg(e));
   }
 
   return res.json({ ok: true, id, status: 'PENDING', notificationId: notif.id });
@@ -1425,7 +1425,7 @@ adminRouter.patch('/background-checks/:id/expire', async (req, res) => {
       fileUrl: bg.fileUrl ?? null,
     });
   } catch (e) {
-    console.warn('[admin] notifyBackgroundCheckStatus EXPIRE failed', e);
+    dbg(debugNotifications, '[admin] notifyBackgroundCheckStatus EXPIRE failed', errMsg(e));
   }
 
   return res.json({
@@ -1552,7 +1552,7 @@ adminRouter.patch('/certifications/:certId/approve', async (req, res) => {
       categoryName: cert.category?.name ?? null,
     });
   } catch (e) {
-    console.warn('[admin] notifyCertificationStatus APPROVED failed', e);
+    dbg(debugNotifications, '[admin] notifyCertificationStatus APPROVED failed', errMsg(e));
   }
 
   return res.json({
@@ -1618,7 +1618,7 @@ adminRouter.patch('/certifications/:certId/reject', async (req, res) => {
       reason: parsed.data.reason,
     });
   } catch (e) {
-    console.warn('[admin] notifyCertificationStatus REJECTED failed', e);
+    dbg(debugNotifications, '[admin] notifyCertificationStatus REJECTED failed', errMsg(e));
   }
 
   return res.json({
@@ -1751,7 +1751,7 @@ adminRouter.patch('/specialists/:specialistId/grant-days', async (req, res) => {
       },
     });
   } catch (e) {
-    console.warn('[push] SUBSCRIPTION_DAYS_GRANTED failed', e);
+    dbg(debugPush, '[push] SUBSCRIPTION_DAYS_GRANTED failed', errMsg(e));
   }
 
   return res.json({

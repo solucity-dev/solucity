@@ -73,12 +73,13 @@ model SpecialistProfile {
   pricingLabel      String?
   specialtyHeadline String?                    @db.VarChar(60)
   officeAddressId   String?                    @unique
+  serviceModes      ServiceMode[]
+  businessName      String?                    @db.VarChar(80)
   kycSubmissions    KycSubmission[]
   orders            ServiceOrder[]             @relation("SpecialistOrders")
   backgroundCheck   SpecialistBackgroundCheck?
   certifications    SpecialistCertification[]
   officeAddress     Address?                   @relation("SpecialistOfficeAddress", fields: [officeAddressId], references: [id])
-  serviceModes ServiceMode[]
   user              User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
   searchIndex       SpecialistSearchIndex?
   specialties       SpecialistSpecialty[]
@@ -154,7 +155,7 @@ model Address {
   formatted         String
   lat               Float
   lng               Float
-  placeId           String?
+  placeId           String?            @unique
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   customerDefaults  CustomerProfile[]  @relation("CustomerDefaultAddress")
@@ -162,7 +163,6 @@ model Address {
   specialistOffices SpecialistProfile? @relation("SpecialistOfficeAddress")
 
   @@index([lat, lng])
-  @@unique([placeId])
 }
 
 model ServiceOrder {
@@ -184,6 +184,7 @@ model ServiceOrder {
   createdAt                DateTime           @default(now())
   updatedAt                DateTime           @updatedAt
   addressText              String?
+  serviceMode              ServiceMode        @default(HOME)
   chatThread               ChatThread?
   events                   OrderEvent[]
   rating                   Rating?
@@ -191,7 +192,6 @@ model ServiceOrder {
   location                 Address?           @relation("OrderLocation", fields: [locationId], references: [id])
   service                  Service            @relation(fields: [serviceId], references: [id])
   specialist               SpecialistProfile? @relation("SpecialistOrders", fields: [specialistId], references: [id])
-  serviceMode ServiceMode @default(HOME)
 
   @@index([status, scheduledAt], map: "idx_order_status_sched")
   @@index([customerId, status], map: "idx_order_customer")

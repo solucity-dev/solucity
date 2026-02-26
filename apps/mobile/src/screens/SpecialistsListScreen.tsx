@@ -47,6 +47,7 @@ type SpecialistRow = {
   verified: boolean;
   distanceKm: number;
   name?: string;
+  businessName?: string | null;
   specialtyHeadline?: string | null;
   avatarUrl?: string | null;
   enabled?: boolean;
@@ -522,7 +523,7 @@ export default function SpecialistsListScreen() {
         <View style={styles.cardMid}>
           <View style={styles.nameRow}>
             <Text style={styles.name} numberOfLines={1}>
-              {s.name || 'Especialista'}
+              {s.businessName?.trim() || s.name || 'Especialista'}
             </Text>
             <View
               style={[styles.statusDotInline, { backgroundColor: online ? '#22c55e' : '#ef4444' }]}

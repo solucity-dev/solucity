@@ -148,15 +148,27 @@ chat.get('/threads', auth, async (req: any, res) => {
             kind: 'specialist' as const,
             name: `${spec.user?.name ?? 'Especialista'} ${spec.user?.surname ?? ''}`.trim(),
             avatarUrl: spec.avatarUrl ?? null,
+            businessName: (spec.businessName ?? null) as string | null, // ✅ NUEVO
           }
-        : { kind: 'specialist' as const, name: 'Especialista', avatarUrl: null }
+        : {
+            kind: 'specialist' as const,
+            name: 'Especialista',
+            avatarUrl: null,
+            businessName: null, // ✅ NUEVO
+          }
       : cust
         ? {
             kind: 'customer' as const,
             name: `${cust.user?.name ?? 'Cliente'} ${cust.user?.surname ?? ''}`.trim(),
             avatarUrl: cust.avatarUrl ?? null,
+            businessName: null, // ✅ NUEVO (customers no tienen)
           }
-        : { kind: 'customer' as const, name: 'Cliente', avatarUrl: null };
+        : {
+            kind: 'customer' as const,
+            name: 'Cliente',
+            avatarUrl: null,
+            businessName: null, // ✅ NUEVO
+          };
 
     return {
       id: t.id,
@@ -197,8 +209,19 @@ chat.get('/threads/:threadId/messages', auth, async (req, res) => {
         select: {
           id: true,
           status: true,
-          customer: { select: { userId: true } },
-          specialist: { select: { userId: true } },
+          customer: {
+            select: {
+              userId: true,
+              user: { select: { name: true, surname: true } },
+            },
+          },
+          specialist: {
+            select: {
+              userId: true,
+              businessName: true,
+              user: { select: { name: true, surname: true } },
+            },
+          },
         },
       },
     },
@@ -259,8 +282,19 @@ chat.post('/threads/:threadId/messages', auth, async (req, res) => {
         select: {
           id: true,
           status: true,
-          customer: { select: { userId: true } },
-          specialist: { select: { userId: true } },
+          customer: {
+            select: {
+              userId: true,
+              user: { select: { name: true, surname: true } },
+            },
+          },
+          specialist: {
+            select: {
+              userId: true,
+              businessName: true,
+              user: { select: { name: true, surname: true } },
+            },
+          },
         },
       },
     },
@@ -270,8 +304,8 @@ chat.post('/threads/:threadId/messages', auth, async (req, res) => {
     return res.json({ ok: true, messages: [] });
   }
 
-  const uCustomer = thread.order.customer?.userId === uid;
-  const uSpecial = thread.order.specialist?.userId === uid;
+  const uCustomer = thread.order?.customer?.userId === uid;
+  const uSpecial = thread.order?.specialist?.userId === uid;
   if (!uCustomer && !uSpecial) return res.status(403).json({ ok: false, error: 'forbidden' });
 
   // ✅ opcional: bloquear envío si la orden ya no está en estados visibles
@@ -299,7 +333,28 @@ chat.post('/threads/:threadId/messages', auth, async (req, res) => {
     const recipientId = uCustomer ? specialistUid : customerUid;
 
     if (recipientId && recipientId !== uid) {
-      const title = 'Nuevo mensaje recibido';
+      const customer = thread.order.customer;
+      const specialist = thread.order.specialist;
+
+      const customerName =
+        `${customer?.user?.name ?? ''} ${customer?.user?.surname ?? ''}`.trim() || 'Cliente';
+
+      const specialistPersonalName =
+        `${specialist?.user?.name ?? ''} ${specialist?.user?.surname ?? ''}`.trim() ||
+        'Especialista';
+
+      const specialistBusinessName =
+        typeof specialist?.businessName === 'string' && specialist.businessName.trim()
+          ? specialist.businessName.trim()
+          : null;
+
+      // ✅ Si envía especialista → negocio (si existe) o nombre personal
+      // ✅ Si envía cliente → nombre del cliente
+      const senderTitle = uSpecial
+        ? (specialistBusinessName ?? specialistPersonalName)
+        : customerName;
+
+      const title = senderTitle;
       const body = text.length > 60 ? text.slice(0, 60) + '…' : text;
 
       // 1) Guardar notificación
@@ -313,6 +368,10 @@ chat.post('/threads/:threadId/messages', auth, async (req, res) => {
             threadId,
             orderId: thread.order.id,
             senderId: uid,
+
+            // ✅ extras para mobile (si querés usarlos luego)
+            businessName: uSpecial ? specialistBusinessName : null,
+            senderName: uSpecial ? specialistPersonalName : customerName,
           } as any,
         },
         select: { id: true, title: true, body: true },
@@ -329,6 +388,10 @@ chat.post('/threads/:threadId/messages', auth, async (req, res) => {
           threadId,
           orderId: thread.order.id,
           senderId: uid,
+
+          // ✅ mismos extras también en el push payload
+          businessName: uSpecial ? specialistBusinessName : null,
+          senderName: uSpecial ? specialistPersonalName : customerName,
         },
       });
     }

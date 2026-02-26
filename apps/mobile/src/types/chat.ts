@@ -22,6 +22,7 @@ export type ChatThreadCounterpart = {
   kind: 'customer' | 'specialist';
   name: string;
   avatarUrl?: string | null;
+  businessName?: string | null; // ✅ NUEVO
 };
 
 // 👇 Debe coincidir con lo que armás en chat.routes.ts (items = rows.map(...))
@@ -49,5 +50,6 @@ export type ChatStackParamList = {
     orderId?: string;
     threadId?: string;
     title?: string;
+    businessName?: string | null;
   };
 };

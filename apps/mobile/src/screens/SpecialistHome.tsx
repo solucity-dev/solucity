@@ -66,6 +66,7 @@ type SpecProfile = {
   specialties: string[];
   avatarUrl?: string | null;
   name?: string | null;
+  businessName?: string | null; // ✅ NUEVO: nombre de empresa/local/pyme (visible al cliente)
   centerLat?: number | null;
   centerLng?: number | null;
   stats?: {
@@ -294,6 +295,8 @@ export default function SpecialistHome() {
   const priceRadiusSnapRef = useRef<string>(''); // guardamos JSON string
   const specialtiesSnapRef = useRef<string>(''); // guardamos JSON string
   const headlineSnapRef = useRef<string>(''); // ✅ snapshot especificación rubro
+  const serviceModesSnapRef = useRef<string>(''); // ✅ snapshot modalidades + dirección/localidad
+  const businessNameSnapRef = useRef<string>(''); // ✅ snapshot nombre del negocio
 
   const [profile, setProfile] = useState<SpecProfile | null>(null);
 
@@ -389,6 +392,7 @@ export default function SpecialistHome() {
   // form fields
   const [bio, setBio] = useState('');
   const [headline, setHeadline] = useState('');
+  const [businessName, setBusinessName] = useState('');
   const [availableNow, setAvailableNow] = useState(true); // switch (intención)
   const [start, setStart] = useState('09:00');
   const [end, setEnd] = useState('18:00');
@@ -659,8 +663,34 @@ export default function SpecialistHome() {
           if (match) setOfficeLocality(match);
         }
 
+        // ✅ baseline Modalidad de servicio (snapshots)
+        // OJO: acá NO usamos los states (porque setState es async), usamos variables locales.
+        const modesBase = Array.isArray((p as any).serviceModes)
+          ? (p as any).serviceModes
+          : ['HOME'];
+
+        let streetBase = '';
+        let localityBase = 'Río Cuarto'; // mismo default que tu state inicial
+
+        if (formatted) {
+          streetBase = formatted.split(',')[0].trim();
+
+          const matchBase = LOCALITIES_CORDOBA.find((loc) =>
+            formatted.toLowerCase().includes(loc.toLowerCase()),
+          );
+          if (matchBase) localityBase = matchBase;
+        }
+
+        // guardamos baseline consistente
+        serviceModesSnapRef.current = JSON.stringify({
+          serviceModes: Array.from(new Set(modesBase)).sort(),
+          officeAddress: streetBase,
+          officeLocality: localityBase,
+        });
+
         setBio(p.bio ?? '');
         setHeadline((p.specialtyHeadline ?? '').trim());
+        setBusinessName((p.businessName ?? '').trim());
 
         // si todavía no viene (backend viejo), fallback a p.available
         setAvailableNow(
@@ -687,6 +717,7 @@ export default function SpecialistHome() {
         const bioBase = p.bio ?? '';
         bioSnapRef.current = bioBase;
         headlineSnapRef.current = (p.specialtyHeadline ?? '').trim();
+        businessNameSnapRef.current = (p.businessName ?? '').trim();
 
         const availBase = {
           days: p.availability?.days ?? [1, 2, 3, 4, 5],
@@ -1009,6 +1040,26 @@ export default function SpecialistHome() {
     }
   }
 
+  async function saveBusinessName() {
+    try {
+      setSavingKey('headline', true); // reutilizamos loading simple, o si querés lo hacemos propio
+      const value = businessName.trim();
+      const safe = value.length ? value.slice(0, 60) : null; // mismo límite que headline
+
+      await api.patch('/specialists/me', { businessName: safe });
+
+      setProfile((prev) => (prev ? { ...prev, businessName: safe } : prev));
+      businessNameSnapRef.current = safe ?? '';
+      setBusinessName((safe ?? '').trim());
+
+      Alert.alert('Listo', 'Nombre de negocio actualizado.');
+    } catch {
+      Alert.alert('Ups', 'No se pudo guardar el nombre de negocio.');
+    } finally {
+      setSavingKey('headline', false);
+    }
+  }
+
   // saves
   async function saveBio() {
     try {
@@ -1216,6 +1267,13 @@ export default function SpecialistHome() {
 
       await api.patch('/specialists/me', payload);
 
+      // ✅ actualizamos baseline para que el botón se apague
+      serviceModesSnapRef.current = JSON.stringify({
+        serviceModes: Array.from(new Set(serviceModes)).sort(),
+        officeAddress: officeAddress.trim(),
+        officeLocality: (officeLocality ?? '').trim(),
+      });
+
       Alert.alert('Listo', 'Modalidades guardadas correctamente.');
 
       // opcional pero recomendado para refrescar profile y que no quede desync
@@ -1402,17 +1460,27 @@ export default function SpecialistHome() {
     return headline.trim() !== headlineSnapRef.current;
   }, [headline]);
 
+  const businessNameDirty = useMemo(() => {
+    return businessName.trim() !== businessNameSnapRef.current;
+  }, [businessName]);
+
   const availabilityDirty = useMemo(() => {
     const current = JSON.stringify({ days, start, end });
     return current !== availabilitySnapRef.current;
   }, [days, start, end]);
 
   const priceRadiusDirty = useMemo(() => {
+    const visitPrice = Math.max(0, Math.floor(Number(price) || 0));
+
+    const radiusNum = Math.max(0, Number(radius) || 0);
+    const radiusKm = Math.min(30, radiusNum); // ✅ igual que savePriceAndRadius
+
     const current = JSON.stringify({
-      visitPrice: Math.max(0, Math.floor(Number(price) || 0)),
-      radiusKm: Math.max(0, Number(radius) || 0),
+      visitPrice,
+      radiusKm,
       pricingLabel: pricingLabel.trim(),
     });
+
     return current !== priceRadiusSnapRef.current;
   }, [price, radius, pricingLabel]);
 
@@ -1427,6 +1495,16 @@ export default function SpecialistHome() {
     const base = JSON.parse(specialtiesSnapRef.current || '[]') as string[];
     return !sameStringSet(cleaned, base);
   }, [specialties]);
+
+  const serviceModesDirty = useMemo(() => {
+    const current = JSON.stringify({
+      serviceModes: Array.from(new Set(serviceModes)).sort(),
+      officeAddress: officeAddress.trim(),
+      officeLocality: (officeLocality ?? '').trim(),
+    });
+
+    return current !== serviceModesSnapRef.current;
+  }, [serviceModes, officeAddress, officeLocality]);
 
   if (loading) {
     return (
@@ -1499,7 +1577,10 @@ export default function SpecialistHome() {
                 {/* Nombre + dot disponibilidad */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Text style={styles.name} numberOfLines={1}>
-                    {profile?.name || 'Especialista'}
+                    {profile?.businessName?.trim() ||
+                      businessName.trim() ||
+                      profile?.name ||
+                      'Especialista'}
                   </Text>
 
                   <View
@@ -1793,6 +1874,37 @@ export default function SpecialistHome() {
 
           {/* Tu perfil (desplegable) */}
           <Section title="Tu perfil" open={openPerfil} onToggle={() => setOpenPerfil((v) => !v)}>
+            <Text style={styles.subTitle}>Nombre de tu negocio (opcional)</Text>
+
+            <TextInput
+              value={businessName}
+              onChangeText={setBusinessName}
+              placeholder="Ej: Plomería González / Estudio Contable Ríos"
+              placeholderTextColor="#9ec9cd"
+              style={styles.input}
+              maxLength={60}
+            />
+
+            <Text style={styles.muted}>
+              Si lo completás, los clientes te verán con este nombre en lugar de tu nombre personal
+              (máx. 60 caracteres).
+            </Text>
+
+            <Pressable
+              onPress={saveBusinessName}
+              disabled={!businessNameDirty || savingBy.headline}
+              style={[styles.btn, (!businessNameDirty || savingBy.headline) && styles.btnDisabled]}
+            >
+              {savingBy.headline ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <ActivityIndicator />
+                  <Text style={styles.btnT}>Guardando…</Text>
+                </View>
+              ) : (
+                <Text style={styles.btnT}>Guardar nombre de negocio</Text>
+              )}
+            </Pressable>
+
             <Text style={styles.subTitle}>¿En qué te especializás?</Text>
 
             <TextInput
@@ -2200,9 +2312,12 @@ export default function SpecialistHome() {
             )}
 
             <Pressable
-              style={[styles.btn, savingBy.serviceModes && styles.btnDisabled]}
+              style={[
+                styles.btn,
+                (!serviceModesDirty || savingBy.serviceModes) && styles.btnDisabled,
+              ]}
               onPress={saveServiceModes}
-              disabled={savingBy.serviceModes}
+              disabled={!serviceModesDirty || savingBy.serviceModes}
             >
               {savingBy.serviceModes ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>

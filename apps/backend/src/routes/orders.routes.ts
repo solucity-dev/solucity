@@ -867,6 +867,7 @@ orders.get('/mine', auth, async (req: any, res) => {
         specialist: {
           select: {
             id: true,
+            businessName: true,
             user: { select: { name: true, surname: true } },
           },
         },
@@ -919,10 +920,12 @@ orders.get('/mine', auth, async (req: any, res) => {
         specialist: o.specialist
           ? {
               id: o.specialist.id,
-              name: `${o.specialist.user.name ?? 'Especialista'}`,
+              businessName: (o.specialist as any).businessName ?? null,
+              name:
+                ((o.specialist as any).businessName ?? '').trim() ||
+                `${o.specialist.user.name ?? 'Especialista'}`,
             }
           : null,
-
         customer: o.customer
           ? {
               id: o.customer.id,
@@ -1637,6 +1640,7 @@ orders.get('/:id', auth, async (req, res) => {
           select: {
             id: true,
             userId: true,
+            businessName: true,
             centerLat: true,
             centerLng: true,
             user: { select: { name: true, surname: true } },
@@ -1943,6 +1947,7 @@ orders.get('/:id', auth, async (req, res) => {
             name: `${order.specialist.user.name ?? 'Especialista'} ${
               order.specialist.user.surname ?? ''
             }`.trim(),
+            businessName: (order.specialist as any).businessName ?? null, // ✅ NUEVO
             centerLat: order.specialist.centerLat,
             centerLng: order.specialist.centerLng,
             avatarUrl: specialistAvatar?.avatarUrl ?? null,

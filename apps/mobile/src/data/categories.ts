@@ -27,6 +27,16 @@ export const ROOT_CATEGORIES: { id: RootCategoryId; title: string; icon: IconSpe
     title: 'Profesionales',
     icon: { set: 'mdi', name: 'briefcase-account' },
   },
+  {
+    id: 'estetica',
+    title: 'Estética',
+    icon: { set: 'mdi', name: 'face-woman-shimmer' }, // alternativa: 'content-cut' o 'spa'
+  },
+  {
+    id: 'alquiler',
+    title: 'Alquiler',
+    icon: { set: 'mdi', name: 'tools' }, // alternativa: 'warehouse' o 'truck-outline'
+  },
 ];
 
 // Mapa (cómodo para lookup por id)
@@ -146,6 +156,11 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
       title: 'Diseño de interiores',
       icon: { set: 'mdi', name: 'sofa' }, // o 'palette-swatch'
     },
+    {
+      id: 'atencion-al-cliente',
+      title: 'Atención al cliente',
+      icon: { set: 'mdi', name: 'account-voice' },
+    },
   ],
 
   gastronomia: [
@@ -171,5 +186,84 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     { id: 'escribano', title: 'Escribano', icon: { set: 'mdi', name: 'file-sign' } },
     { id: 'arquitecto', title: 'Arquitecto', icon: { set: 'mdi', name: 'compass-outline' } },
     { id: 'ingeniero', title: 'Ingeniero', icon: { set: 'mdi', name: 'cog-outline' } },
+    { id: 'psicologo', title: 'Psicólogo', icon: { set: 'mdi', name: 'brain' } }, // alternativa: 'head-heart-outline'
+    { id: 'psiquiatra', title: 'Psiquiatra', icon: { set: 'mdi', name: 'hospital-box-outline' } },
+  ],
+
+  estetica: [
+    { id: 'peluqueria', title: 'Peluquería', icon: { set: 'mdi', name: 'content-cut' } },
+    { id: 'barberia', title: 'Barbería', icon: { set: 'mdi', name: 'mustache' } },
+    {
+      id: 'manicuria-unas',
+      title: 'Manicuría / Uñas',
+      icon: { set: 'mdi', name: 'hand-heart-outline' },
+    },
+    { id: 'maquillaje', title: 'Maquillaje', icon: { set: 'mdi', name: 'brush' } },
+    { id: 'depilacion', title: 'Depilación', icon: { set: 'mdi', name: 'razor-double-edge' } },
+    { id: 'cosmetologia', title: 'Cosmetología', icon: { set: 'mdi', name: 'lotion' } },
+    { id: 'masajes', title: 'Masajes', icon: { set: 'mdi', name: 'hand' } },
+    {
+      id: 'spa-estetica-corporal',
+      title: 'Spa / Estética corporal',
+      icon: { set: 'mdi', name: 'spa-outline' },
+    },
+    {
+      id: 'cejas-y-pestanas',
+      title: 'Cejas y pestañas',
+      icon: { set: 'mdi', name: 'eye-outline' },
+    },
+  ],
+
+  alquiler: [
+    {
+      id: 'alquiler-de-herramientas',
+      title: 'Alquiler de herramientas',
+      icon: { set: 'mdi', name: 'tools' },
+    },
+    {
+      id: 'alquiler-de-maquinaria-liviana',
+      title: 'Alquiler de maquinaria liviana',
+      icon: { set: 'mdi', name: 'engine-outline' },
+    },
+    {
+      id: 'alquiler-de-maquinaria-pesada',
+      title: 'Alquiler de maquinaria pesada',
+      icon: { set: 'mdi', name: 'excavator' },
+    },
+    {
+      id: 'alquiler-de-generadores',
+      title: 'Alquiler de generadores',
+      icon: { set: 'mdi', name: 'generator-mobile' },
+    },
+    {
+      id: 'alquiler-de-andamios',
+      title: 'Alquiler de andamios',
+      icon: { set: 'mdi', name: 'stairs' },
+    },
+    {
+      id: 'alquiler-de-hidrolavadoras',
+      title: 'Alquiler de hidrolavadoras',
+      icon: { set: 'mdi', name: 'water-pump' },
+    },
+    {
+      id: 'alquiler-de-hormigoneras',
+      title: 'Alquiler de hormigoneras',
+      icon: { set: 'mdi', name: 'concrete-mixer' },
+    },
+    {
+      id: 'alquiler-de-elevadores',
+      title: 'Alquiler de elevadores',
+      icon: { set: 'mdi', name: 'elevator' },
+    },
+    {
+      id: 'alquiler-de-equipos-de-sonido-e-iluminacion',
+      title: 'Alquiler de sonido e iluminación',
+      icon: { set: 'mdi', name: 'speaker-multiple' },
+    },
+    {
+      id: 'alquiler-de-carpas-y-mobiliario',
+      title: 'Alquiler de carpas y mobiliario',
+      icon: { set: 'mdi', name: 'tent' },
+    },
   ],
 };

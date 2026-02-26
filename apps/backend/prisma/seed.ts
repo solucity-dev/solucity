@@ -75,6 +75,7 @@ const groups: GroupSeed[] = [
       'Diseño de interiores',
       'Organización de eventos',
       'Fotografía y video',
+      'Atención al cliente',
     ],
   },
   {
@@ -92,7 +93,46 @@ const groups: GroupSeed[] = [
   {
     name: 'Profesionales',
     slug: 'profesionales',
-    rubros: ['Abogado', 'Contador', 'Escribano', 'Arquitecto', 'Ingeniero'],
+    rubros: [
+      'Abogado',
+      'Contador',
+      'Escribano',
+      'Arquitecto',
+      'Ingeniero',
+      'Psicólogo',
+      'Psiquiatra',
+    ],
+  },
+  {
+    name: 'Estética',
+    slug: 'estetica',
+    rubros: [
+      'Peluquería',
+      'Barbería',
+      'Manicuría / Uñas',
+      'Maquillaje',
+      'Depilación',
+      'Cosmetología',
+      'Masajes',
+      'Spa / Estética corporal',
+      'Cejas y pestañas',
+    ],
+  },
+  {
+    name: 'Alquiler',
+    slug: 'alquiler',
+    rubros: [
+      'Alquiler de herramientas',
+      'Alquiler de maquinaria liviana',
+      'Alquiler de maquinaria pesada',
+      'Alquiler de generadores',
+      'Alquiler de andamios',
+      'Alquiler de hidrolavadoras',
+      'Alquiler de hormigoneras',
+      'Alquiler de elevadores',
+      'Alquiler de equipos de sonido e iluminación',
+      'Alquiler de carpas y mobiliario',
+    ],
   },
 ];
 
@@ -140,6 +180,8 @@ const REQUIRES_CERTIFICATION = new Set<string>([
   'escribano',
   'arquitecto',
   'ingeniero',
+  'psicologo',
+  'psiquiatra',
 ]);
 
 async function upsertCategories() {

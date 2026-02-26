@@ -53,6 +53,7 @@ type OrderDetail = {
   specialist: {
     id: string;
     name: string | null;
+    businessName?: string | null;
     avatarUrl?: string | null;
   } | null;
 
@@ -629,9 +630,14 @@ export default function OrderDetailScreen() {
                     ? 'Pedido cerrado'
                     : 'Detalle del pedido';
 
-  const headerName = isClient
-    ? (data?.specialist?.name ?? 'Especialista a asignar')
-    : (data?.customer?.name ?? 'Cliente');
+  const specialistDisplayName =
+    (data?.specialist?.businessName ?? '').trim() ||
+    (data?.specialist?.name ?? '').trim() ||
+    'Especialista a asignar';
+
+  const customerDisplayName = (data?.customer?.name ?? 'Cliente').trim?.() || 'Cliente';
+
+  const headerName = isClient ? specialistDisplayName : customerDisplayName;
 
   const headerAvatarUrl = isClient
     ? (data?.specialist?.avatarUrl ?? null)
@@ -904,7 +910,7 @@ export default function OrderDetailScreen() {
     const parent = nav.getParent?.();
     const title = isSpecialist
       ? (data.customer?.name ?? data.service?.name ?? 'Chat')
-      : (data.specialist?.name ?? data.service?.name ?? 'Chat');
+      : (specialistDisplayName ?? data.service?.name ?? 'Chat');
 
     const params = { threadId, orderId: data.id, title };
 

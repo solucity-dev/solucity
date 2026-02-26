@@ -97,7 +97,12 @@ export default function ChatListScreen() {
           </View>
         }
         renderItem={({ item }) => {
-          const counterpartName = item.counterpart?.name ?? 'Contacto';
+          const businessName = item.counterpart?.businessName;
+
+          const counterpartName =
+            typeof businessName === 'string' && businessName.trim()
+              ? businessName.trim()
+              : (item.counterpart?.name ?? 'Contacto');
 
           const rawAvatar = (item as any).counterpart?.avatarUrl ?? null;
           const avatarUrl = rawAvatar ? absoluteUrl(rawAvatar) : undefined;
@@ -131,7 +136,11 @@ export default function ChatListScreen() {
                   nav.navigate('ChatThread', {
                     threadId: item.id,
                     orderId,
-                    title: counterpartName,
+                    title: item.counterpart?.name ?? 'Contacto', // nombre personal
+                    businessName:
+                      typeof businessName === 'string' && businessName.trim()
+                        ? businessName.trim()
+                        : null,
                   })
                 }
                 style={{

@@ -136,7 +136,19 @@ export default function AgendaScreen() {
   }, [needsRefresh, refetch]);
 
   const getCounterpartName = (item: any) => {
-    if (role === 'specialist') return item.customer?.name ?? null;
+    if (role === 'specialist') {
+      // el especialista ve al cliente
+      return item.customer?.name ?? null;
+    }
+
+    // el cliente ve al especialista: PRIORIDAD negocio > nombre
+    const bn =
+      item.specialist?.businessName ??
+      item.specialistBusinessName ?? // por si el hook lo trae plano
+      null;
+
+    if (typeof bn === 'string' && bn.trim()) return bn.trim();
+
     return item.specialist?.name ?? null;
   };
 
@@ -314,7 +326,12 @@ export default function AgendaScreen() {
             contentContainerStyle={{ paddingBottom: 24, gap: 10 }}
             renderItem={({ item }) => {
               const counterpartName = getCounterpartName(item);
-              const title = counterpartName ?? item.service?.name ?? 'Orden';
+              const title =
+                counterpartName ??
+                item.specialist?.name ??
+                item.customer?.name ??
+                item.service?.name ??
+                'Orden';
               const rubro = getRubroText(item);
 
               const createdAgo = getCreatedAgo(item);

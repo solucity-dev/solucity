@@ -38,6 +38,7 @@ type Review = {
 type SpecialistDetails = {
   id: string;
   name: string;
+  businessName?: string | null;
   avatarUrl?: string | null;
   ratingAvg?: number | null;
   ratingCount?: number | null;
@@ -117,6 +118,7 @@ export default function SpecialistProfileScreen() {
         const normalized: SpecialistDetails = {
           id: data.id,
           name: data.name,
+          businessName: data.businessName ?? data.business_name ?? null,
           avatarUrl: data.avatarUrl,
           ratingAvg: data.ratingAvg,
           ratingCount: data.ratingCount,
@@ -255,7 +257,7 @@ export default function SpecialistProfileScreen() {
                 </View>
 
                 <View style={{ flex: 1, marginLeft: 14 }}>
-                  <Text style={styles.name}>{spec.name}</Text>
+                  <Text style={styles.name}>{spec.businessName?.trim() || spec.name}</Text>
 
                   <View style={styles.row}>
                     <Ionicons name="star" size={16} color="#FFD166" />
@@ -431,7 +433,7 @@ export default function SpecialistProfileScreen() {
 
                   nav.navigate('CreateOrder', {
                     specialistId: spec.id,
-                    specialistName: spec.name,
+                    specialistName: spec.businessName?.trim() || spec.name,
                     visitPrice: spec.visitPrice ?? null,
                     pricingLabel: spec.pricingLabel ?? null,
                     categorySlug,

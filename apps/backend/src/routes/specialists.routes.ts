@@ -487,6 +487,7 @@ router.get('/search', async (req, res) => {
         kycStatus: true,
         specialtyHeadline: true,
         avatarUrl: true,
+        businessName: true,
         availability: true,
         availableNow: true,
         pricingLabel: true,
@@ -584,7 +585,8 @@ router.get('/search', async (req, res) => {
         const visible = userOk && kycOk && bgOk && subOk && toggleAvailable; // ⬅️ NO incluye horario
         const availableNow = visible && scheduleOk; // ⬅️ SOLO para la pill
 
-        const name = `${user?.name ?? 'Especialista'} ${user?.surname ?? ''}`.trim();
+        const personalName = `${user?.name ?? 'Especialista'} ${user?.surname ?? ''}`.trim();
+        const name = prof?.businessName?.trim() ? prof.businessName.trim() : personalName;
 
         const debugInfo = debug
           ? {
@@ -1121,6 +1123,7 @@ const AvailabilitySchema = z.object({
 });
 
 const PatchMeSchema = z.object({
+  businessName: z.string().trim().max(80).optional().nullable(),
   bio: z.string().max(1000).optional(),
   specialtyHeadline: z.string().max(60).optional().nullable(),
   available: z.boolean().optional(),
@@ -1167,6 +1170,7 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
       where: { userId },
       select: {
         id: true,
+        businessName: true,
         bio: true,
         specialtyHeadline: true,
         availableNow: true,
@@ -1271,6 +1275,7 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
       ok: true,
       profile: {
         name: `${profile.user?.name ?? ''} ${profile.user?.surname ?? ''}`.trim(),
+        businessName: (profile as any).businessName ?? null,
         bio: profile.bio ?? '',
         specialtyHeadline: (profile as any).specialtyHeadline ?? null,
         available,
@@ -1527,6 +1532,7 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
         radiusKm: data.radiusKm ?? null,
         visitPrice: data.visitPrice ?? null,
         pricingLabel: data.pricingLabel ?? null,
+        businessName: data.businessName?.trim() ? data.businessName.trim() : null,
         availability: nextAvail as any,
         kycStatus: 'PENDING',
         avatarUrl: data.avatarUrl ?? null,
@@ -1545,6 +1551,9 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
         ...(data.radiusKm !== undefined ? { radiusKm: data.radiusKm } : {}),
         ...(data.visitPrice !== undefined ? { visitPrice: data.visitPrice } : {}),
         ...(data.pricingLabel !== undefined ? { pricingLabel: data.pricingLabel } : {}),
+        ...(data.businessName !== undefined
+          ? { businessName: data.businessName?.trim() ? data.businessName.trim() : null }
+          : {}),
         availability: nextAvail as any,
         ...(data.avatarUrl !== undefined ? { avatarUrl: data.avatarUrl } : {}),
         ...(data.centerLat !== undefined ? { centerLat: data.centerLat } : {}),
@@ -1769,6 +1778,7 @@ router.get('/:id', async (req, res) => {
       select: {
         id: true,
         userId: true,
+        businessName: true,
         user: { select: { status: true } },
         bio: true,
         visitPrice: true,
@@ -2007,7 +2017,9 @@ router.get('/:id', async (req, res) => {
 
     return res.json({
       id: spec.id,
-      name: `${user?.name ?? 'Especialista'} ${user?.surname ?? ''}`.trim(),
+      name: spec.businessName?.trim()
+        ? spec.businessName.trim()
+        : `${user?.name ?? 'Especialista'} ${user?.surname ?? ''}`.trim(),
       avatarUrl: spec.avatarUrl ?? null,
       ratingAvg: spec.ratingAvg,
       ratingCount: spec.ratingCount,

@@ -7,12 +7,18 @@ export type RootCategoryId =
   | 'seguridad'
   | 'servicios'
   | 'gastronomia'
-  | 'profesionales';
+  | 'profesionales'
+  | 'estetica'
+  | 'alquiler';
 /**
  * Slugs de rubros (categorías hijas).
  * ✅ Regla: minúsculas, sin tildes, sin espacios, sin "/" y con guiones.
  */
 
+/**
+ * Slugs de rubros (categorías hijas).
+ * ✅ Regla: minúsculas, sin tildes, sin espacios, sin "/" y con guiones.
+ */
 export type CategorySlug =
   // ── Construcción & Mantenimiento ──────────────────────────
   | 'albanileria'
@@ -53,6 +59,7 @@ export type CategorySlug =
   | 'cuidado-de-mascotas'
   | 'organizacion-de-eventos'
   | 'fotografia-y-video'
+  | 'atencion-al-cliente'
   // ── Gastronomía ───────────────────────────────────────────
   | 'camarero-mozo'
   | 'cocinero'
@@ -65,7 +72,30 @@ export type CategorySlug =
   | 'contador'
   | 'escribano'
   | 'arquitecto'
-  | 'ingeniero';
+  | 'ingeniero'
+  | 'psicologo'
+  | 'psiquiatra'
+  // ── Estética ──────────────────────────────────────────────
+  | 'peluqueria'
+  | 'barberia'
+  | 'manicuria-unas'
+  | 'maquillaje'
+  | 'depilacion'
+  | 'cosmetologia'
+  | 'masajes'
+  | 'spa-estetica-corporal'
+  | 'cejas-y-pestanas'
+  // ── Alquiler ──────────────────────────────────────────────
+  | 'alquiler-de-herramientas'
+  | 'alquiler-de-maquinaria-liviana'
+  | 'alquiler-de-maquinaria-pesada'
+  | 'alquiler-de-generadores'
+  | 'alquiler-de-andamios'
+  | 'alquiler-de-hidrolavadoras'
+  | 'alquiler-de-hormigoneras'
+  | 'alquiler-de-elevadores'
+  | 'alquiler-de-equipos-de-sonido-e-iluminacion'
+  | 'alquiler-de-carpas-y-mobiliario';
 
 /** Tabs principales del cliente */
 export type ClientTabsParamList = {

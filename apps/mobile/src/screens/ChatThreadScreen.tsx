@@ -50,7 +50,12 @@ export default function ChatThreadScreen() {
     }
   };
 
-  const title = params.title || 'Chat';
+  const businessName =
+    typeof params.businessName === 'string' && params.businessName.trim()
+      ? params.businessName.trim()
+      : null;
+
+  const title = businessName ?? params.title ?? 'Chat';
   const hasMessages = (messages ?? []).length > 0;
 
   // 👉 función centralizada para "volver al listado de chats"

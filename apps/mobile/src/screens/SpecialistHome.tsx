@@ -180,12 +180,53 @@ const REQUIRES_CERT_FALLBACK = new Set([
   'escribano',
   'arquitecto',
   'ingeniero',
+  'psicologo',
+  'psiquiatra',
 ]);
 
 // 🔒 Rubros legacy que queremos ocultar SOLO en SpecialistHome
 const HIDDEN_SPECIALTIES = new Set<string>([
   'plomeria', // legacy: existe en DB pero usamos "plomeria-gasista"
 ]);
+
+// ✅ Normaliza modos (legacy-safe): casing, espacios, duplicados y valores inválidos
+function normalizeModes(input: any): ('HOME' | 'OFFICE' | 'ONLINE')[] {
+  const allowed = new Set(['HOME', 'OFFICE', 'ONLINE']);
+  const raw = Array.isArray(input) ? input : [];
+
+  const out = Array.from(
+    new Set(
+      raw
+        .map((x) =>
+          String(x ?? '')
+            .trim()
+            .toUpperCase(),
+        )
+        .filter((x) => allowed.has(x)),
+    ),
+  ).sort();
+
+  return (out.length ? out : ['HOME']) as any;
+}
+
+// ✅ Extrae solo "Calle y número" aunque venga "Calle 123, Ciudad..."
+function streetOnly(s: string) {
+  return String(s ?? '')
+    .split(',')[0]
+    .trim();
+}
+
+// ✅ Snapshot estable para evitar "a veces" (mismos criterios en baseline y dirty)
+function serviceModesSnapshot(modes: any, officeAddr: string, locality: string): string {
+  const normalized = normalizeModes(modes);
+  const hasOffice = normalized.includes('OFFICE');
+
+  return JSON.stringify({
+    serviceModes: normalized,
+    officeAddress: hasOffice ? streetOnly(officeAddr) : '',
+    officeLocality: hasOffice ? String(locality ?? '').trim() : '',
+  });
+}
 
 function isWithinAvailability(av?: { days?: number[]; start?: string; end?: string }) {
   if (!av) return true;
@@ -267,6 +308,7 @@ export default function SpecialistHome() {
   type SaveKey =
     | 'bio'
     | 'headline'
+    | 'businessName'
     | 'availability'
     | 'priceRadius'
     | 'specialties'
@@ -277,6 +319,7 @@ export default function SpecialistHome() {
   const [savingBy, setSavingBy] = useState<Record<SaveKey, boolean>>({
     bio: false,
     headline: false,
+    businessName: false,
     availability: false,
     priceRadius: false,
     specialties: false,
@@ -489,12 +532,13 @@ export default function SpecialistHome() {
 
   const requiresCert = useCallback(
     (slug: string) => {
-      const fromApi = categoryOptions.find((c) => c.slug === slug)?.requiresCertification;
+      const found = categoryOptions.find((c) => c.slug === slug);
 
-      // ✅ Si el backend dice TRUE, listo.
-      if (fromApi === true) return true;
+      // ✅ Si tenemos el rubro desde API, el backend manda la verdad absoluta
+      if (found) return !!found.requiresCertification;
 
-      // ✅ Si el backend dice FALSE o no viene, usamos nuestro fallback local
+      // ✅ Solo si NO existe en API (ej: /categories falló o todavía no cargó)
+      // usamos fallback local
       return REQUIRES_CERT_FALLBACK.has(slug);
     },
     [categoryOptions],
@@ -565,7 +609,11 @@ export default function SpecialistHome() {
       try {
         if (!silent) setSavingKey('location', true);
 
-        const perm = await Location.getForegroundPermissionsAsync();
+        let perm = await Location.getForegroundPermissionsAsync();
+        if (perm.status !== 'granted') {
+          perm = await Location.requestForegroundPermissionsAsync();
+        }
+
         if (perm.status !== 'granted') {
           if (!silent) {
             Alert.alert(
@@ -640,12 +688,8 @@ export default function SpecialistHome() {
         }
 
         setProfile(p);
-        // 🔥 Cargar modalidades del backend
-        if (Array.isArray((p as any).serviceModes)) {
-          setServiceModes((p as any).serviceModes);
-        } else {
-          setServiceModes(['HOME']); // fallback seguro
-        }
+        // 🔥 Cargar modalidades del backend (normalizado: legacy-safe)
+        setServiceModes(normalizeModes((p as any).serviceModes));
 
         // 🔥 Cargar dirección del local si existe (soporta string u objeto)
         const oa = (p as any).officeAddress;
@@ -654,8 +698,8 @@ export default function SpecialistHome() {
           typeof oa === 'string' ? oa : typeof oa?.formatted === 'string' ? oa.formatted : null;
 
         if (formatted) {
-          const streetOnly = formatted.split(',')[0].trim();
-          setOfficeAddress(streetOnly);
+          const street = streetOnly(formatted);
+          setOfficeAddress(street);
 
           const match = LOCALITIES_CORDOBA.find((loc) =>
             formatted.toLowerCase().includes(loc.toLowerCase()),
@@ -665,15 +709,13 @@ export default function SpecialistHome() {
 
         // ✅ baseline Modalidad de servicio (snapshots)
         // OJO: acá NO usamos los states (porque setState es async), usamos variables locales.
-        const modesBase = Array.isArray((p as any).serviceModes)
-          ? (p as any).serviceModes
-          : ['HOME'];
+        const modesBase = normalizeModes((p as any).serviceModes);
 
         let streetBase = '';
         let localityBase = 'Río Cuarto'; // mismo default que tu state inicial
 
         if (formatted) {
-          streetBase = formatted.split(',')[0].trim();
+          streetBase = streetOnly(formatted);
 
           const matchBase = LOCALITIES_CORDOBA.find((loc) =>
             formatted.toLowerCase().includes(loc.toLowerCase()),
@@ -682,11 +724,7 @@ export default function SpecialistHome() {
         }
 
         // guardamos baseline consistente
-        serviceModesSnapRef.current = JSON.stringify({
-          serviceModes: Array.from(new Set(modesBase)).sort(),
-          officeAddress: streetBase,
-          officeLocality: localityBase,
-        });
+        serviceModesSnapRef.current = serviceModesSnapshot(modesBase, streetBase, localityBase);
 
         setBio(p.bio ?? '');
         setHeadline((p.specialtyHeadline ?? '').trim());
@@ -1042,7 +1080,7 @@ export default function SpecialistHome() {
 
   async function saveBusinessName() {
     try {
-      setSavingKey('headline', true); // reutilizamos loading simple, o si querés lo hacemos propio
+      setSavingKey('businessName', true);
       const value = businessName.trim();
       const safe = value.length ? value.slice(0, 60) : null; // mismo límite que headline
 
@@ -1056,7 +1094,7 @@ export default function SpecialistHome() {
     } catch {
       Alert.alert('Ups', 'No se pudo guardar el nombre de negocio.');
     } finally {
-      setSavingKey('headline', false);
+      setSavingKey('businessName', false);
     }
   }
 
@@ -1236,51 +1274,67 @@ export default function SpecialistHome() {
       setSavingKey('serviceModes', true);
 
       // ✅ Siempre guardamos serviceModes
-      const payload: any = { serviceModes };
+      const payload: any = { serviceModes: normalizeModes(serviceModes) };
 
       // ✅ Si incluye OFFICE, validamos dirección y la mandamos
-      if (serviceModes.includes('OFFICE')) {
+      if (payload.serviceModes.includes('OFFICE')) {
         if (!officeAddress.trim()) {
           Alert.alert('Debés cargar la dirección de tu oficina.');
           return;
         }
 
-        const street = officeAddress.split(',')[0].trim();
+        const street = streetOnly(officeAddress);
 
         if (!street) {
           Alert.alert('Debés cargar la dirección de tu oficina.');
           return;
         }
 
-        const formatted = officeLocality?.trim()
-          ? `${street}, ${officeLocality.trim()}, Córdoba, Argentina`
-          : `${street}, Córdoba, Argentina`;
+        const loc = String(officeLocality ?? '').trim();
+        if (!loc) {
+          Alert.alert('Debés elegir la localidad de tu oficina.');
+          return;
+        }
 
-        payload.officeAddress = {
-          formatted,
-          placeId: null,
-        };
+        const formatted = `${street}, ${loc}, Córdoba, Argentina`;
+        payload.officeAddress = formatted;
+
+        payload.officeAddress = formatted; // legacy-safe si el backend espera string
       } else {
         // ✅ Si NO incluye OFFICE, limpiamos officeAddress (para no dejar basura)
         payload.officeAddress = null;
+
+        setOfficeAddress('');
+        setOfficeLocalityQuery('');
+        setOfficeLocalityOpen(false);
+        // 👇 NO borres officeLocality, dejalo como último valor elegido
       }
 
       await api.patch('/specialists/me', payload);
 
       // ✅ actualizamos baseline para que el botón se apague
-      serviceModesSnapRef.current = JSON.stringify({
-        serviceModes: Array.from(new Set(serviceModes)).sort(),
-        officeAddress: officeAddress.trim(),
-        officeLocality: (officeLocality ?? '').trim(),
-      });
+      const streetForSnap = payload.serviceModes.includes('OFFICE')
+        ? streetOnly(officeAddress)
+        : '';
+      serviceModesSnapRef.current = serviceModesSnapshot(
+        payload.serviceModes,
+        streetForSnap,
+        officeLocality,
+      );
 
       Alert.alert('Listo', 'Modalidades guardadas correctamente.');
 
       // opcional pero recomendado para refrescar profile y que no quede desync
       await reloadProfileAndSubscription({ silent: true });
-    } catch (e) {
-      console.error(e);
-      Alert.alert('Error', 'No se pudieron guardar las modalidades.');
+    } catch (e: any) {
+      const status = e?.response?.status;
+      const data = e?.response?.data;
+      console.error('[saveServiceModes] error', status, data ?? e);
+
+      Alert.alert(
+        'Error',
+        data?.error ? String(data.error) : 'No se pudieron guardar las modalidades.',
+      );
     } finally {
       setSavingKey('serviceModes', false);
     }
@@ -1296,9 +1350,17 @@ export default function SpecialistHome() {
   }
 
   function toggleServiceMode(mode: 'HOME' | 'OFFICE' | 'ONLINE') {
-    setServiceModes((prev) =>
-      prev.includes(mode) ? prev.filter((m) => m !== mode) : [...prev, mode],
-    );
+    setServiceModes((prev) => {
+      const next = prev.includes(mode) ? prev.filter((m) => m !== mode) : [...prev, mode];
+
+      // ✅ nunca dejamos vacío
+      if (next.length === 0) return ['HOME'];
+
+      // ✅ opcional: siempre mantener HOME (si querés obligarlo)
+      // if (!next.includes('HOME')) next.push('HOME');
+
+      return next;
+    });
   }
 
   function sameStringSet(a: string[], b: string[]) {
@@ -1497,12 +1559,7 @@ export default function SpecialistHome() {
   }, [specialties]);
 
   const serviceModesDirty = useMemo(() => {
-    const current = JSON.stringify({
-      serviceModes: Array.from(new Set(serviceModes)).sort(),
-      officeAddress: officeAddress.trim(),
-      officeLocality: (officeLocality ?? '').trim(),
-    });
-
+    const current = serviceModesSnapshot(serviceModes, officeAddress, officeLocality);
     return current !== serviceModesSnapRef.current;
   }, [serviceModes, officeAddress, officeLocality]);
 
@@ -1892,10 +1949,13 @@ export default function SpecialistHome() {
 
             <Pressable
               onPress={saveBusinessName}
-              disabled={!businessNameDirty || savingBy.headline}
-              style={[styles.btn, (!businessNameDirty || savingBy.headline) && styles.btnDisabled]}
+              disabled={!businessNameDirty || savingBy.businessName}
+              style={[
+                styles.btn,
+                (!businessNameDirty || savingBy.businessName) && styles.btnDisabled,
+              ]}
             >
-              {savingBy.headline ? (
+              {savingBy.businessName ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   <ActivityIndicator />
                   <Text style={styles.btnT}>Guardando…</Text>

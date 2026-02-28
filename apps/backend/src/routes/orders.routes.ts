@@ -420,12 +420,26 @@ orders.post('/', auth, async (req, res) => {
       return res.status(400).json({ ok: false, error: 'specialist_required' });
     }
 
+    dbg(debugOrders, '[POST /orders][specialistId received]', {
+      specialistIdFromParsed: specialistId,
+      mode: parsed.mode,
+      bodySpecialistId: (req.body as any)?.specialistId ?? null,
+    });
+
     // ✅ NUEVO: modos de servicio del especialista (HOME / OFFICE / ONLINE)
     const spec = await prisma.specialistProfile.findUnique({
       where: { id: specialistId },
       select: { serviceModes: true, officeAddressId: true },
     });
     if (!spec) return res.status(404).json({ ok: false, error: 'specialist_not_found' });
+
+    dbg(debugOrders, '[POST /orders][spec snapshot]', {
+      specialistIdFromBody: specialistId,
+      specialistIdLooksLikeUserId: specialistId?.startsWith('cmk') ?? null, // solo heurística
+      specExists: !!spec,
+      serviceModesRaw: (spec as any)?.serviceModes ?? null,
+      officeAddressId: (spec as any)?.officeAddressId ?? null,
+    });
 
     const modes = (spec.serviceModes as any as ('HOME' | 'OFFICE' | 'ONLINE')[]) ?? ['HOME'];
 
@@ -437,11 +451,12 @@ orders.post('/', auth, async (req, res) => {
         ? requestedModeRaw
         : undefined;
 
-    // ✅ Si el cliente no manda nada:
-    // - si el especialista tiene 1 solo modo, usamos ese
-    // - si tiene varios, default HOME (compat con flujo actual)
+    // ✅ Default seguro:
+    // - si el cliente NO manda nada:
+    //   - si HOME está disponible => HOME
+    //   - si NO => usamos el primer modo del especialista (ej: OFFICE/ONLINE)
     const finalServiceMode: 'HOME' | 'OFFICE' | 'ONLINE' =
-      requestedMode ?? (modes.length === 1 ? modes[0] : 'HOME');
+      requestedMode ?? (modes.length === 1 ? modes[0] : modes.includes('HOME') ? 'HOME' : modes[0]);
 
     dbg(debugOrders, '[POST /orders][serviceMode]', {
       bodyServiceMode: (req.body as any)?.serviceMode,
@@ -895,10 +910,11 @@ orders.get('/mine', auth, async (req: any, res) => {
 
     const list = rows.map((o) => {
       const resolvedAddress =
-        typeof o.location?.formatted === 'string' && o.location.formatted.trim()
-          ? o.location.formatted.trim()
-          : typeof o.addressText === 'string' && o.addressText.trim()
-            ? o.addressText.trim()
+        // ✅ HOME: preferimos lo que escribió el cliente (más limpio / consistente con /orders/:id)
+        typeof o.addressText === 'string' && o.addressText.trim()
+          ? o.addressText.trim()
+          : typeof o.location?.formatted === 'string' && o.location.formatted.trim()
+            ? o.location.formatted.trim()
             : null;
 
       return {

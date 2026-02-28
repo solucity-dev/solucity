@@ -36,6 +36,7 @@ export type CategorySlug =
   | 'vidrieria'
   | 'aberturas'
   | 'impermeabilizacion'
+  | 'zingueria'
   // ── Informática & Electrónica ─────────────────────────────
   | 'climatizacion'
   | 'servicio-tecnico-electronica'

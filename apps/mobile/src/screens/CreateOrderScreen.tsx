@@ -632,7 +632,7 @@ export default function CreateOrderScreen() {
           placeMode === 'AT_HOME' ? 'HOME' : placeMode === 'AT_SPECIALIST' ? 'OFFICE' : 'ONLINE',
         description: description || null,
         attachments,
-        isUrgent: urgent || mode === 'now',
+        isUrgent: urgent,
         ...(locationIdToSend ? { locationId: locationIdToSend } : {}),
         ...(typedFormatted ? { address: typedFormatted, addressText: typedFormatted } : {}),
       };

@@ -37,6 +37,7 @@ const groups: GroupSeed[] = [
       'Vidriería',
       'Aberturas',
       'Impermeabilización',
+      'Zinguería',
     ],
   },
   {

@@ -35,7 +35,7 @@ export const ROOT_CATEGORIES: { id: RootCategoryId; title: string; icon: IconSpe
   {
     id: 'alquiler',
     title: 'Alquiler',
-    icon: { set: 'mdi', name: 'tools' }, // alternativa: 'warehouse' o 'truck-outline'
+    icon: { set: 'mdi', name: 'warehouse' },
   },
 ];
 
@@ -80,6 +80,7 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     { id: 'vidrieria', title: 'Vidriería', icon: { set: 'mdi', name: 'glass-fragile' } },
     { id: 'aberturas', title: 'Aberturas', icon: { set: 'mdi', name: 'door' } },
     { id: 'impermeabilizacion', title: 'Impermeabilización', icon: { set: 'mdi', name: 'water' } },
+    { id: 'zingueria', title: 'Zinguería', icon: { set: 'mdi', name: 'home-roof' } },
   ],
 
   'informatica-electronica': [
@@ -196,12 +197,12 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     {
       id: 'manicuria-unas',
       title: 'Manicuría / Uñas',
-      icon: { set: 'mdi', name: 'hand-heart-outline' },
+      icon: { set: 'mdi', name: 'hand-sparkles' },
     },
     { id: 'maquillaje', title: 'Maquillaje', icon: { set: 'mdi', name: 'brush' } },
     { id: 'depilacion', title: 'Depilación', icon: { set: 'mdi', name: 'razor-double-edge' } },
     { id: 'cosmetologia', title: 'Cosmetología', icon: { set: 'mdi', name: 'lotion' } },
-    { id: 'masajes', title: 'Masajes', icon: { set: 'mdi', name: 'hand' } },
+    { id: 'masajes', title: 'Masajes', icon: { set: 'mdi', name: 'massage' } },
     {
       id: 'spa-estetica-corporal',
       title: 'Spa / Estética corporal',
@@ -218,7 +219,7 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     {
       id: 'alquiler-de-herramientas',
       title: 'Alquiler de herramientas',
-      icon: { set: 'mdi', name: 'tools' },
+      icon: { set: 'mdi', name: 'toolbox-outline' },
     },
     {
       id: 'alquiler-de-maquinaria-liviana',
@@ -248,7 +249,7 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     {
       id: 'alquiler-de-hormigoneras',
       title: 'Alquiler de hormigoneras',
-      icon: { set: 'mdi', name: 'concrete-mixer' },
+      icon: { set: 'mdi', name: 'truck-mixer' },
     },
     {
       id: 'alquiler-de-elevadores',

@@ -1450,10 +1450,23 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
 
         // 2) Si NO vienen coords, geocodificar
         if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) {
-          const geo = await geocodeAddress(formatted);
-          // asumimos que geocodeAddress devuelve { lat, lng, formatted? } o similar
-          lat = geo?.lat;
-          lng = geo?.lng;
+          try {
+            const geo = await geocodeAddress(formatted);
+            // asumimos que geocodeAddress devuelve { lat, lng, formatted? } o similar
+            lat = geo?.lat;
+            lng = geo?.lng;
+          } catch (e) {
+            dbg(debugSpecialists, '[PATCH /specialists/me] geocodeAddress failed', {
+              formatted,
+              e,
+            });
+            return res.status(400).json({
+              ok: false,
+              error: 'office_geocode_failed',
+              message:
+                'No pudimos ubicar esa dirección. Probá agregando altura/barrio o una referencia.',
+            });
+          }
 
           if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) {
             return res.status(400).json({

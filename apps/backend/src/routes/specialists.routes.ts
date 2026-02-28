@@ -1122,6 +1122,21 @@ const AvailabilitySchema = z.object({
   enabled: z.boolean().optional(),
 });
 
+const OfficeAddressSchema = z.preprocess(
+  (v) => {
+    // ✅ compat: si el mobile manda string, lo convertimos al objeto esperado
+    if (typeof v === 'string') return { formatted: v };
+    return v;
+  },
+  z.object({
+    formatted: z.string().min(5),
+    locality: z.string().min(2).optional().nullable(),
+    lat: z.coerce.number().optional(),
+    lng: z.coerce.number().optional(),
+    placeId: z.string().optional().nullable(),
+  }),
+);
+
 const PatchMeSchema = z.object({
   businessName: z.string().trim().max(80).optional().nullable(),
   bio: z.string().max(1000).optional(),
@@ -1144,20 +1159,8 @@ const PatchMeSchema = z.object({
     .min(1)
     .optional(),
 
-  // ✅ NUEVO: dirección de oficina (solo si incluye OFFICE)
-  officeAddress: z
-    .object({
-      formatted: z.string().min(5),
-
-      // ✅ FIX: en mobile hoy NO lo estás mandando, entonces tiene que ser opcional
-      locality: z.string().min(2).optional().nullable(),
-
-      lat: z.coerce.number().optional(),
-      lng: z.coerce.number().optional(),
-      placeId: z.string().optional().nullable(),
-    })
-    .nullable()
-    .optional(),
+  // ✅ NUEVO: dirección de oficina (acepta string o objeto)
+  officeAddress: OfficeAddressSchema.nullable().optional(),
 });
 
 /** GET /specialists/me */

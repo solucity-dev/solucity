@@ -197,12 +197,12 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     {
       id: 'manicuria-unas',
       title: 'Manicuría / Uñas',
-      icon: { set: 'mdi', name: 'hand-sparkles' },
+      icon: { set: 'mdi', name: 'hand' },
     },
     { id: 'maquillaje', title: 'Maquillaje', icon: { set: 'mdi', name: 'brush' } },
     { id: 'depilacion', title: 'Depilación', icon: { set: 'mdi', name: 'razor-double-edge' } },
     { id: 'cosmetologia', title: 'Cosmetología', icon: { set: 'mdi', name: 'lotion' } },
-    { id: 'masajes', title: 'Masajes', icon: { set: 'mdi', name: 'massage' } },
+    { id: 'masajes', title: 'Masajes', icon: { set: 'mdi', name: 'spa' } },
     {
       id: 'spa-estetica-corporal',
       title: 'Spa / Estética corporal',
@@ -249,7 +249,7 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     {
       id: 'alquiler-de-hormigoneras',
       title: 'Alquiler de hormigoneras',
-      icon: { set: 'mdi', name: 'truck-mixer' },
+      icon: { set: 'mdi', name: 'truck' },
     },
     {
       id: 'alquiler-de-elevadores',

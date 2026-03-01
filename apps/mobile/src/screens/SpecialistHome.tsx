@@ -26,6 +26,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../auth/AuthProvider';
+import { LOCALITIES_CORDOBA } from '../data/localitiesCordoba';
 import { api } from '../lib/api';
 import { markLocationSynced } from '../lib/locationOnce';
 import {
@@ -253,18 +254,6 @@ function isWithinAvailability(av?: { days?: number[]; start?: string; end?: stri
   // rango que cruza medianoche (ej 22:00–02:00)
   return nowMin >= startMin || nowMin <= endMin;
 }
-const LOCALITIES_CORDOBA = [
-  'Río Cuarto',
-  'Córdoba',
-  'Villa Carlos Paz',
-  'San Francisco',
-  'Villa María',
-  'Alta Gracia',
-  'Jesús María',
-  'Río Tercero',
-  'Cosquín',
-  'La Falda',
-] as const;
 
 const DAY_LABELS = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
 

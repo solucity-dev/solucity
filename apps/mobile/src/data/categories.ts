@@ -197,7 +197,7 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     {
       id: 'manicuria-unas',
       title: 'Manicuría / Uñas',
-      icon: { set: 'mdi', name: 'hand' },
+      icon: { set: 'mdi', name: 'nail' },
     },
     { id: 'maquillaje', title: 'Maquillaje', icon: { set: 'mdi', name: 'brush' } },
     { id: 'depilacion', title: 'Depilación', icon: { set: 'mdi', name: 'razor-double-edge' } },

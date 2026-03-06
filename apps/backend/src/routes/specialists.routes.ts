@@ -635,7 +635,10 @@ router.get('/search', async (req, res) => {
 
           kycStatus: prof?.kycStatus ?? 'UNVERIFIED',
           avatarUrl: prof?.avatarUrl ?? null,
-          serviceModes: (prof as any)?.serviceModes ?? ['HOME'],
+          serviceModes:
+            Array.isArray((prof as any)?.serviceModes) && (prof as any).serviceModes.length
+              ? (prof as any).serviceModes
+              : ['HOME'],
           officeAddressId: (prof as any)?.officeAddressId ?? null,
           visible,
           availableNow, // pill (incluye horario)
@@ -1019,6 +1022,7 @@ router.post('/register', auth, async (req: AuthReq, res: Response) => {
         bio: data.bio,
         kycStatus: 'PENDING',
         availableNow: false,
+        serviceModes: ['HOME'],
       },
       create: {
         userId,
@@ -1029,6 +1033,7 @@ router.post('/register', auth, async (req: AuthReq, res: Response) => {
         bio: data.bio,
         kycStatus: 'PENDING',
         availableNow: false,
+        serviceModes: ['HOME'],
       },
       select: { id: true },
     });
@@ -1286,7 +1291,10 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
         radiusKm: profile.radiusKm ?? 30,
         visitPrice: profile.visitPrice ?? 0,
         pricingLabel: (profile as any).pricingLabel ?? null,
-        serviceModes: (profile.serviceModes as any) ?? ['HOME'],
+        serviceModes:
+          Array.isArray(profile.serviceModes) && profile.serviceModes.length
+            ? (profile.serviceModes as any)
+            : ['HOME'],
         officeAddressId: profile.officeAddressId ?? null,
 
         availability: avail ?? ({ days: [1, 2, 3, 4, 5], start: '09:00', end: '18:00' } as any),
@@ -1578,7 +1586,14 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
           ? { availableNow: current?.kycStatus === 'VERIFIED' ? setAvailableNow : false }
           : {}),
         ...(data.serviceModes !== undefined
-          ? { serviceModes: { set: data.serviceModes as any } }
+          ? {
+              serviceModes: {
+                set:
+                  Array.isArray(data.serviceModes) && data.serviceModes.length
+                    ? (data.serviceModes as any)
+                    : (['HOME'] as any),
+              },
+            }
           : {}),
 
         ...(nextOfficeAddressId !== undefined ? { officeAddressId: nextOfficeAddressId } : {}),
@@ -2054,7 +2069,10 @@ router.get('/:id', async (req, res) => {
       radiusKm: spec.radiusKm,
       distanceKm,
       availability: spec.availability,
-      serviceModes: (spec as any).serviceModes ?? ['HOME'],
+      serviceModes:
+        Array.isArray((spec as any).serviceModes) && (spec as any).serviceModes.length
+          ? (spec as any).serviceModes
+          : ['HOME'],
       officeAddressId: (spec as any).officeAddressId ?? null,
       specialties: spec.specialties.map((s) => ({
         id: s.category.id,

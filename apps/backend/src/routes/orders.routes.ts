@@ -441,7 +441,8 @@ orders.post('/', auth, async (req, res) => {
       officeAddressId: (spec as any)?.officeAddressId ?? null,
     });
 
-    const modes = (spec.serviceModes as any as ('HOME' | 'OFFICE' | 'ONLINE')[]) ?? ['HOME'];
+    const rawModes = (spec.serviceModes as any as ('HOME' | 'OFFICE' | 'ONLINE')[]) ?? [];
+    const modes: ('HOME' | 'OFFICE' | 'ONLINE')[] = rawModes.length ? rawModes : ['HOME'];
 
     // Lo que eligió el cliente (si mandó)
     const requestedModeRaw = (req.body as any)?.serviceMode;
@@ -456,7 +457,7 @@ orders.post('/', auth, async (req, res) => {
     //   - si HOME está disponible => HOME
     //   - si NO => usamos el primer modo del especialista (ej: OFFICE/ONLINE)
     const finalServiceMode: 'HOME' | 'OFFICE' | 'ONLINE' =
-      requestedMode ?? (modes.length === 1 ? modes[0] : modes.includes('HOME') ? 'HOME' : modes[0]);
+      requestedMode ?? (modes.includes('HOME') ? 'HOME' : (modes[0] ?? 'HOME'));
 
     dbg(debugOrders, '[POST /orders][serviceMode]', {
       bodyServiceMode: (req.body as any)?.serviceMode,

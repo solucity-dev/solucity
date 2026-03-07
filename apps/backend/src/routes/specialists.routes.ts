@@ -491,6 +491,10 @@ router.get('/search', async (req, res) => {
         availability: true,
         availableNow: true,
         pricingLabel: true,
+        visitPrice: true,
+        ratingAvg: true,
+        ratingCount: true,
+        badge: true,
         backgroundCheck: { select: { status: true } },
         user: { select: { status: true } },
         serviceModes: true,
@@ -624,6 +628,10 @@ router.get('/search', async (req, res) => {
           userOk,
 
           name,
+          ratingAvg: prof?.ratingAvg ?? 0,
+          ratingCount: prof?.ratingCount ?? 0,
+          visitPrice: prof?.visitPrice ?? x.visitPrice ?? null,
+          badge: prof?.badge ?? x.badge ?? null,
 
           // 👇 compat (hasta que el mobile use categoryEnabled)
           enabled: categoryEnabled,

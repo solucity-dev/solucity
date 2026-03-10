@@ -1470,29 +1470,55 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
         // 2) Si NO vienen coords, geocodificar
         if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) {
           try {
+            dbg(debugSpecialists, '[PATCH /specialists/me] geocode input', {
+              originalFormatted: officeAddress.formatted,
+              normalizedFormatted: formatted,
+              locality: officeAddress.locality ?? null,
+              inferredLocality,
+            });
+
             const geo = await geocodeAddress(formatted);
+
+            dbg(debugSpecialists, '[PATCH /specialists/me] geocode result', {
+              normalizedFormatted: formatted,
+              geo,
+            });
+
             // asumimos que geocodeAddress devuelve { lat, lng, formatted? } o similar
             lat = geo?.lat;
             lng = geo?.lng;
           } catch (e) {
             dbg(debugSpecialists, '[PATCH /specialists/me] geocodeAddress failed', {
-              formatted,
-              e,
+              originalFormatted: officeAddress.formatted,
+              normalizedFormatted: formatted,
+              locality: officeAddress.locality ?? null,
+              inferredLocality,
+              error: e instanceof Error ? { message: e.message, stack: e.stack } : e,
             });
+
             return res.status(400).json({
               ok: false,
               error: 'office_geocode_failed',
               message:
-                'No pudimos ubicar esa dirección. Probá agregando altura/barrio o una referencia.',
+                'No pudimos ubicar esa dirección. Revisá que la calle esté bien escrita y agregá altura, barrio o una referencia.',
             });
           }
 
           if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) {
+            dbg(debugSpecialists, '[PATCH /specialists/me] geocode returned invalid coords', {
+              originalFormatted: officeAddress.formatted,
+              normalizedFormatted: formatted,
+              locality: officeAddress.locality ?? null,
+              inferredLocality,
+              lat,
+              lng,
+            });
+
             return res.status(400).json({
               ok: false,
               error: 'office_geocode_failed',
               message:
-                'No pudimos ubicar esa dirección. Probá agregando altura/barrio o una referencia.',
+                'No pudimos ubicar esa dirección. Revisá que la calle esté bien escrita y agregá altura, barrio o una referencia.',
             });
           }
         }
@@ -1500,10 +1526,18 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
         // Córdoba-only por coordenadas (tu check)
         const inCordoba = lat >= -35.5 && lat <= -29.0 && lng >= -66.8 && lng <= -62.0;
         if (!inCordoba) {
+          dbg(debugSpecialists, '[PATCH /specialists/me] office coords outside cordoba', {
+            originalFormatted: officeAddress.formatted,
+            normalizedFormatted: formatted,
+            lat,
+            lng,
+          });
+
           return res.status(400).json({
             ok: false,
             error: 'office_coords_outside_cordoba',
-            message: 'Las coordenadas de la oficina deben estar dentro de Córdoba.',
+            message:
+              'La dirección encontrada quedó fuera de Córdoba. Revisá la calle y la localidad ingresadas.',
           });
         }
 

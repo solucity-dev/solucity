@@ -1,3 +1,4 @@
+//apps/backend/src/routes/admin.routes.ts
 import { Router } from 'express';
 import { z } from 'zod';
 
@@ -215,7 +216,16 @@ adminRouter.get('/customers', async (req, res) => {
     .trim()
     .toUpperCase();
 
-  const where: any = { role: 'CUSTOMER' };
+  const where: any = {
+    role: 'CUSTOMER',
+    status: 'ACTIVE',
+    NOT: {
+      email: {
+        endsWith: '@deleted.local',
+        mode: 'insensitive',
+      },
+    },
+  };
 
   if (status === 'ACTIVE' || status === 'BLOCKED') {
     where.status = status;
@@ -327,6 +337,16 @@ adminRouter.get('/customers/:id', async (req, res) => {
  * GET /admin/metrics
  */
 adminRouter.get('/metrics', async (_req, res) => {
+  const activeRealUserWhere = {
+    status: 'ACTIVE' as const,
+    NOT: {
+      email: {
+        endsWith: '@deleted.local',
+        mode: 'insensitive' as const,
+      },
+    },
+  };
+
   const [
     usersTotal,
     adminsTotal,
@@ -344,10 +364,10 @@ adminRouter.get('/metrics', async (_req, res) => {
     certificationsPending,
     backgroundPending,
   ] = await Promise.all([
-    prisma.user.count(),
-    prisma.user.count({ where: { role: 'ADMIN' } }),
-    prisma.user.count({ where: { role: 'CUSTOMER' } }),
-    prisma.user.count({ where: { role: 'SPECIALIST' } }),
+    prisma.user.count({ where: activeRealUserWhere }),
+    prisma.user.count({ where: { role: 'ADMIN', ...activeRealUserWhere } }),
+    prisma.user.count({ where: { role: 'CUSTOMER', ...activeRealUserWhere } }),
+    prisma.user.count({ where: { role: 'SPECIALIST', ...activeRealUserWhere } }),
 
     prisma.serviceOrder.count(),
     prisma.serviceOrder.count({ where: { status: 'PENDING' } }),
@@ -647,7 +667,16 @@ adminRouter.get('/specialists', async (_req, res) => {
   const now = new Date();
 
   const users = await prisma.user.findMany({
-    where: { role: 'SPECIALIST' },
+    where: {
+      role: 'SPECIALIST',
+      status: 'ACTIVE',
+      NOT: {
+        email: {
+          endsWith: '@deleted.local',
+          mode: 'insensitive',
+        },
+      },
+    },
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,

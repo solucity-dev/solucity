@@ -13,6 +13,7 @@ import { sendExpoPush } from '../services/pushExpo';
 import { dbg, debugNotifications, debugPush, errMsg } from '../utils/debug';
 
 const adminRouter = Router();
+const ADMIN_ORDERS_VISIBLE_FROM = new Date('2026-03-06T00:00:00.000Z');
 
 /** Util: normalizar URL absoluta a partir de /uploads/... */
 function toAbsoluteUrl(u: string | null | undefined): string | null {
@@ -455,7 +456,11 @@ adminRouter.get('/orders', async (req, res) => {
     .trim()
     .toUpperCase();
 
-  const where: any = {};
+  const where: any = {
+    createdAt: {
+      gte: ADMIN_ORDERS_VISIBLE_FROM,
+    },
+  };
   if (statusRaw && statusRaw !== 'ALL') where.status = statusRaw;
 
   if (q) {
@@ -563,8 +568,13 @@ adminRouter.get('/orders/:id', async (req, res) => {
   const id = String(req.params.id ?? '').trim();
   if (!id) return res.status(400).json({ ok: false, error: 'id_required' });
 
-  const o = await prisma.serviceOrder.findUnique({
-    where: { id },
+  const o = await prisma.serviceOrder.findFirst({
+    where: {
+      id,
+      createdAt: {
+        gte: ADMIN_ORDERS_VISIBLE_FROM,
+      },
+    },
     select: {
       id: true,
       status: true,

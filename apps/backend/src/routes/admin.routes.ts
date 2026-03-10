@@ -348,12 +348,6 @@ adminRouter.get('/metrics', async (_req, res) => {
     },
   };
 
-  const visibleOrdersWhere = {
-    createdAt: {
-      gte: ADMIN_ORDERS_VISIBLE_FROM,
-    },
-  };
-
   const [
     usersTotal,
     adminsTotal,
@@ -377,17 +371,25 @@ adminRouter.get('/metrics', async (_req, res) => {
     prisma.user.count({ where: { role: 'SPECIALIST', ...activeRealUserWhere } }),
 
     prisma.serviceOrder.count({
-      where: visibleOrdersWhere,
+      where: {
+        createdAt: {
+          gte: ADMIN_ORDERS_VISIBLE_FROM,
+        },
+      },
     }),
     prisma.serviceOrder.count({
       where: {
-        ...visibleOrdersWhere,
+        createdAt: {
+          gte: ADMIN_ORDERS_VISIBLE_FROM,
+        },
         status: 'PENDING',
       },
     }),
     prisma.serviceOrder.count({
       where: {
-        ...visibleOrdersWhere,
+        createdAt: {
+          gte: ADMIN_ORDERS_VISIBLE_FROM,
+        },
         status: {
           in: ['ASSIGNED', 'IN_PROGRESS', 'PAUSED', 'FINISHED_BY_SPECIALIST', 'IN_CLIENT_REVIEW'],
         },
@@ -395,13 +397,17 @@ adminRouter.get('/metrics', async (_req, res) => {
     }),
     prisma.serviceOrder.count({
       where: {
-        ...visibleOrdersWhere,
+        createdAt: {
+          gte: ADMIN_ORDERS_VISIBLE_FROM,
+        },
         status: { in: ['CONFIRMED_BY_CLIENT', 'CLOSED'] },
       },
     }),
     prisma.serviceOrder.count({
       where: {
-        ...visibleOrdersWhere,
+        createdAt: {
+          gte: ADMIN_ORDERS_VISIBLE_FROM,
+        },
         status: {
           in: [
             'CANCELLED_BY_CUSTOMER',

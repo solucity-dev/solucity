@@ -174,6 +174,55 @@ async function pushToUser(params: { userId: string; title: string; body: string;
   );
 }
 
+async function notifyAdminNewOrder(params: {
+  orderId: string;
+  customerName: string;
+  specialistName: string;
+  categoryName: string;
+}) {
+  const adminEmail = String(process.env.ADMIN_EMAIL ?? '')
+    .trim()
+    .toLowerCase();
+
+  if (!adminEmail) return;
+
+  const adminUser = await prisma.user.findUnique({
+    where: { email: adminEmail },
+    select: { id: true },
+  });
+
+  if (!adminUser?.id) return;
+
+  const title = 'Nueva orden creada';
+  const body = `${params.customerName} creó una orden para ${params.categoryName} con ${params.specialistName}.`;
+
+  const notif = await prisma.notification.create({
+    data: {
+      userId: adminUser.id,
+      type: 'ADMIN_ORDER_CREATED',
+      title,
+      body,
+      data: {
+        orderId: params.orderId,
+        customerName: params.customerName,
+        specialistName: params.specialistName,
+        categoryName: params.categoryName,
+      } as any,
+    },
+    select: { id: true, title: true, body: true },
+  });
+
+  await pushToUser({
+    userId: adminUser.id,
+    title: notif.title ?? title,
+    body: notif.body ?? body,
+    data: {
+      notificationId: notif.id,
+      type: 'ADMIN_ORDER_CREATED',
+      orderId: params.orderId,
+    },
+  });
+}
 // 👇 opcional: si más adelante creás un user "System", ponés su id aquí en .env
 const SYSTEM_ACTOR_ID = process.env.SYSTEM_ACTOR_ID || '';
 
@@ -779,28 +828,46 @@ orders.post('/', auth, async (req, res) => {
       preassignedSpecialistUserId: preassignedUserId,
     } as any);
 
-    // ✅ CAMBIO: ORDER_CREATED ahora manda push con notificationId
+    // ✅ Notificar al especialista
+    let adminCustomerName = 'Un cliente';
+    let adminSpecialistName = 'Especialista';
+    let adminCategoryName = 'un rubro';
+
     if (order.specialistId) {
       const specialistUserId = await getSpecialistUserId(order.specialistId);
 
+      const [custUser, serviceInfo, specialistInfo] = await Promise.all([
+        prisma.customerProfile.findUnique({
+          where: { id: order.customerId },
+          select: { user: { select: { name: true, surname: true } } },
+        }),
+        prisma.service.findUnique({
+          where: { id: order.serviceId },
+          select: { category: { select: { name: true } } },
+        }),
+        prisma.specialistProfile.findUnique({
+          where: { id: order.specialistId },
+          select: {
+            businessName: true,
+            user: { select: { name: true, surname: true } },
+          },
+        }),
+      ]);
+
+      const customerName =
+        `${custUser?.user?.name ?? 'Un cliente'} ${custUser?.user?.surname ?? ''}`.trim();
+
+      const rubroName = serviceInfo?.category?.name ?? 'un rubro';
+
+      const specialistName =
+        specialistInfo?.businessName?.trim() ||
+        `${specialistInfo?.user?.name ?? 'Especialista'} ${specialistInfo?.user?.surname ?? ''}`.trim();
+
+      adminCustomerName = customerName || 'Un cliente';
+      adminSpecialistName = specialistName || 'Especialista';
+      adminCategoryName = rubroName || 'un rubro';
+
       if (specialistUserId) {
-        const [custUser, serviceInfo] = await Promise.all([
-          prisma.customerProfile.findUnique({
-            where: { id: order.customerId },
-            select: { user: { select: { name: true, surname: true } } },
-          }),
-          prisma.service.findUnique({
-            where: { id: order.serviceId },
-            select: { category: { select: { name: true } } },
-          }),
-        ]);
-
-        const customerName =
-          `${custUser?.user?.name ?? 'Un cliente'} ${custUser?.user?.surname ?? ''}`.trim();
-
-        const rubroName = serviceInfo?.category?.name ?? 'un rubro';
-
-        // 1) Guardar notificación en DB
         const notif = await prisma.notification.create({
           data: {
             userId: specialistUserId,
@@ -816,14 +883,13 @@ orders.post('/', auth, async (req, res) => {
           select: { id: true, title: true, body: true },
         });
 
-        // 2) PUSH REAL al especialista + notificationId
         try {
           await pushToUser({
             userId: specialistUserId,
             title: notif.title ?? 'Nueva solicitud de trabajo',
             body: notif.body ?? `${customerName} solicitó ${rubroName}.`,
             data: {
-              notificationId: notif.id, // ✅ CLAVE para marcar read desde el tap
+              notificationId: notif.id,
               type: 'ORDER_CREATED',
               orderId: order.id,
               customerName,
@@ -834,6 +900,18 @@ orders.post('/', auth, async (req, res) => {
           console.warn('[push] ORDER_CREATED failed', e);
         }
       }
+    }
+
+    // ✅ Notificar al admin
+    try {
+      await notifyAdminNewOrder({
+        orderId: order.id,
+        customerName: adminCustomerName,
+        specialistName: adminSpecialistName,
+        categoryName: adminCategoryName,
+      });
+    } catch (e) {
+      console.warn('[push] ADMIN_ORDER_CREATED failed', e);
     }
 
     return res.status(201).json({ ok: true, order });

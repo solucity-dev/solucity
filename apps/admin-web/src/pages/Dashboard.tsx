@@ -116,8 +116,10 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
     // Snapshot anterior para detectar incrementos
-  const prevRef = React.useRef<{
+    const prevRef = React.useRef<{
     usersTotal: number;
+    ordersTotal: number;
+    ordersPending: number;
     kycPending: number;
     certificationsPending: number;
     backgroundPending: number;
@@ -144,8 +146,10 @@ export default function Dashboard() {
   React.useEffect(() => {
     if (!data) return;
 
-    const current = {
+        const current = {
       usersTotal: Number(data.users?.total || 0),
+      ordersTotal: Number(data.orders?.total || 0),
+      ordersPending: Number(data.orders?.pending || 0),
       kycPending: Number(data.specialists?.kycPending || 0),
       certificationsPending: Number(data.specialists?.certificationsPending || 0),
       backgroundPending: Number(data.specialists?.backgroundPending || 0),
@@ -158,6 +162,10 @@ export default function Dashboard() {
 
       if (current.usersTotal > prev.usersTotal) {
         alerts.push(`Usuarios totales: ${prev.usersTotal} → ${current.usersTotal}`);
+      }
+
+      if (current.ordersPending > prev.ordersPending) {
+        alerts.push(`Órdenes pendientes: ${prev.ordersPending} → ${current.ordersPending}`);
       }
 
       if (current.kycPending > prev.kycPending) {
@@ -179,7 +187,7 @@ export default function Dashboard() {
       // Si hubo al menos un incremento, sonar + notificar
 if (alerts.length > 0) {
   playAlarm(30000); // 🔔 30 segundos de alarma
-  notify('Solucity · Nuevo pendiente / cambio', alerts.join('\n'));
+    notify('Solucity · Nueva actividad', alerts.join('\n'));
 }
 
     }

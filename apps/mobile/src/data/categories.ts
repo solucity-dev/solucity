@@ -18,6 +18,11 @@ export const ROOT_CATEGORIES: { id: RootCategoryId; title: string; icon: IconSpe
   { id: 'seguridad', title: 'Seguridad', icon: { set: 'mdi', name: 'shield-lock-outline' } },
   { id: 'servicios', title: 'Servicios', icon: { set: 'mdi', name: 'hand-heart-outline' } },
   {
+    id: 'salud',
+    title: 'Salud',
+    icon: { set: 'mdi', name: 'hospital-box-outline' },
+  },
+  {
     id: 'gastronomia',
     title: 'Gastronomía',
     icon: { set: 'mdi', name: 'silverware-fork-knife' },
@@ -133,11 +138,6 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
   servicios: [
     { id: 'limpieza', title: 'Limpieza', icon: { set: 'mdi', name: 'broom' } },
     {
-      id: 'acompanante-terapeutico',
-      title: 'Acompañante terapéutico',
-      icon: { set: 'mdi', name: 'hand-heart' },
-    },
-    {
       id: 'clases-particulares',
       title: 'Clases particulares',
       icon: { set: 'mdi', name: 'book-open-variant' },
@@ -164,6 +164,44 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     },
   ],
 
+  salud: [
+    {
+      id: 'acompanante-terapeutico',
+      title: 'Acompañante terapéutico',
+      icon: { set: 'mdi', name: 'hand-heart' },
+    },
+    {
+      id: 'psicologo',
+      title: 'Psicólogo',
+      icon: { set: 'mdi', name: 'head-heart-outline' },
+    },
+    {
+      id: 'psiquiatra',
+      title: 'Psiquiatra',
+      icon: { set: 'mdi', name: 'stethoscope' },
+    },
+    {
+      id: 'asistencia-medica',
+      title: 'Asistencia médica',
+      icon: { set: 'mdi', name: 'medical-bag' },
+    },
+    {
+      id: 'nutricionista',
+      title: 'Nutricionista',
+      icon: { set: 'mdi', name: 'food-apple' },
+    },
+    {
+      id: 'psicopedagoga',
+      title: 'Psicopedagoga',
+      icon: { set: 'mdi', name: 'school-outline' },
+    },
+    {
+      id: 'kinesiologia',
+      title: 'Kinesiología',
+      icon: { set: 'mdi', name: 'arm-flex-outline' },
+    },
+  ],
+
   gastronomia: [
     { id: 'camarero-mozo', title: 'Camarero / Mozo', icon: { set: 'mdi', name: 'account-tie' } },
     { id: 'cocinero', title: 'Cocinero', icon: { set: 'mdi', name: 'chef-hat' } },
@@ -187,8 +225,6 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     { id: 'escribano', title: 'Escribano', icon: { set: 'mdi', name: 'file-sign' } },
     { id: 'arquitecto', title: 'Arquitecto', icon: { set: 'mdi', name: 'compass-outline' } },
     { id: 'ingeniero', title: 'Ingeniero', icon: { set: 'mdi', name: 'cog-outline' } },
-    { id: 'psicologo', title: 'Psicólogo', icon: { set: 'mdi', name: 'brain' } }, // alternativa: 'head-heart-outline'
-    { id: 'psiquiatra', title: 'Psiquiatra', icon: { set: 'mdi', name: 'hospital-box-outline' } },
   ],
 
   estetica: [

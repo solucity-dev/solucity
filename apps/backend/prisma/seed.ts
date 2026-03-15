@@ -68,7 +68,6 @@ const groups: GroupSeed[] = [
     slug: 'servicios',
     rubros: [
       'Limpieza',
-      'Acompañante terapéutico',
       'Clases particulares',
       'Paseador de perros',
       'Cuidado de mascotas',
@@ -77,6 +76,19 @@ const groups: GroupSeed[] = [
       'Organización de eventos',
       'Fotografía y video',
       'Atención al cliente',
+    ],
+  },
+  {
+    name: 'Salud',
+    slug: 'salud',
+    rubros: [
+      'Acompañante terapéutico',
+      'Psicólogo',
+      'Psiquiatra',
+      'Asistencia médica',
+      'Nutricionista',
+      'Psicopedagoga',
+      'Kinesiología',
     ],
   },
   {
@@ -100,8 +112,7 @@ const groups: GroupSeed[] = [
       'Escribano',
       'Arquitecto',
       'Ingeniero',
-      'Psicólogo',
-      'Psiquiatra',
+      'PAS - Productor Asesor de Seguros',
     ],
   },
   {
@@ -155,25 +166,33 @@ const REQUIRES_CERTIFICATION = new Set<string>([
   // Construcción
   'electricidad',
   'plomeria-gasista',
-  'desagote-y-banos-quimicos', // si realmente querés exigir habilitación
+  'desagote-y-banos-quimicos',
 
   // Informática y electrónica
   'climatizacion',
   'servicio-tecnico-electronica',
   'servicio-tecnico-electrodomesticos',
   'servicio-tecnico-informatica',
-  'servicio-tecnico-audiovisual', // OJO con el nombre exacto (ver punto 1.1)
+  'servicio-tecnico-audiovisual',
 
   // Seguridad
   'camaras-y-alarmas',
   'cerrajeria',
   'personal-de-seguridad',
-  'cercos-electricos-perimetrales', // si querés exigir habilitación (tiene sentido)
+  'cercos-electricos-perimetrales',
 
   // Servicios
-  'acompanante-terapeutico',
-  'fletes', // licencia + seguro (criterio tuyo)
+  'fletes',
   'diseno-de-interiores',
+
+  // Salud
+  'acompanante-terapeutico',
+  'psicologo',
+  'psiquiatra',
+  'asistencia-medica',
+  'nutricionista',
+  'psicopedagoga',
+  'kinesiologia',
 
   // Profesionales
   'abogado',
@@ -181,8 +200,7 @@ const REQUIRES_CERTIFICATION = new Set<string>([
   'escribano',
   'arquitecto',
   'ingeniero',
-  'psicologo',
-  'psiquiatra',
+  'pas-productor-asesor-de-seguros',
 ]);
 
 async function upsertCategories() {

@@ -336,6 +336,7 @@ export default function SpecialistHome() {
   const [serviceModes, setServiceModes] = useState<('HOME' | 'OFFICE' | 'ONLINE')[]>([]);
 
   const [officeAddress, setOfficeAddress] = useState('');
+  const [savedOfficeAddress, setSavedOfficeAddress] = useState('');
 
   // ✅ Localidad para oficina (opción B)
   const [officeLocality, setOfficeLocality] = useState('Río Cuarto');
@@ -364,6 +365,7 @@ export default function SpecialistHome() {
   const [openAvailability, setOpenAvailability] = useState(false);
   const [openPerfil, setOpenPerfil] = useState(false);
   const [openRubros, setOpenRubros] = useState(false);
+  const [specialtyQuery, setSpecialtyQuery] = useState('');
   // ✅ Lazy-load certs (cargar solo al abrir el bloque la 1ra vez)
   const certsLoadedOnceRef = useRef(false);
   const [certsLoading, setCertsLoading] = useState(false);
@@ -586,6 +588,14 @@ export default function SpecialistHome() {
       .replace(/-+/g, '-');
   }
 
+  function normalizeText(s: string) {
+    return String(s)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
   function catNameBySlug(slug: string) {
     return categoryOptions.find((c) => c.slug === slug)?.name ?? slug;
   }
@@ -689,11 +699,14 @@ export default function SpecialistHome() {
         if (formatted) {
           const street = streetOnly(formatted);
           setOfficeAddress(street);
+          setSavedOfficeAddress(formatted);
 
           const match = LOCALITIES_CORDOBA.find((loc) =>
             formatted.toLowerCase().includes(loc.toLowerCase()),
           );
           if (match) setOfficeLocality(match);
+        } else {
+          setSavedOfficeAddress('');
         }
 
         // ✅ baseline Modalidad de servicio (snapshots)
@@ -1287,6 +1300,7 @@ export default function SpecialistHome() {
 
         const formatted = `${street}, ${loc}, Córdoba, Argentina`;
         payload.officeAddress = formatted;
+        setSavedOfficeAddress(formatted);
 
         payload.officeAddress = formatted; // legacy-safe si el backend espera string
       } else {
@@ -1294,6 +1308,7 @@ export default function SpecialistHome() {
         payload.officeAddress = null;
 
         setOfficeAddress('');
+        setSavedOfficeAddress('');
         setOfficeLocalityQuery('');
         setOfficeLocalityOpen(false);
         // 👇 NO borres officeLocality, dejalo como último valor elegido
@@ -1483,6 +1498,50 @@ export default function SpecialistHome() {
       .filter((s) => !HIDDEN_SPECIALTIES.has(s))
       .map((s) => ({ slug: s, name: s }));
   }, [categoryOptions]);
+
+  const normalizedSpecialtyQuery = useMemo(() => normalizeText(specialtyQuery), [specialtyQuery]);
+
+  const selectedChipSource = useMemo(() => {
+    return chipSource
+      .filter((opt) => specialties.includes(opt.slug))
+      .sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
+  }, [chipSource, specialties]);
+
+  const filteredChipSource = useMemo(() => {
+    const withMeta = chipSource.map((opt) => {
+      const meta = categoryOptions.find((c) => c.slug === opt.slug);
+      return {
+        ...opt,
+        groupName: meta?.groupName ?? '',
+        groupSlug: meta?.groupSlug ?? '',
+      };
+    });
+
+    const filtered = !normalizedSpecialtyQuery
+      ? withMeta
+      : withMeta.filter((opt) => {
+          const name = normalizeText(opt.name);
+          const slug = normalizeText(opt.slug);
+          const groupName = normalizeText(opt.groupName);
+          const groupSlug = normalizeText(opt.groupSlug);
+
+          return (
+            name.includes(normalizedSpecialtyQuery) ||
+            slug.includes(normalizedSpecialtyQuery) ||
+            groupName.includes(normalizedSpecialtyQuery) ||
+            groupSlug.includes(normalizedSpecialtyQuery)
+          );
+        });
+
+    return filtered.sort((a, b) => {
+      const aSelected = specialties.includes(a.slug) ? 1 : 0;
+      const bSelected = specialties.includes(b.slug) ? 1 : 0;
+
+      if (aSelected !== bSelected) return bSelected - aSelected;
+
+      return a.name.localeCompare(b.name, 'es', { sensitivity: 'base' });
+    });
+  }, [chipSource, categoryOptions, normalizedSpecialtyQuery, specialties]);
 
   const specialtiesRequiringCert = useMemo(
     () => specialties.filter((s) => requiresCert(s)),
@@ -2259,6 +2318,17 @@ export default function SpecialistHome() {
                   editable={!savingBy.serviceModes}
                 />
 
+                {savedOfficeAddress ? (
+                  <View style={styles.savedInfoBox}>
+                    <Text style={styles.savedInfoLabel}>Dirección actual guardada</Text>
+                    <Text style={styles.savedInfoText}>{savedOfficeAddress}</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.muted}>
+                    Aún no tenés una dirección de oficina/local guardada.
+                  </Text>
+                )}
+
                 <Text style={[styles.subTitle, { marginTop: 10 }]}>Localidad</Text>
 
                 <Pressable
@@ -2383,27 +2453,73 @@ export default function SpecialistHome() {
           <Section
             title={`Rubros (${specialties.length})`}
             open={openRubros}
-            onToggle={() => setOpenRubros((v) => !v)}
+            onToggle={() =>
+              setOpenRubros((v) => {
+                const next = !v;
+                if (!next) setSpecialtyQuery('');
+                return next;
+              })
+            }
           >
-            {/* ✅ Lazy: si está cerrado, NO renderiza los chips */}
             {openRubros ? (
               <>
-                <View style={styles.chipsWrap}>
-                  {chipSource.map((opt) => {
-                    const on = specialties.includes(opt.slug);
-                    return (
-                      <Pressable
-                        key={opt.slug}
-                        onPress={() => toggleSpecialty(opt.slug)}
-                        style={[styles.chip, on ? styles.chipOn : styles.chipOff]}
-                      >
-                        <Text style={[styles.chipT, { color: on ? '#063A40' : '#9ec9cd' }]}>
-                          {opt.name}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                <Text style={styles.muted}>
+                  Escribí parte del servicio para encontrarlo más rápido.
+                </Text>
+
+                <TextInput
+                  value={specialtyQuery}
+                  onChangeText={setSpecialtyQuery}
+                  placeholder="Buscar rubro o servicio..."
+                  placeholderTextColor="#9ec9cd"
+                  style={styles.input}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="search"
+                />
+
+                {selectedChipSource.length > 0 ? (
+                  <>
+                    <Text style={styles.subTitle}>Seleccionados ({selectedChipSource.length})</Text>
+
+                    <View style={styles.chipsWrap}>
+                      {selectedChipSource.map((opt) => (
+                        <Pressable
+                          key={`selected-${opt.slug}`}
+                          onPress={() => toggleSpecialty(opt.slug)}
+                          style={[styles.chip, styles.chipOn]}
+                        >
+                          <Text style={[styles.chipT, { color: '#063A40' }]}>{opt.name}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </>
+                ) : null}
+
+                <Text style={styles.subTitle}>
+                  {normalizedSpecialtyQuery ? 'Resultados' : 'Todos los rubros'}
+                </Text>
+
+                {filteredChipSource.length === 0 ? (
+                  <Text style={styles.searchEmptyText}>No encontramos rubros con ese nombre.</Text>
+                ) : (
+                  <View style={styles.chipsWrap}>
+                    {filteredChipSource.map((opt) => {
+                      const on = specialties.includes(opt.slug);
+                      return (
+                        <Pressable
+                          key={opt.slug}
+                          onPress={() => toggleSpecialty(opt.slug)}
+                          style={[styles.chip, on ? styles.chipOn : styles.chipOff]}
+                        >
+                          <Text style={[styles.chipT, { color: on ? '#063A40' : '#9ec9cd' }]}>
+                            {opt.name}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                )}
 
                 <Pressable
                   onPress={saveSpecialties}
@@ -2713,6 +2829,37 @@ const styles = StyleSheet.create({
   name: { color: '#E9FEFF', fontWeight: '900', fontSize: 18, lineHeight: 22 },
   subTitle: { color: '#E9FEFF', fontWeight: '700', marginTop: 8, marginBottom: 6 },
   muted: { color: '#9ec9cd' },
+
+  searchEmptyText: {
+    color: '#9ec9cd',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 6,
+    fontWeight: '700',
+  },
+
+  savedInfoBox: {
+    marginTop: 8,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(233,254,255,0.14)',
+  },
+  savedInfoLabel: {
+    color: '#E9FEFF',
+    fontWeight: '800',
+    marginBottom: 4,
+    fontSize: 12,
+  },
+  savedInfoText: {
+    color: '#9ec9cd',
+    fontWeight: '700',
+    lineHeight: 18,
+  },
 
   stateRow: {
     flexDirection: 'row',

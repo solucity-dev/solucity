@@ -53,6 +53,15 @@ const qNum = (v: unknown): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
+const normalizeWhatsappPhone = (phone?: string | null): string | null => {
+  if (!phone) return null;
+
+  const digits = String(phone).replace(/\D+/g, '');
+  if (!digits) return null;
+
+  return digits;
+};
+
 // ✅ Normaliza categorySlug (compat / alias)
 function normalizeCategorySlug(raw: any): string | null {
   if (typeof raw !== 'string') return null;
@@ -102,6 +111,15 @@ const CLOSED_STATUSES: OrderStatus[] = [
   'CANCELLED_BY_SPECIALIST',
   // 'CANCELLED_AUTO',  // 👈 ocultar vencidas
   'CLOSED',
+];
+
+const WHATSAPP_ALLOWED_STATUSES: OrderStatus[] = [
+  'ASSIGNED',
+  'IN_PROGRESS',
+  'PAUSED',
+  'FINISHED_BY_SPECIALIST',
+  'IN_CLIENT_REVIEW',
+  'CONFIRMED_BY_CLIENT',
 ];
 
 // Fallback constante
@@ -1738,7 +1756,7 @@ orders.get('/:id', auth, async (req, res) => {
             businessName: true,
             centerLat: true,
             centerLng: true,
-            user: { select: { name: true, surname: true } },
+            user: { select: { name: true, surname: true, phone: true } },
 
             // ✅ NUEVO: traer dirección de oficina/local
             officeAddress: { select: { formatted: true, lat: true, lng: true } },
@@ -1747,7 +1765,7 @@ orders.get('/:id', auth, async (req, res) => {
 
         customer: {
           include: {
-            user: { select: { name: true } },
+            user: { select: { name: true, surname: true, phone: true } },
           },
         },
         location: true,
@@ -1765,6 +1783,53 @@ orders.get('/:id', auth, async (req, res) => {
     const isSpecialist = order.specialist?.userId === uid;
     if (!isCustomer && !isSpecialist) {
       return res.status(403).json({ ok: false, error: 'forbidden' });
+    }
+
+    const whatsappAllowed =
+      WHATSAPP_ALLOWED_STATUSES.includes(order.status as OrderStatus) && !!order.chatThread?.id;
+
+    let whatsappContact: {
+      available: boolean;
+      phone: string | null;
+      name: string | null;
+    } = {
+      available: false,
+      phone: null,
+      name: null,
+    };
+
+    if (whatsappAllowed) {
+      if (isCustomer) {
+        const specialistPhone = normalizeWhatsappPhone(order.specialist?.user?.phone ?? null);
+        const specialistName =
+          order.specialist?.businessName?.trim() ||
+          `${order.specialist?.user?.name ?? 'Especialista'} ${
+            order.specialist?.user?.surname ?? ''
+          }`.trim();
+
+        if (specialistPhone) {
+          whatsappContact = {
+            available: true,
+            phone: specialistPhone,
+            name: specialistName || 'Especialista',
+          };
+        }
+      }
+
+      if (isSpecialist) {
+        const customerPhone = normalizeWhatsappPhone(order.customer?.user?.phone ?? null);
+        const customerName = `${order.customer?.user?.name ?? 'Cliente'} ${
+          order.customer?.user?.surname ?? ''
+        }`.trim();
+
+        if (customerPhone) {
+          whatsappContact = {
+            available: true,
+            phone: customerPhone,
+            name: customerName || 'Cliente',
+          };
+        }
+      }
     }
 
     // 🔹 avatars de perfiles
@@ -2073,6 +2138,9 @@ orders.get('/:id', auth, async (req, res) => {
 
       // ✅ NUEVO: coords para abrir Maps correctamente
       jobLocation,
+
+      // ✅ NUEVO: contacto para botón de WhatsApp
+      whatsappContact,
     };
 
     t('before-response', { events: order.events?.length ?? 0, status: order.status });

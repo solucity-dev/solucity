@@ -67,6 +67,12 @@ type OrderDetail = {
   rating: { score: number; comment: string | null } | null;
   chatThreadId?: string | null;
 
+  whatsappContact?: {
+    available: boolean;
+    phone: string | null;
+    name: string | null;
+  } | null;
+
   serviceMode?: 'HOME' | 'OFFICE' | 'ONLINE';
 };
 
@@ -198,6 +204,23 @@ const openInMaps = async (q: string) => {
   } catch {}
 
   Alert.alert('No disponible', 'No se pudo abrir Maps en este dispositivo.');
+};
+
+const openWhatsapp = async (phone: string, message: string) => {
+  const normalizedPhone = String(phone ?? '').replace(/\D+/g, '');
+  if (!normalizedPhone) {
+    Alert.alert('WhatsApp no disponible', 'No hay un número válido para contactar.');
+    return;
+  }
+
+  const encodedMessage = encodeURIComponent(message);
+  const url = `https://wa.me/${normalizedPhone}?text=${encodedMessage}`;
+
+  try {
+    await Linking.openURL(url);
+  } catch {
+    Alert.alert('WhatsApp no disponible', 'No se pudo abrir WhatsApp en este dispositivo.');
+  }
 };
 
 /**
@@ -735,6 +758,12 @@ export default function OrderDetailScreen() {
   // ✅ Chat disponible si no está pendiente/cancelada y existe thread
   const canShowChat = !isPending && !isCancelled && !!data?.chatThreadId;
 
+  const canShowWhatsapp =
+    !isPending &&
+    !isCancelled &&
+    !!data?.whatsappContact?.available &&
+    !!data?.whatsappContact?.phone;
+
   const confirmAction = ({
     title,
     message,
@@ -920,6 +949,27 @@ export default function OrderDetailScreen() {
     }
 
     nav.navigate('ChatThread', params);
+  };
+
+  const handleOpenWhatsapp = async () => {
+    if (!data?.whatsappContact?.available || !data?.whatsappContact?.phone) {
+      Alert.alert(
+        'WhatsApp no disponible',
+        'El otro usuario no tiene un número de teléfono cargado.',
+      );
+      return;
+    }
+
+    const contactName =
+      data.whatsappContact.name?.trim() || (isSpecialist ? 'Cliente' : 'Especialista');
+    const serviceName =
+      data.service?.name?.trim() || data.service?.categoryName?.trim() || 'el trabajo';
+
+    const message = isSpecialist
+      ? `Hola ${contactName}, soy ${specialistDisplayName}. Te escribo por la orden confirmada de Solucity sobre ${serviceName}.`
+      : `Hola ${contactName}, soy ${customerDisplayName}. Te escribo por la orden confirmada de Solucity sobre ${serviceName}.`;
+
+    await openWhatsapp(data.whatsappContact.phone, message);
   };
 
   // ───────────────────── Estados UI (BOTONES) ─────────────────────
@@ -1330,6 +1380,17 @@ export default function OrderDetailScreen() {
                 <Text style={styles.ctaAltText}>Ir al chat</Text>
               </Pressable>
             )}
+
+            {/* ✅ WhatsApp: visible solo si backend habilita contacto */}
+            {canShowWhatsapp && (
+              <Pressable
+                style={[styles.ctaWhatsApp, primaryDisabled && styles.ctaDisabledAlt]}
+                onPress={handleOpenWhatsapp}
+                disabled={primaryDisabled}
+              >
+                <Text style={styles.ctaWhatsAppText}>Escribir por WhatsApp</Text>
+              </Pressable>
+            )}
           </View>
         </ScrollView>
 
@@ -1514,6 +1575,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ctaAltText: { color: '#E9FEFF', fontWeight: '800' },
+
+  ctaWhatsApp: {
+    backgroundColor: '#25D366',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  ctaWhatsAppText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+  },
 
   ctaDanger: {
     backgroundColor: '#FFE5E3',

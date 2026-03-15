@@ -292,6 +292,7 @@ export default function RegisterSpecialist() {
   const [groups, setGroups] = useState<CategoryGroup[]>([]);
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
   const [finalizing, setFinalizing] = useState(false);
+  const [serviceQuery, setServiceQuery] = useState('');
 
   // ✅ hint suave paso 3
   const [step3Hint, setStep3Hint] = useState<string | null>(null);
@@ -326,11 +327,53 @@ export default function RegisterSpecialist() {
     );
   }, [groups]);
 
+  const normalizedQuery = useMemo(() => normalizeText(serviceQuery), [serviceQuery]);
+
+  const filteredCategories = useMemo(() => {
+    const base = [...flatCategories];
+
+    const filtered = !normalizedQuery
+      ? base
+      : base.filter((c) => {
+          const name = normalizeText(c.name);
+          const slug = normalizeText(c.slug);
+          const group = normalizeText(c.group);
+
+          return (
+            name.includes(normalizedQuery) ||
+            slug.includes(normalizedQuery) ||
+            group.includes(normalizedQuery)
+          );
+        });
+
+    return filtered.sort((a, b) => {
+      const aSelected = selectedSlugs.includes(a.slug) ? 1 : 0;
+      const bSelected = selectedSlugs.includes(b.slug) ? 1 : 0;
+
+      if (aSelected !== bSelected) return bSelected - aSelected;
+
+      return a.name.localeCompare(b.name, 'es', { sensitivity: 'base' });
+    });
+  }, [flatCategories, normalizedQuery, selectedSlugs]);
+
+  const selectedCategories = useMemo(() => {
+    return flatCategories
+      .filter((c) => selectedSlugs.includes(c.slug))
+      .sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
+  }, [flatCategories, selectedSlugs]);
+
   const toggleSlug = (slug: string) => {
     setSelectedSlugs((prev) =>
       prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug],
     );
   };
+
+  const normalizeText = (text: string) =>
+    text
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
 
   /**
    * ✅ MÁS SEGURO:
@@ -623,21 +666,64 @@ export default function RegisterSpecialist() {
 
         {step === 3 && (
           <View style={s.card}>
-            <Text style={s.label}>Seleccioná tus rubros</Text>
+            <Text style={s.label}>Seleccioná los servicios que realizás</Text>
 
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {flatCategories.map((c) => {
-                const active = selectedSlugs.includes(c.slug);
-                return (
-                  <Pressable
-                    key={c.slug}
-                    onPress={() => toggleSlug(c.slug)}
-                    style={[s.chip, active && s.chipActive]}
-                  >
-                    <Text style={[s.chipT, active && s.chipTActive]}>{c.name}</Text>
-                  </Pressable>
-                );
-              })}
+            <Text style={s.helperText}>
+              Escribí parte del servicio para encontrarlo más rápido.
+            </Text>
+
+            <TextInput
+              style={s.input}
+              value={serviceQuery}
+              onChangeText={setServiceQuery}
+              placeholder="Buscar servicio..."
+              placeholderTextColor="#cfe"
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+
+            {selectedCategories.length > 0 && (
+              <View style={{ gap: 8 }}>
+                <Text style={s.subLabel}>Seleccionados ({selectedCategories.length})</Text>
+
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {selectedCategories.map((c) => (
+                    <Pressable
+                      key={`selected-${c.slug}`}
+                      onPress={() => toggleSlug(c.slug)}
+                      style={[s.chip, s.chipActive]}
+                    >
+                      <Text style={[s.chipT, s.chipTActive]}>{c.name}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            <View style={{ gap: 8 }}>
+              <Text style={s.subLabel}>
+                {normalizedQuery ? 'Resultados' : 'Todos los servicios'}
+              </Text>
+
+              {filteredCategories.length === 0 ? (
+                <Text style={s.emptyText}>No encontramos servicios con ese nombre.</Text>
+              ) : (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {filteredCategories.map((c) => {
+                    const active = selectedSlugs.includes(c.slug);
+                    return (
+                      <Pressable
+                        key={c.slug}
+                        onPress={() => toggleSlug(c.slug)}
+                        style={[s.chip, active && s.chipActive]}
+                      >
+                        <Text style={[s.chipT, active && s.chipTActive]}>{c.name}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
             </View>
 
             {/* ✅ Aviso simple: documentación se sube después desde Home */}
@@ -908,6 +994,25 @@ const s = StyleSheet.create({
     color: 'rgba(233,254,255,0.85)',
     fontWeight: '800',
     fontSize: 12,
+  },
+
+  helperText: {
+    color: 'rgba(233,254,255,0.85)',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  subLabel: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  emptyText: {
+    color: 'rgba(233,254,255,0.85)',
+    fontWeight: '700',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
   },
 
   // card base

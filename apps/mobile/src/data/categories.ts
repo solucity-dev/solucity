@@ -225,6 +225,11 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     { id: 'escribano', title: 'Escribano', icon: { set: 'mdi', name: 'file-sign' } },
     { id: 'arquitecto', title: 'Arquitecto', icon: { set: 'mdi', name: 'compass-outline' } },
     { id: 'ingeniero', title: 'Ingeniero', icon: { set: 'mdi', name: 'cog-outline' } },
+    {
+      id: 'pas-productor-asesor-de-seguros',
+      title: 'PAS - Productor asesor de seguros',
+      icon: { set: 'mdi', name: 'shield-check-outline' },
+    },
   ],
 
   estetica: [

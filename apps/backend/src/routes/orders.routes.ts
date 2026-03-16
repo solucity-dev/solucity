@@ -56,8 +56,30 @@ const qNum = (v: unknown): number | null => {
 const normalizeWhatsappPhone = (phone?: string | null): string | null => {
   if (!phone) return null;
 
-  const digits = String(phone).replace(/\D+/g, '');
+  let digits = String(phone).replace(/\D+/g, '');
   if (!digits) return null;
+
+  // Ya viene en formato WhatsApp correcto para AR
+  if (digits.startsWith('549')) return digits;
+
+  // Ya viene con código país AR
+  if (digits.startsWith('54')) {
+    // Si viene 54 + área + número, forzamos móvil con 9 si no está
+    if (!digits.startsWith('549')) {
+      digits = `549${digits.slice(2)}`;
+    }
+    return digits;
+  }
+
+  // Si viene con 0 inicial local, lo quitamos
+  if (digits.startsWith('0')) {
+    digits = digits.slice(1);
+  }
+
+  // Caso típico local argentino: 3584113451 → 5493584113451
+  if (digits.length >= 10 && digits.length <= 11) {
+    return `549${digits}`;
+  }
 
   return digits;
 };

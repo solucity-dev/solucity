@@ -327,7 +327,7 @@ export default function RegisterSpecialist() {
     );
   }, [groups]);
 
-  const normalizedQuery = useMemo(() => normalizeText(serviceQuery), [serviceQuery]);
+  const normalizedQuery = useMemo(() => normalizeText(serviceQuery ?? ''), [serviceQuery]);
 
   const filteredCategories = useMemo(() => {
     const base = [...flatCategories];
@@ -335,9 +335,9 @@ export default function RegisterSpecialist() {
     const filtered = !normalizedQuery
       ? base
       : base.filter((c) => {
-          const name = normalizeText(c.name);
-          const slug = normalizeText(c.slug);
-          const group = normalizeText(c.group);
+          const name = normalizeText(c.name ?? '');
+          const slug = normalizeText(c.slug ?? '');
+          const group = normalizeText(c.group ?? '');
 
           return (
             name.includes(normalizedQuery) ||
@@ -368,12 +368,13 @@ export default function RegisterSpecialist() {
     );
   };
 
-  const normalizeText = (text: string) =>
-    text
+  function normalizeText(text: string = '') {
+    return String(text)
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase()
       .trim();
+  }
 
   /**
    * ✅ MÁS SEGURO:

@@ -67,6 +67,35 @@ const transportOptions: SMTPTransport.Options | StreamTransport.Options = hasSmt
 
 const transporter: Transporter = nodemailer.createTransport(transportOptions);
 
+function buildProviderError(error: any) {
+  const err: any = new Error(error?.message || 'email_send_failed');
+  err.status = error?.statusCode ?? error?.status ?? 500;
+  err.statusCode = error?.statusCode ?? error?.status ?? 500;
+  err.name = error?.name || 'email_send_failed';
+  err.provider = 'resend';
+  err.raw = error;
+  return err;
+}
+
+async function sendViaSmtp(to: string, subject: string, html: string) {
+  const info = await transporter.sendMail({
+    from: FROM,
+    to,
+    subject,
+    html,
+  });
+
+  if (!hasSmtpCreds) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('📨 [FAKE SMTP] Email simulado ->', { to, subject });
+    }
+  } else {
+    console.log('📨 Email enviado (SMTP):', info.messageId);
+  }
+
+  return { messageId: info.messageId, provider: hasSmtpCreds ? 'smtp' : 'fake-smtp' };
+}
+
 export async function sendOtpEmail(to: string, code: string) {
   const subject = 'Tu código de verificación';
   const html = `
@@ -78,42 +107,55 @@ export async function sendOtpEmail(to: string, code: string) {
     </div>
   `;
 
-  // 👉 PRIORIDAD: RESEND
+  // 1) Intentar con Resend si está configurado
   if (resend) {
-    const { data, error } = await resend.emails.send({
-      from: FROM,
-      to,
-      subject,
-      html,
-    });
+    try {
+      const { data, error } = await resend.emails.send({
+        from: FROM,
+        to,
+        subject,
+        html,
+      });
 
-    if (error) {
-      console.error('[RESEND ERROR]', error);
-      throw new Error('email_send_failed');
+      if (error) {
+        console.error('[RESEND ERROR]', error);
+
+        // Si hay SMTP real configurado, intentamos fallback
+        if (hasSmtpCreds) {
+          console.warn('[MAILER] Resend falló, intentando fallback SMTP...');
+          return await sendViaSmtp(to, subject, html);
+        }
+
+        throw buildProviderError(error);
+      }
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('📨 Email enviado (Resend):', data?.id);
+      }
+
+      return { messageId: data?.id, provider: 'resend' };
+    } catch (err: any) {
+      console.error('[RESEND THROW]', err);
+
+      // Fallback real a SMTP si existe
+      if (hasSmtpCreds) {
+        console.warn('[MAILER] Excepción en Resend, intentando fallback SMTP...');
+        return await sendViaSmtp(to, subject, html);
+      }
+
+      // Preservar forma del error para que register.service.ts pueda mapearlo bien
+      if (err?.provider === 'resend' || err?.status || err?.statusCode || err?.name) {
+        throw err;
+      }
+
+      const unknown: any = new Error(err?.message || 'email_send_failed');
+      unknown.status = 503;
+      unknown.statusCode = 503;
+      unknown.name = err?.name || 'email_delivery_unavailable';
+      throw unknown;
     }
-
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('📨 Email enviado (Resend):', data?.id);
-    }
-
-    return { messageId: data?.id };
   }
 
-  // 👉 FALLBACK: SMTP real o fake
-  const info = await transporter.sendMail({
-    from: FROM,
-    to,
-    subject,
-    html,
-  });
-
-  if (!hasSmtpCreds) {
-    if (!hasSmtpCreds && process.env.NODE_ENV !== 'production') {
-      console.log('📨 [FAKE SMTP] Email simulado ->', { to, subject });
-    }
-  } else {
-    console.log('📨 Email enviado (SMTP):', info.messageId);
-  }
-
-  return { messageId: info.messageId };
+  // 2) Si no hay Resend, usar SMTP real o fake
+  return await sendViaSmtp(to, subject, html);
 }

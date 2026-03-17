@@ -14,6 +14,19 @@ import { prisma } from '../lib/prisma';
 const OTP_MINUTES = 10;
 const OTP_MAX_ATTEMPTS = 5;
 
+/**
+ * Rate limit simple por email (sin Redis):
+ * - Máx 3 códigos/solicitudes en 10 minutos por email
+ */
+const OTP_RATE_WINDOW_MINUTES = 10;
+const OTP_RATE_MAX_PER_WINDOW = 3;
+
+/**
+ * Cooldown corto para evitar reenvíos impulsivos
+ * y consumo innecesario de cuota del proveedor.
+ */
+const OTP_RESEND_COOLDOWN_SECONDS = 60;
+
 function otpTraceEnabled(email: string) {
   // Activación general por env var
   if (process.env.DEBUG_OTP_FLOW === 'true') return true;
@@ -26,13 +39,6 @@ function emailHash(email: string) {
   return crypto.createHash('sha256').update(email).digest('hex').slice(0, 10);
 }
 
-/**
- * Rate limit simple por email (sin Redis):
- * - Máx 3 códigos en 10 minutos por email
- */
-const OTP_RATE_WINDOW_MINUTES = 10;
-const OTP_RATE_MAX_PER_WINDOW = 3;
-
 function httpError(message: string, status = 400) {
   const err: any = new Error(message);
   err.status = status;
@@ -44,55 +50,194 @@ export async function startEmailRegistration(email: string) {
 
   const trace = otpTraceEnabled(normalized);
   const ehash = emailHash(normalized);
+
   if (trace) console.log(`[OTP/start] e=${ehash} begin`);
 
   // 1) No permitir si ya existe usuario
-  const exists = await prisma.user.findUnique({ where: { email: normalized } });
+  const exists = await prisma.user.findUnique({
+    where: { email: normalized },
+  });
+
   if (exists) throw httpError('email_in_use', 409);
 
-  // 2) Limpieza de OTP expirados de ese email (higiene)
+  const now = new Date();
+
+  // 2) Limpieza de OTP expirados de ese email
   await prisma.emailOtp.deleteMany({
-    where: { email: normalized, expiresAt: { lt: new Date() } },
+    where: {
+      email: normalized,
+      expiresAt: { lt: now },
+    },
   });
 
-  // 3) Rate limit por email (cuántos OTP emití en los últimos X minutos)
-  const since = addMinutes(new Date(), -OTP_RATE_WINDOW_MINUTES);
-  const sentCount = await prisma.emailOtp.count({
-    where: { email: normalized, createdAt: { gte: since } },
+  // 3) Rate limit por ventana de tiempo
+  //    Sigue siendo simple y compatible con el esquema actual.
+  const since = addMinutes(now, -OTP_RATE_WINDOW_MINUTES);
+  const recentCount = await prisma.emailOtp.count({
+    where: {
+      email: normalized,
+      createdAt: { gte: since },
+    },
   });
-  if (sentCount >= OTP_RATE_MAX_PER_WINDOW) {
+
+  if (recentCount >= OTP_RATE_MAX_PER_WINDOW) {
+    if (trace) {
+      console.log(`[OTP/start] e=${ehash} fail=too_many_requests recentCount=${recentCount}`);
+    }
     throw httpError('too_many_requests', 429);
   }
 
-  if (trace) console.log(`[OTP/start] e=${ehash} sentCount=${sentCount}`);
+  if (trace) console.log(`[OTP/start] e=${ehash} recentCount=${recentCount}`);
 
-  // 4) Invalidar OTPs previos no usados (evita múltiples OTP válidos a la vez)
-  const invalidated = await prisma.emailOtp.updateMany({
-    where: { email: normalized, usedAt: null },
-    data: { usedAt: new Date() },
+  // 4) Buscar OTP activo, no usado y no expirado
+  const activeOtp = await prisma.emailOtp.findFirst({
+    where: {
+      email: normalized,
+      usedAt: null,
+      expiresAt: { gt: now },
+    },
+    orderBy: { createdAt: 'desc' },
   });
-  if (trace) console.log(`[OTP/start] e=${ehash} invalidated=${invalidated.count}`);
 
-  // 5) Generar y guardar OTP
-  const code = generateOtp();
-  const expiresAt = addMinutes(new Date(), OTP_MINUTES);
+  // 5) Cooldown corto: si ya existe OTP activo y fue creado hace menos de X segundos,
+  //    bloqueamos el reenvío para no quemar cuota innecesariamente.
+  if (activeOtp) {
+    const secondsSinceCreation = Math.floor((now.getTime() - activeOtp.createdAt.getTime()) / 1000);
 
-  const created = await prisma.emailOtp.create({
-    data: { email: normalized, code, expiresAt },
-  });
-  if (trace)
-    console.log(`[OTP/start] e=${ehash} createdId=${created.id} exp=${expiresAt.toISOString()}`);
-
-  // 6) Enviar email (SMTP real si hay credenciales, fake si no)
-  await sendOtpEmail(normalized, code);
-
-  // 7) Log controlado (Render)
-  const debugOtp = process.env.DEBUG_OTP === 'true';
-  if (debugOtp || process.env.NODE_ENV !== 'production') {
-    console.log(`🔐 [OTP] ${normalized} -> ${code} (expira ${expiresAt.toISOString()})`);
+    if (secondsSinceCreation < OTP_RESEND_COOLDOWN_SECONDS) {
+      if (trace) {
+        console.log(
+          `[OTP/start] e=${ehash} fail=too_many_requests cooldown_remaining=${
+            OTP_RESEND_COOLDOWN_SECONDS - secondsSinceCreation
+          }s`,
+        );
+      }
+      throw httpError('too_many_requests', 429);
+    }
   }
 
-  return { otpId: 'ok', expiresAt };
+  let otpToUse: {
+    id?: string;
+    email: string;
+    code: string;
+    expiresAt: Date;
+    createdAt: Date;
+    usedAt: Date | null;
+    attempts: number;
+  } | null = null;
+
+  let shouldCreateOtpInDb = false;
+
+  // 6) Reutilizar OTP vigente si existe; si no, preparar uno nuevo.
+  if (activeOtp) {
+    otpToUse = {
+      id: activeOtp.id,
+      email: activeOtp.email,
+      code: activeOtp.code,
+      expiresAt: activeOtp.expiresAt,
+      createdAt: activeOtp.createdAt,
+      usedAt: activeOtp.usedAt,
+      attempts: activeOtp.attempts,
+    };
+
+    if (trace) {
+      console.log(
+        `[OTP/start] e=${ehash} reusing_otp id=${activeOtp.id} exp=${activeOtp.expiresAt.toISOString()}`,
+      );
+    }
+  } else {
+    const code = generateOtp();
+    const expiresAt = addMinutes(now, OTP_MINUTES);
+
+    otpToUse = {
+      email: normalized,
+      code,
+      expiresAt,
+      createdAt: now,
+      usedAt: null,
+      attempts: 0,
+    };
+
+    shouldCreateOtpInDb = true;
+
+    if (trace) {
+      console.log(`[OTP/start] e=${ehash} prepared_new_otp exp=${expiresAt.toISOString()}`);
+    }
+  }
+
+  // 7) Intentar enviar el mail ANTES de persistir cambios destructivos.
+  //    Así evitamos crear OTP basura o invalidar OTP útil si el proveedor falla.
+  try {
+    await sendOtpEmail(normalized, otpToUse.code);
+  } catch (err: any) {
+    const resendStatus = err?.status ?? err?.statusCode;
+    const resendName = err?.name ?? '';
+    const resendMessage = err?.message ?? '';
+
+    if (trace) {
+      console.log(
+        `[OTP/start] e=${ehash} send_failed status=${String(
+          resendStatus ?? 'unknown',
+        )} name=${String(resendName || 'unknown')} message=${String(resendMessage || 'unknown')}`,
+      );
+    }
+
+    // Mapeo semántico para que la ruta pueda responder mejor al frontend.
+    if (
+      resendStatus === 429 &&
+      (resendName === 'daily_quota_exceeded' || resendMessage.includes('daily email sending quota'))
+    ) {
+      throw httpError('email_provider_quota_exceeded', 429);
+    }
+
+    if (
+      resendStatus === 429 &&
+      (resendName === 'rate_limit_exceeded' || resendMessage.toLowerCase().includes('rate limit'))
+    ) {
+      throw httpError('email_provider_rate_limited', 429);
+    }
+
+    throw httpError('email_delivery_unavailable', 503);
+  }
+
+  // 8) Persistir SOLO si el envío fue exitoso.
+  if (shouldCreateOtpInDb) {
+    const created = await prisma.emailOtp.create({
+      data: {
+        email: normalized,
+        code: otpToUse.code,
+        expiresAt: otpToUse.expiresAt,
+      },
+    });
+
+    otpToUse = {
+      id: created.id,
+      email: created.email,
+      code: created.code,
+      expiresAt: created.expiresAt,
+      createdAt: created.createdAt,
+      usedAt: created.usedAt,
+      attempts: created.attempts,
+    };
+
+    if (trace) {
+      console.log(
+        `[OTP/start] e=${ehash} createdId=${created.id} exp=${created.expiresAt.toISOString()}`,
+      );
+    }
+  } else if (trace) {
+    console.log(`[OTP/start] e=${ehash} reused_existing_otp send_ok`);
+  }
+
+  // 9) Log controlado
+  const debugOtp = process.env.DEBUG_OTP === 'true';
+  if (debugOtp || process.env.NODE_ENV !== 'production') {
+    console.log(
+      `🔐 [OTP] ${normalized} -> ${otpToUse.code} (expira ${otpToUse.expiresAt.toISOString()})`,
+    );
+  }
+
+  return { otpId: 'ok', expiresAt: otpToUse.expiresAt };
 }
 
 type VerifyArgs = {
@@ -106,12 +251,13 @@ type VerifyArgs = {
 };
 
 export async function verifyEmailRegistration(args: VerifyArgs) {
-  // ✅ Normalización consistente (IMPORTANTE)
+  // ✅ Normalización consistente
   const email = args.email.trim().toLowerCase();
   const code = args.code.trim();
 
   const trace = otpTraceEnabled(email);
   const ehash = emailHash(email);
+
   if (trace) console.log(`[OTP/verify] e=${ehash} begin codeLen=${code.length}`);
 
   const name = args.name.trim();
@@ -126,7 +272,11 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
 
   if (trace) {
     console.log(
-      `[OTP/verify] e=${ehash} pick id=${otp?.id ?? 'null'} created=${otp?.createdAt?.toISOString() ?? 'null'} usedAt=${otp?.usedAt?.toISOString() ?? 'null'} exp=${otp?.expiresAt?.toISOString() ?? 'null'} attempts=${otp?.attempts ?? 'null'}`,
+      `[OTP/verify] e=${ehash} pick id=${otp?.id ?? 'null'} created=${
+        otp?.createdAt?.toISOString() ?? 'null'
+      } usedAt=${otp?.usedAt?.toISOString() ?? 'null'} exp=${
+        otp?.expiresAt?.toISOString() ?? 'null'
+      } attempts=${otp?.attempts ?? 'null'}`,
     );
   }
 
@@ -134,14 +284,17 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
     if (trace) console.log(`[OTP/verify] e=${ehash} fail=otp_not_found`);
     throw httpError('otp_not_found', 400);
   }
+
   if (otp.usedAt) {
     if (trace) console.log(`[OTP/verify] e=${ehash} fail=otp_already_used`);
     throw httpError('otp_already_used', 400);
   }
+
   if (otp.attempts >= OTP_MAX_ATTEMPTS) {
     if (trace) console.log(`[OTP/verify] e=${ehash} fail=otp_blocked`);
     throw httpError('otp_blocked', 429);
   }
+
   if (isAfter(new Date(), otp.expiresAt)) {
     if (trace) console.log(`[OTP/verify] e=${ehash} fail=otp_expired`);
     throw httpError('otp_expired', 400);
@@ -163,7 +316,6 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
     throw httpError('otp_invalid', 400);
   }
 
-  // ✅ acá recién: otp match
   if (trace) console.log(`[OTP/verify] e=${ehash} otp_match id=${otp.id}`);
 
   const pwd = String(args.password ?? '');
@@ -189,7 +341,9 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
   try {
     if (trace) {
       console.log(
-        `[OTP/verify] e=${ehash} creating_user role=${args.role} phone=${phone ? 'yes' : 'no'} surname=${surname ? 'yes' : 'no'}`,
+        `[OTP/verify] e=${ehash} creating_user role=${args.role} phone=${
+          phone ? 'yes' : 'no'
+        } surname=${surname ? 'yes' : 'no'}`,
       );
     }
 
@@ -208,10 +362,17 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
             ? { specialist: { create: {} } }
             : { customer: { create: {} } }),
         },
-        select: { id: true, email: true, role: true, name: true, surname: true, phone: true },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          name: true,
+          surname: true,
+          phone: true,
+        },
       });
 
-      // ✅ ahora sí: consumimos OTP SOLO si user se creó OK
+      // Consumimos OTP solo si el user se creó correctamente
       await tx.emailOtp.update({
         where: { id: otp.id },
         data: { usedAt: now },
@@ -238,6 +399,7 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
         createdAt: new Date().toISOString(),
       },
     });
+
     return user;
   } catch (e: any) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {

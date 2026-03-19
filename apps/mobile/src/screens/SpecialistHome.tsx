@@ -1437,8 +1437,6 @@ export default function SpecialistHome() {
         const formatted = `${street}, ${loc}, Córdoba, Argentina`;
         payload.officeAddress = formatted;
         setSavedOfficeAddress(formatted);
-
-        payload.officeAddress = formatted; // legacy-safe si el backend espera string
       } else {
         // ✅ Si NO incluye OFFICE, limpiamos officeAddress (para no dejar basura)
         payload.officeAddress = null;

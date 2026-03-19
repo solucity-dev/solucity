@@ -1205,7 +1205,7 @@ async function geocodeOfficeAddressWithFallback(params: {
   const inferredLocality = (locality ?? String(parts[1] ?? '').trim()) || null;
 
   const buildCandidate = (base: string) => {
-    let candidate = normalizeOfficeAddressText(base);
+    let candidate = String(base ?? '').trim();
 
     const low = candidate.toLowerCase();
 
@@ -1223,38 +1223,40 @@ async function geocodeOfficeAddressWithFallback(params: {
     return candidate;
   };
 
-  const candidatePrimary = buildCandidate(originalFormatted);
+  const normalizedOriginal = normalizeOfficeAddressText(originalFormatted);
 
-  const candidateSecondary =
-    candidatePrimary !== originalFormatted ? buildCandidate(candidatePrimary) : null;
+  const candidates = Array.from(
+    new Set(
+      [
+        originalFormatted,
+        buildCandidate(originalFormatted),
+        normalizedOriginal,
+        buildCandidate(normalizedOriginal),
+      ]
+        .map((x) => String(x ?? '').trim())
+        .filter(Boolean),
+    ),
+  );
 
   let geo: any = null;
-  let usedFormatted = candidatePrimary;
+  let usedFormatted = candidates[0] ?? originalFormatted;
 
-  try {
-    geo = await geocodeAddress(candidatePrimary);
-  } catch {
-    geo = null;
-  }
-
-  if (
-    (geo?.lat == null || geo?.lng == null || Number.isNaN(geo?.lat) || Number.isNaN(geo?.lng)) &&
-    candidateSecondary &&
-    candidateSecondary !== candidatePrimary
-  ) {
+  for (const candidate of candidates) {
     try {
-      const geo2 = await geocodeAddress(candidateSecondary);
+      const result = await geocodeAddress(candidate);
+
       if (
-        geo2?.lat != null &&
-        geo2?.lng != null &&
-        !Number.isNaN(geo2.lat) &&
-        !Number.isNaN(geo2.lng)
+        result?.lat != null &&
+        result?.lng != null &&
+        !Number.isNaN(result.lat) &&
+        !Number.isNaN(result.lng)
       ) {
-        geo = geo2;
-        usedFormatted = candidateSecondary;
+        geo = result;
+        usedFormatted = candidate;
+        break;
       }
     } catch {
-      // noop
+      // seguimos con el siguiente candidate
     }
   }
 
@@ -1343,6 +1345,15 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
         // ✅ NUEVO:
         serviceModes: true,
         officeAddressId: true,
+        officeAddress: {
+          select: {
+            id: true,
+            formatted: true,
+            lat: true,
+            lng: true,
+            placeId: true,
+          },
+        },
 
         user: { select: { name: true, surname: true } },
         specialties: { select: { category: { select: { slug: true } } } },
@@ -1442,6 +1453,15 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
             ? (profile.serviceModes as any)
             : ['HOME'],
         officeAddressId: profile.officeAddressId ?? null,
+        officeAddress: profile.officeAddress
+          ? {
+              id: profile.officeAddress.id,
+              formatted: profile.officeAddress.formatted,
+              lat: profile.officeAddress.lat,
+              lng: profile.officeAddress.lng,
+              placeId: profile.officeAddress.placeId ?? null,
+            }
+          : null,
 
         availability: avail ?? ({ days: [1, 2, 3, 4, 5], start: '09:00', end: '18:00' } as any),
         ratingAvg,

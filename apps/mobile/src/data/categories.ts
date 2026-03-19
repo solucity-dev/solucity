@@ -38,6 +38,11 @@ export const ROOT_CATEGORIES: { id: RootCategoryId; title: string; icon: IconSpe
     icon: { set: 'mdi', name: 'face-woman-shimmer' }, // alternativa: 'content-cut' o 'spa'
   },
   {
+    id: 'transporte',
+    title: 'Transporte',
+    icon: { set: 'mdi', name: 'car-multiple' },
+  },
+  {
     id: 'alquiler',
     title: 'Alquiler',
     icon: { set: 'mdi', name: 'warehouse' },
@@ -86,6 +91,7 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     { id: 'aberturas', title: 'Aberturas', icon: { set: 'mdi', name: 'door' } },
     { id: 'impermeabilizacion', title: 'Impermeabilización', icon: { set: 'mdi', name: 'water' } },
     { id: 'zingueria', title: 'Zinguería', icon: { set: 'mdi', name: 'home-roof' } },
+    { id: 'tapizado', title: 'Tapizado', icon: { set: 'mdi', name: 'sofa-single' } },
   ],
 
   'informatica-electronica': [
@@ -151,7 +157,6 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     },
     { id: 'fotografia-y-video', title: 'Fotografía y video', icon: { set: 'mdi', name: 'camera' } },
 
-    { id: 'fletes', title: 'Fletes', icon: { set: 'mdi', name: 'truck-fast-outline' } },
     {
       id: 'diseno-de-interiores',
       title: 'Diseño de interiores',
@@ -199,6 +204,11 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
       id: 'kinesiologia',
       title: 'Kinesiología',
       icon: { set: 'mdi', name: 'arm-flex-outline' },
+    },
+    {
+      id: 'cuidador-de-pacientes',
+      title: 'Cuidador de pacientes',
+      icon: { set: 'mdi', name: 'account-heart-outline' },
     },
   ],
 
@@ -253,6 +263,29 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
       id: 'cejas-y-pestanas',
       title: 'Cejas y pestañas',
       icon: { set: 'mdi', name: 'eye-outline' },
+    },
+  ],
+
+  transporte: [
+    {
+      id: 'traslado-de-pasajeros',
+      title: 'Traslado de pasajeros',
+      icon: { set: 'mdi', name: 'car-seat' },
+    },
+    {
+      id: 'chofer-particular',
+      title: 'Chofer particular',
+      icon: { set: 'mdi', name: 'steering' },
+    },
+    {
+      id: 'fletes',
+      title: 'Fletes',
+      icon: { set: 'mdi', name: 'truck-fast-outline' },
+    },
+    {
+      id: 'auxilio-vehicular',
+      title: 'Auxilio vehicular',
+      icon: { set: 'mdi', name: 'car-wrench' },
     },
   ],
 

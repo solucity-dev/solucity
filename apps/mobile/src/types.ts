@@ -10,6 +10,7 @@ export type RootCategoryId =
   | 'gastronomia'
   | 'profesionales'
   | 'estetica'
+  | 'transporte'
   | 'alquiler';
 /**
  * Slugs de rubros (categorías hijas).
@@ -69,6 +70,7 @@ export type CategorySlug =
   | 'nutricionista'
   | 'psicopedagoga'
   | 'kinesiologia'
+  | 'cuidador-de-pacientes'
   // ── Gastronomía ───────────────────────────────────────────
   | 'camarero-mozo'
   | 'cocinero'
@@ -93,6 +95,10 @@ export type CategorySlug =
   | 'masajes'
   | 'spa-estetica-corporal'
   | 'cejas-y-pestanas'
+  // ── Transporte ──────────────────────────────────────────────
+  | 'traslado-de-pasajeros'
+  | 'chofer-particular'
+  | 'auxilio-vehicular'
   // ── Alquiler ──────────────────────────────────────────────
   | 'alquiler-de-herramientas'
   | 'alquiler-de-maquinaria-liviana'

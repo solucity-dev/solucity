@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -32,6 +33,15 @@ type Review = {
   comment: string | null;
   author: string;
   avatarUrl: string | null;
+  createdAt: string;
+};
+
+type PortfolioItem = {
+  id: string;
+  imageUrl: string;
+  thumbUrl?: string | null;
+  caption?: string | null;
+  sortOrder: number;
   createdAt: string;
 };
 
@@ -70,6 +80,11 @@ export default function SpecialistProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [spec, setSpec] = useState<SpecialistDetails | null>(null);
+
+  const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
+  const [portfolioLoading, setPortfolioLoading] = useState(false);
+  const [portfolioPreviewOpen, setPortfolioPreviewOpen] = useState(false);
+  const [portfolioPreviewUri, setPortfolioPreviewUri] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -156,6 +171,36 @@ export default function SpecialistProfileScreen() {
     };
   }, [params]);
 
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        setPortfolioLoading(true);
+
+        const res = await api.get(`/specialists/${params.id}/portfolio`, {
+          headers: { 'Cache-Control': 'no-cache' },
+        });
+
+        const items = Array.isArray(res.data?.items) ? res.data.items : [];
+
+        if (!alive) return;
+        setPortfolio(items);
+      } catch (e) {
+        if (!alive) return;
+        if (__DEV__) console.log('[SpecialistProfile] portfolio error', e);
+        setPortfolio([]);
+      } finally {
+        if (!alive) return;
+        setPortfolioLoading(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [params.id]);
+
   // ✅ unificamos: usar resolveUploadUrl como en la lista
   const resolvedAvatarUrl = useMemo(
     () => resolveUploadUrl(spec?.avatarUrl ?? null),
@@ -166,6 +211,8 @@ export default function SpecialistProfileScreen() {
     if (resolvedAvatarUrl) return { uri: resolvedAvatarUrl };
     return require('../assets/avatar-placeholder.png');
   }, [resolvedAvatarUrl]);
+
+  const visiblePortfolio = useMemo(() => portfolio.slice(0, 3), [portfolio]);
 
   // ✅ LOG general (evita TS2448 porque corre después de crear avatarSource)
   useEffect(() => {
@@ -356,6 +403,62 @@ export default function SpecialistProfileScreen() {
                 </View>
               )}
 
+              {/* Trabajos realizados */}
+              <View style={styles.sectionCard}>
+                <View style={styles.sectionHeader}>
+                  <MDI name="image-multiple-outline" size={18} color="#E9FEFF" />
+                  <Text style={styles.sectionTitle}>Trabajos realizados</Text>
+                </View>
+
+                {portfolioLoading ? (
+                  <View style={{ paddingVertical: 10, alignItems: 'center' }}>
+                    <ActivityIndicator color="#E9FEFF" />
+                    <Text style={[styles.sectionBody, { marginTop: 8 }]}>Cargando imágenes…</Text>
+                  </View>
+                ) : portfolio.length === 0 ? (
+                  <Text style={styles.sectionBody}>
+                    Este especialista todavía no cargó imágenes de trabajos realizados.
+                  </Text>
+                ) : (
+                  <>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={{ gap: 10, paddingTop: 6 }}
+                    >
+                      {visiblePortfolio.map((item) => {
+                        const uri =
+                          resolveUploadUrl(item.thumbUrl || item.imageUrl) || item.imageUrl;
+
+                        return (
+                          <Pressable
+                            key={item.id}
+                            onPress={() => {
+                              const full = resolveUploadUrl(item.imageUrl) || item.imageUrl;
+                              setPortfolioPreviewUri(full);
+                              setPortfolioPreviewOpen(true);
+                            }}
+                            style={styles.portfolioThumbWrap}
+                          >
+                            <Image
+                              source={{ uri }}
+                              style={styles.portfolioThumb}
+                              resizeMode="cover"
+                            />
+                          </Pressable>
+                        );
+                      })}
+                    </ScrollView>
+
+                    {portfolio.length > 3 ? (
+                      <Text style={[styles.sectionBody, { marginTop: 10 }]}>
+                        +{portfolio.length - 3} imagen{portfolio.length - 3 === 1 ? '' : 'es'} más
+                      </Text>
+                    ) : null}
+                  </>
+                )}
+              </View>
+
               {/* Contrataciones */}
               <View style={styles.sectionCard}>
                 <View style={styles.sectionHeader}>
@@ -446,6 +549,31 @@ export default function SpecialistProfileScreen() {
           </View>
         )}
       </SafeAreaView>
+
+      <Modal
+        transparent
+        visible={portfolioPreviewOpen}
+        animationType="fade"
+        onRequestClose={() => setPortfolioPreviewOpen(false)}
+      >
+        <View style={styles.previewOverlay}>
+          <View style={styles.previewModalCard}>
+            {portfolioPreviewUri ? (
+              <Image source={{ uri: portfolioPreviewUri }} style={styles.previewModalImg} />
+            ) : null}
+
+            <Pressable
+              style={styles.previewCloseBtn}
+              onPress={() => {
+                setPortfolioPreviewOpen(false);
+                setPortfolioPreviewUri(null);
+              }}
+            >
+              <Text style={styles.previewCloseBtnText}>Cerrar</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -627,5 +755,48 @@ const styles = StyleSheet.create({
     color: '#0A5B63',
     fontWeight: '900',
     fontSize: 16,
+  },
+  portfolioThumbWrap: {
+    width: 120,
+    height: 120,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(233,254,255,0.18)',
+  },
+  portfolioThumb: {
+    width: '100%',
+    height: '100%',
+  },
+
+  previewOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  previewModalCard: {
+    backgroundColor: '#E9FEFF',
+    borderRadius: 18,
+    padding: 14,
+  },
+  previewModalImg: {
+    width: '100%',
+    height: 360,
+    borderRadius: 14,
+    backgroundColor: '#d9e6e7',
+  },
+  previewCloseBtn: {
+    marginTop: 12,
+    backgroundColor: '#0A5B63',
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewCloseBtnText: {
+    color: '#E9FEFF',
+    fontWeight: '900',
   },
 });

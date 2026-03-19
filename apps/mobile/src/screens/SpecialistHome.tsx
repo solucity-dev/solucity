@@ -85,6 +85,15 @@ type ReviewItem = {
   customerName: string;
 };
 
+type PortfolioItem = {
+  id: string;
+  imageUrl: string;
+  thumbUrl?: string | null;
+  caption?: string | null;
+  sortOrder: number;
+  createdAt: string;
+};
+
 function absoluteUrl(u?: string | null): string | undefined {
   if (!u) return undefined;
   if (/^https?:\/\//i.test(u)) return u;
@@ -303,7 +312,8 @@ export default function SpecialistHome() {
     | 'specialties'
     | 'location'
     | 'avatar'
-    | 'serviceModes';
+    | 'serviceModes'
+    | 'portfolio';
 
   const [savingBy, setSavingBy] = useState<Record<SaveKey, boolean>>({
     bio: false,
@@ -315,6 +325,7 @@ export default function SpecialistHome() {
     location: false,
     avatar: false,
     serviceModes: false,
+    portfolio: false,
   });
 
   const setSavingKey = useCallback((k: SaveKey, v: boolean) => {
@@ -370,6 +381,14 @@ export default function SpecialistHome() {
   const certsLoadedOnceRef = useRef(false);
   const [certsLoading, setCertsLoading] = useState(false);
   const [openServiceModes, setOpenServiceModes] = useState(false);
+
+  // portfolio / trabajos realizados
+  const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
+  const [portfolioLoading, setPortfolioLoading] = useState(false);
+  const [portfolioModalOpen, setPortfolioModalOpen] = useState(false);
+  const [portfolioPreviewOpen, setPortfolioPreviewOpen] = useState(false);
+  const [portfolioPreviewUri, setPortfolioPreviewUri] = useState<string | null>(null);
+  const portfolioLoadedOnceRef = useRef(false);
 
   // catálogo rubros
   type CategoryOption = {
@@ -554,6 +573,26 @@ export default function SpecialistHome() {
     }
   }, []);
 
+  const loadPortfolioOnce = useCallback(async () => {
+    if (portfolioLoadedOnceRef.current) return;
+
+    try {
+      portfolioLoadedOnceRef.current = true;
+      setPortfolioLoading(true);
+
+      const { data } = await api.get('/specialists/me/portfolio', {
+        headers: { 'Cache-Control': 'no-cache' },
+      });
+
+      setPortfolio(Array.isArray(data?.items) ? data.items : []);
+    } catch (e) {
+      portfolioLoadedOnceRef.current = false;
+      if (__DEV__) console.log('[SpecialistHome] loadPortfolioOnce error', e);
+    } finally {
+      setPortfolioLoading(false);
+    }
+  }, []);
+
   function normalizeSpecialties(input: any): string[] {
     if (!input) return [];
     if (!Array.isArray(input)) return [];
@@ -598,6 +637,10 @@ export default function SpecialistHome() {
 
   function catNameBySlug(slug: string) {
     return categoryOptions.find((c) => c.slug === slug)?.name ?? slug;
+  }
+
+  function portfolioImageSource(item: PortfolioItem) {
+    return absoluteUrl(item.thumbUrl || item.imageUrl);
   }
 
   // Ubicación: pedir permisos, obtener coords y guardarlas (no bloqueante)
@@ -809,6 +852,21 @@ export default function SpecialistHome() {
     [logout],
   );
 
+  const refreshPortfolio = useCallback(async () => {
+    try {
+      setPortfolioLoading(true);
+      const { data } = await api.get('/specialists/me/portfolio', {
+        headers: { 'Cache-Control': 'no-cache' },
+      });
+      setPortfolio(Array.isArray(data?.items) ? data.items : []);
+      portfolioLoadedOnceRef.current = true;
+    } catch (e) {
+      if (__DEV__) console.log('[SpecialistHome] refreshPortfolio error', e);
+    } finally {
+      setPortfolioLoading(false);
+    }
+  }, []);
+
   // ✅ Reseñas en background post-interactions
   const loadReviews = useCallback(async () => {
     if (!token) return;
@@ -853,6 +911,7 @@ export default function SpecialistHome() {
 
     loadCategories();
     reloadProfileAndSubscription({ silent: false });
+    loadCertsOnce();
 
     const task = InteractionManager.runAfterInteractions(() => {
       loadReviews();
@@ -862,7 +921,7 @@ export default function SpecialistHome() {
       const maybeCancel = (task as any)?.cancel;
       if (typeof maybeCancel === 'function') maybeCancel();
     };
-  }, [token, loadCategories, reloadProfileAndSubscription, loadReviews]);
+  }, [token, loadCategories, reloadProfileAndSubscription, loadReviews, loadCertsOnce]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1056,6 +1115,83 @@ export default function SpecialistHome() {
       Alert.alert('Ups', msg);
     } finally {
       setSavingKey('avatar', false);
+    }
+  }
+
+  async function handleAddPortfolioImage() {
+    try {
+      if (portfolio.length >= 8) {
+        Alert.alert('Límite alcanzado', 'Podés subir hasta 8 imágenes de trabajos realizados.');
+        return;
+      }
+
+      const granted = await requestMedia();
+      if (!granted) return;
+
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 1,
+        allowsEditing: true,
+        aspect: [4, 3],
+      });
+
+      if (res.canceled || !res.assets?.[0]?.uri) return;
+
+      setSavingKey('portfolio', true);
+
+      const manipulated = await ImageManipulator.manipulateAsync(
+        res.assets[0].uri,
+        [{ resize: { width: 1600 } }],
+        { compress: 0.88, format: ImageManipulator.SaveFormat.JPEG },
+      );
+
+      const form = new FormData();
+      form.append('file', {
+        uri: manipulated.uri,
+        name: 'portfolio.jpg',
+        type: 'image/jpeg',
+      } as any);
+
+      const uploadRes = await api.post('/specialists/portfolio/upload', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const relativeUrl: string | undefined = uploadRes?.data?.url;
+      if (!relativeUrl) throw new Error('upload_failed');
+
+      await api.post('/specialists/me/portfolio', {
+        imageUrl: relativeUrl,
+        caption: null,
+      });
+
+      await refreshPortfolio();
+      Alert.alert('Listo', 'Imagen agregada a tus trabajos realizados.');
+    } catch (e: any) {
+      const msg =
+        e?.response?.data?.error === 'portfolio_limit_reached'
+          ? 'Ya alcanzaste el máximo de 8 imágenes.'
+          : e?.response?.data?.error === 'low_quality'
+            ? 'La imagen es muy chica. Probá con otra más nítida.'
+            : 'No se pudo subir la imagen.';
+      Alert.alert('Ups', msg);
+    } finally {
+      setSavingKey('portfolio', false);
+    }
+  }
+
+  async function handleDeletePortfolioImage(itemId: string) {
+    try {
+      setSavingKey('portfolio', true);
+
+      await api.delete(`/specialists/me/portfolio/${itemId}`);
+      await refreshPortfolio();
+
+      Alert.alert('Listo', 'La imagen fue eliminada.');
+    } catch (e) {
+      if (__DEV__) console.log('[handleDeletePortfolioImage] error', e);
+      Alert.alert('Ups', 'No se pudo eliminar la imagen.');
+    } finally {
+      setSavingKey('portfolio', false);
     }
   }
 
@@ -1548,6 +1684,15 @@ export default function SpecialistHome() {
     [specialties, requiresCert],
   );
 
+  const enabledByCerts = useMemo(() => {
+    if (specialtiesRequiringCert.length === 0) return true;
+
+    return specialtiesRequiringCert.every((slug) => {
+      const cert = certs.find((c) => c.category.slug === slug);
+      return cert?.status === 'APPROVED';
+    });
+  }, [specialtiesRequiringCert, certs]);
+
   useEffect(() => {
     if (!__DEV__) return;
 
@@ -1754,7 +1899,7 @@ export default function SpecialistHome() {
                   <View style={styles.previewPillSoft}>
                     <Ionicons name="ribbon-outline" size={14} color="#E9FEFF" />
                     <Text style={styles.previewPillSoftText}>
-                      {visibleEffective ? 'Habilitado' : 'No habilitado'}
+                      {enabledByCerts ? 'Habilitado' : 'No habilitado'}
                     </Text>
                   </View>
                 </View>
@@ -2604,6 +2749,55 @@ export default function SpecialistHome() {
             )}
           </Section>
 
+          {/* Trabajos realizados */}
+          <View style={styles.card}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={styles.cardTitle}>Trabajos realizados</Text>
+              <Pressable
+                onPress={async () => {
+                  setPortfolioModalOpen(true);
+                  await loadPortfolioOnce();
+                }}
+                style={{ padding: 6 }}
+              >
+                <Ionicons name="images-outline" size={20} color="#E9FEFF" />
+              </Pressable>
+            </View>
+
+            <Text style={styles.muted}>
+              Mostrá fotos de trabajos reales para generar más confianza en los clientes.
+            </Text>
+
+            <View
+              style={{
+                marginTop: 12,
+                padding: 12,
+                borderRadius: 14,
+                backgroundColor: 'rgba(255,255,255,0.08)',
+                borderWidth: 1,
+                borderColor: 'rgba(233,254,255,0.14)',
+              }}
+            >
+              <Text style={{ color: '#E9FEFF', fontWeight: '800' }}>
+                {portfolio.length}/8 imágenes cargadas
+              </Text>
+
+              <Text style={[styles.muted, { marginTop: 4 }]}>
+                Tocá para administrar tus fotos de trabajos realizados.
+              </Text>
+
+              <Pressable
+                onPress={async () => {
+                  setPortfolioModalOpen(true);
+                  await loadPortfolioOnce();
+                }}
+                style={[styles.btn, { marginTop: 12 }]}
+              >
+                <Text style={styles.btnT}>Administrar imágenes</Text>
+              </Pressable>
+            </View>
+          </View>
+
           {/* Reseñas */}
           <View style={styles.card}>
             <View style={[styles.cardHeaderRow, { marginBottom: 0 }]}>
@@ -2740,6 +2934,145 @@ export default function SpecialistHome() {
                 <Text style={styles.btnT}>{savingBy.avatar ? 'Subiendo…' : 'Usar foto'}</Text>
               </Pressable>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal: trabajos realizados */}
+      <Modal
+        transparent
+        visible={portfolioModalOpen}
+        animationType="fade"
+        onRequestClose={() => setPortfolioModalOpen(false)}
+      >
+        <View style={styles.previewBG}>
+          <View style={[styles.previewCard, { maxHeight: '85%' }]}>
+            <View style={[styles.cardHeaderRow, { marginBottom: 10 }]}>
+              <Text style={[styles.cardTitle, { color: '#0A5B63' }]}>Trabajos realizados</Text>
+              <Pressable onPress={() => setPortfolioModalOpen(false)}>
+                <Ionicons name="close" size={24} color="#0A5B63" />
+              </Pressable>
+            </View>
+
+            <Text style={{ color: '#4A6C70', fontWeight: '700', marginBottom: 10 }}>
+              {portfolio.length}/8 imágenes cargadas
+            </Text>
+
+            <Pressable
+              style={[styles.btn, savingBy.portfolio && styles.btnDisabled, { marginTop: 0 }]}
+              onPress={handleAddPortfolioImage}
+              disabled={savingBy.portfolio || portfolio.length >= 8}
+            >
+              {savingBy.portfolio ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <ActivityIndicator />
+                  <Text style={styles.btnT}>Subiendo…</Text>
+                </View>
+              ) : (
+                <Text style={styles.btnT}>
+                  {portfolio.length >= 8 ? 'Límite alcanzado' : 'Agregar imagen'}
+                </Text>
+              )}
+            </Pressable>
+
+            <RNScrollView
+              style={{ marginTop: 14 }}
+              contentContainerStyle={{ gap: 12, paddingBottom: 12 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {portfolioLoading ? (
+                <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                  <ActivityIndicator />
+                  <Text style={{ color: '#4A6C70', marginTop: 8 }}>Cargando imágenes…</Text>
+                </View>
+              ) : portfolio.length === 0 ? (
+                <View style={{ paddingVertical: 20 }}>
+                  <Text style={{ color: '#4A6C70', textAlign: 'center', fontWeight: '700' }}>
+                    Aún no cargaste imágenes de trabajos realizados.
+                  </Text>
+                </View>
+              ) : (
+                portfolio.map((item) => (
+                  <View
+                    key={item.id}
+                    style={{
+                      borderRadius: 14,
+                      overflow: 'hidden',
+                      backgroundColor: 'rgba(6,73,79,0.08)',
+                    }}
+                  >
+                    <Pressable
+                      onPress={() => {
+                        setPortfolioPreviewUri(absoluteUrl(item.imageUrl) ?? null);
+                        setPortfolioPreviewOpen(true);
+                      }}
+                    >
+                      <Image
+                        source={{ uri: portfolioImageSource(item) }}
+                        style={{ width: '100%', height: 180, backgroundColor: '#d9e6e7' }}
+                        resizeMode="cover"
+                      />
+                    </Pressable>
+
+                    <View style={{ padding: 10 }}>
+                      <Text style={{ color: '#4A6C70', fontWeight: '700' }}>
+                        {item.caption?.trim() || 'Trabajo realizado'}
+                      </Text>
+
+                      <Pressable
+                        onPress={() =>
+                          Alert.alert('Eliminar imagen', '¿Querés eliminar esta imagen?', [
+                            { text: 'Cancelar', style: 'cancel' },
+                            {
+                              text: 'Eliminar',
+                              style: 'destructive',
+                              onPress: () => handleDeletePortfolioImage(item.id),
+                            },
+                          ])
+                        }
+                        style={[
+                          styles.btn,
+                          {
+                            marginTop: 10,
+                            backgroundColor: 'rgba(239,68,68,0.12)',
+                            borderWidth: 1,
+                            borderColor: 'rgba(239,68,68,0.25)',
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.btnT, { color: '#B42318' }]}>Eliminar</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ))
+              )}
+            </RNScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal: preview imagen portfolio */}
+      <Modal
+        transparent
+        visible={portfolioPreviewOpen}
+        animationType="fade"
+        onRequestClose={() => setPortfolioPreviewOpen(false)}
+      >
+        <View style={styles.previewBG}>
+          <View style={styles.previewCard}>
+            {portfolioPreviewUri ? (
+              <Image source={{ uri: portfolioPreviewUri }} style={styles.previewImg} />
+            ) : null}
+
+            <Pressable
+              style={[styles.btn, { marginTop: 12 }]}
+              onPress={() => {
+                setPortfolioPreviewOpen(false);
+                setPortfolioPreviewUri(null);
+              }}
+            >
+              <Text style={styles.btnT}>Cerrar</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>

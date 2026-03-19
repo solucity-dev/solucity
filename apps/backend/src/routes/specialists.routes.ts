@@ -24,16 +24,19 @@ const router = Router();
 const kycDir = path.join(uploadsRoot, 'kyc');
 const certsDir = path.join(uploadsRoot, 'certifications');
 const backgroundChecksDir = path.join(uploadsRoot, 'background-checks');
+const portfolioDir = path.join(uploadsRoot, 'portfolio');
 
 ensureDir(kycDir);
 ensureDir(certsDir);
 ensureDir(backgroundChecksDir);
+ensureDir(portfolioDir);
 
 if (debugUploads) {
   dbg(debugUploads, '[specialists.routes] uploadsRoot =', uploadsRoot);
   dbg(debugUploads, '[specialists.routes] kycDir =', kycDir);
   dbg(debugUploads, '[specialists.routes] certsDir =', certsDir);
   dbg(debugUploads, '[specialists.routes] backgroundChecksDir =', backgroundChecksDir);
+  dbg(debugUploads, '[specialists.routes] portfolioDir =', portfolioDir);
 }
 
 /** ========= Multer storages ========= **/
@@ -73,6 +76,18 @@ const storageBackgroundChecks = multer.diskStorage({
   },
 });
 
+const storagePortfolio = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, portfolioDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.jpg';
+    const base = path
+      .basename(file.originalname, ext)
+      .replace(/\s+/g, '_')
+      .replace(/[^A-Za-z0-9_-]/g, '');
+    cb(null, `${Date.now()}_${base}${ext}`);
+  },
+});
+
 /** Solo imágenes (JPEG/PNG/WebP) — KYC */
 const upload = multer({
   storage: storageKyc,
@@ -104,6 +119,17 @@ const uploadBackgroundCheck = multer({
     const isImg = /^image\/(jpe?g|png|webp)$/i.test(file.mimetype);
     const isPdf = file.mimetype === 'application/pdf';
     if (!isImg && !isPdf) return cb(new Error('unsupported_type'));
+    cb(null, true);
+  },
+});
+
+/** Solo imágenes — Portfolio */
+const uploadPortfolio = multer({
+  storage: storagePortfolio,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (_req, file, cb) => {
+    const ok = /^image\/(jpe?g|png|webp)$/i.test(file.mimetype);
+    if (!ok) return cb(new Error('unsupported_type'));
     cb(null, true);
   },
 });
@@ -1128,6 +1154,118 @@ function pickBadge(avg: number | null, count: number | null): 'BRONZE' | 'SILVER
   return 'BRONZE';
 }
 
+function normalizeOfficeAddressText(input: string): string {
+  let s = String(input ?? '').trim();
+
+  if (!s) return s;
+
+  // Normaliza espacios y separadores raros
+  s = s.replace(/\s*,\s*/g, ', ');
+  s = s.replace(/\s+/g, ' ').trim();
+
+  // Expansión MUY conservadora de abreviaturas comunes de calles
+  // Solo tocamos casos frecuentes para no romper direcciones válidas.
+  const replacements: [RegExp, string][] = [
+    [/\bpje\.?\b/gi, 'pasaje'],
+    [/\bpas\.?\b/gi, 'pasaje'],
+    [/\bav\.?\b/gi, 'avenida'],
+    [/\bavda\.?\b/gi, 'avenida'],
+    [/\bbv\.?\b/gi, 'boulevard'],
+    [/\bblvd\.?\b/gi, 'boulevard'],
+    [/\bgral\.?\b/gi, 'general'],
+    [/\bdr\.?\b/gi, 'doctor'],
+  ];
+
+  for (const [regex, value] of replacements) {
+    s = s.replace(regex, value);
+  }
+
+  // Caso típico: "pasaje.drago" -> "pasaje drago"
+  s = s.replace(/\.(?=[A-Za-zÁÉÍÓÚáéíóúÑñ])/g, ' ');
+
+  // Limpieza final
+  s = s.replace(/\s+/g, ' ').trim();
+  s = s.replace(/\s*,\s*/g, ', ');
+
+  return s;
+}
+
+async function geocodeOfficeAddressWithFallback(params: {
+  formatted: string;
+  locality?: string | null;
+}) {
+  const originalFormatted = String(params.formatted ?? '').trim();
+  const locality = String(params.locality ?? '').trim() || null;
+
+  const parts = originalFormatted
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const inferredLocality = (locality ?? String(parts[1] ?? '').trim()) || null;
+
+  const buildCandidate = (base: string) => {
+    let candidate = normalizeOfficeAddressText(base);
+
+    const low = candidate.toLowerCase();
+
+    if (inferredLocality && !low.includes(inferredLocality.toLowerCase())) {
+      candidate = `${candidate}, ${inferredLocality}`;
+    }
+
+    const low2 = candidate.toLowerCase();
+    const hasCordoba = low2.includes('córdoba') || low2.includes('cordoba');
+
+    if (!hasCordoba) {
+      candidate = `${candidate}, Córdoba, Argentina`;
+    }
+
+    return candidate;
+  };
+
+  const candidatePrimary = buildCandidate(originalFormatted);
+
+  const candidateSecondary =
+    candidatePrimary !== originalFormatted ? buildCandidate(candidatePrimary) : null;
+
+  let geo: any = null;
+  let usedFormatted = candidatePrimary;
+
+  try {
+    geo = await geocodeAddress(candidatePrimary);
+  } catch {
+    geo = null;
+  }
+
+  if (
+    (geo?.lat == null || geo?.lng == null || Number.isNaN(geo?.lat) || Number.isNaN(geo?.lng)) &&
+    candidateSecondary &&
+    candidateSecondary !== candidatePrimary
+  ) {
+    try {
+      const geo2 = await geocodeAddress(candidateSecondary);
+      if (
+        geo2?.lat != null &&
+        geo2?.lng != null &&
+        !Number.isNaN(geo2.lat) &&
+        !Number.isNaN(geo2.lng)
+      ) {
+        geo = geo2;
+        usedFormatted = candidateSecondary;
+      }
+    } catch {
+      // noop
+    }
+  }
+
+  return {
+    geo,
+    usedFormatted,
+    inferredLocality,
+    originalFormatted,
+  };
+}
+
 const AvailabilitySchema = z.object({
   days: z.array(z.number().int().min(0).max(6)).min(1),
   start: z.string().regex(/^\d{2}:\d{2}$/),
@@ -1444,49 +1582,36 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
           return res.status(400).json({ ok: false, error: 'office_address_required' });
         }
 
-        // ✅ FIX: si no viene locality, la inferimos desde el formatted
-        // Ej: "Fray Luis Beltrán 875, Río Cuarto, Córdoba, Argentina" -> locality = "Río Cuarto"
-        const parts = formatted
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean);
-        const inferredLocality = String(officeAddress.locality ?? parts[1] ?? '').trim();
-
-        // Normalización Córdoba + (si existe) localidad
-        const f0Lower = formatted.toLowerCase();
-        const hasCordoba = f0Lower.includes('córdoba') || f0Lower.includes('cordoba');
-
-        if (inferredLocality) {
-          const hasLocality = f0Lower.includes(inferredLocality.toLowerCase());
-          if (!hasLocality) formatted = `${formatted}, ${inferredLocality}`;
-        }
-
-        if (!hasCordoba) formatted = `${formatted}, Córdoba, Argentina`;
-
         // 1) Tomar coords si vienen
         let lat = officeAddress.lat;
         let lng = officeAddress.lng;
+        let inferredLocality: string | null = null;
 
-        // 2) Si NO vienen coords, geocodificar
+        // 2) Si NO vienen coords, geocodificar con fallback seguro
         if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) {
           try {
+            const result = await geocodeOfficeAddressWithFallback({
+              formatted,
+              locality: officeAddress.locality ?? null,
+            });
+
+            inferredLocality = result.inferredLocality;
+            formatted = result.usedFormatted;
+
             dbg(debugSpecialists, '[PATCH /specialists/me] geocode input', {
-              originalFormatted: officeAddress.formatted,
-              normalizedFormatted: formatted,
+              originalFormatted: result.originalFormatted,
+              normalizedFormatted: result.usedFormatted,
               locality: officeAddress.locality ?? null,
               inferredLocality,
             });
 
-            const geo = await geocodeAddress(formatted);
-
             dbg(debugSpecialists, '[PATCH /specialists/me] geocode result', {
-              normalizedFormatted: formatted,
-              geo,
+              normalizedFormatted: result.usedFormatted,
+              geo: result.geo,
             });
 
-            // asumimos que geocodeAddress devuelve { lat, lng, formatted? } o similar
-            lat = geo?.lat;
-            lng = geo?.lng;
+            lat = result.geo?.lat;
+            lng = result.geo?.lng;
           } catch (e) {
             dbg(debugSpecialists, '[PATCH /specialists/me] geocodeAddress failed', {
               originalFormatted: officeAddress.formatted,
@@ -1836,9 +1961,272 @@ router.get('/certifications', auth, async (req: AuthReq, res: Response) => {
   }
 });
 
+/** POST /specialists/portfolio/upload (solo imagen) */
+router.post('/portfolio/upload', auth, (req: Request, res: Response) => {
+  uploadPortfolio.single('file')(req, res, async (err: any) => {
+    const maybe = multerErrorToResponse(err, res);
+    if (maybe) return;
+
+    const r = req as MulterReq;
+
+    try {
+      if (!r.file) return res.status(400).json({ ok: false, error: 'file_required' });
+
+      const meta = await sharp(r.file.path).rotate().metadata();
+      const minW = 800;
+      const minH = 600;
+
+      if (!meta.width || !meta.height || meta.width < minW || meta.height < minH) {
+        try {
+          fs.unlinkSync(r.file.path);
+        } catch {}
+        return res.status(400).json({ ok: false, error: 'low_quality', minW, minH });
+      }
+
+      const webpPath = r.file.path + '.webp';
+      await sharp(r.file.path)
+        .rotate()
+        .resize({ width: 1400, withoutEnlargement: true })
+        .webp({ quality: 84 })
+        .toFile(webpPath);
+
+      try {
+        fs.unlinkSync(r.file.path);
+      } catch {}
+
+      const relative = `/uploads/portfolio/${path.basename(webpPath)}`;
+
+      return res.json({
+        ok: true,
+        url: relative,
+        format: 'webp',
+        width: meta.width,
+        height: meta.height,
+      });
+    } catch (e) {
+      if (process.env.NODE_ENV !== 'production')
+        console.error('POST /specialists/portfolio/upload', e);
+      return res.status(500).json({ ok: false, error: 'server_error' });
+    }
+  });
+});
+
+/** GET /specialists/me/portfolio */
+router.get('/me/portfolio', auth, async (req: AuthReq, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' });
+
+    const spec = await prisma.specialistProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!spec) return res.json({ ok: true, items: [] });
+
+    const items = await prisma.specialistPortfolioImage.findMany({
+      where: { specialistId: spec.id },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+      select: {
+        id: true,
+        imageUrl: true,
+        thumbUrl: true,
+        caption: true,
+        sortOrder: true,
+        createdAt: true,
+      },
+    });
+
+    return res.json({
+      ok: true,
+      items: items.map((x) => ({
+        ...x,
+        imageUrl: toAbsoluteUrl(x.imageUrl),
+        thumbUrl: x.thumbUrl ? toAbsoluteUrl(x.thumbUrl) : null,
+      })),
+    });
+  } catch (e) {
+    if (process.env.NODE_ENV !== 'production') console.error('GET /specialists/me/portfolio', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+/** POST /specialists/me/portfolio */
+router.post('/me/portfolio', auth, async (req: AuthReq, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' });
+
+    const schema = z.object({
+      imageUrl: urlLike,
+      thumbUrl: urlLike.optional().nullable(),
+      caption: z.string().max(140).optional().nullable(),
+    });
+
+    const body = schema.parse(req.body);
+
+    const spec = await prisma.specialistProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!spec) return res.status(400).json({ ok: false, error: 'no_profile' });
+
+    const count = await prisma.specialistPortfolioImage.count({
+      where: { specialistId: spec.id },
+    });
+
+    if (count >= 8) {
+      return res.status(400).json({ ok: false, error: 'portfolio_limit_reached' });
+    }
+
+    const item = await prisma.specialistPortfolioImage.create({
+      data: {
+        specialistId: spec.id,
+        imageUrl: body.imageUrl,
+        thumbUrl: body.thumbUrl ?? null,
+        caption: body.caption ?? null,
+        sortOrder: count,
+      },
+      select: {
+        id: true,
+        imageUrl: true,
+        thumbUrl: true,
+        caption: true,
+        sortOrder: true,
+        createdAt: true,
+      },
+    });
+
+    return res.json({
+      ok: true,
+      item: {
+        ...item,
+        imageUrl: toAbsoluteUrl(item.imageUrl),
+        thumbUrl: item.thumbUrl ? toAbsoluteUrl(item.thumbUrl) : null,
+      },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ ok: false, error: 'invalid_input', details: err.flatten() });
+    }
+    if (process.env.NODE_ENV !== 'production') console.error('POST /specialists/me/portfolio', err);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+/** DELETE /specialists/me/portfolio/:id */
+router.delete('/me/portfolio/:id', auth, async (req: AuthReq, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const itemId = String(req.params.id ?? '').trim();
+
+    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    if (!itemId) return res.status(400).json({ ok: false, error: 'invalid_id' });
+
+    const spec = await prisma.specialistProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!spec) return res.status(400).json({ ok: false, error: 'no_profile' });
+
+    const item = await prisma.specialistPortfolioImage.findFirst({
+      where: {
+        id: itemId,
+        specialistId: spec.id,
+      },
+      select: {
+        id: true,
+        imageUrl: true,
+        thumbUrl: true,
+      },
+    });
+
+    if (!item) return res.status(404).json({ ok: false, error: 'not_found' });
+
+    await prisma.specialistPortfolioImage.delete({
+      where: { id: item.id },
+    });
+
+    const maybeDeleteLocal = (u?: string | null) => {
+      if (!u) return;
+
+      let relativePath = u;
+
+      // si viene absoluta, extraemos solo la parte /uploads/...
+      try {
+        if (/^https?:\/\//i.test(u)) {
+          const parsed = new URL(u);
+          relativePath = parsed.pathname;
+        }
+      } catch {
+        relativePath = u;
+      }
+
+      if (!relativePath.startsWith('/uploads/')) return;
+
+      const abs = path.join(uploadsRoot, relativePath.replace(/^\/uploads\//, ''));
+
+      try {
+        if (fs.existsSync(abs)) fs.unlinkSync(abs);
+      } catch {}
+    };
+
+    maybeDeleteLocal(item.imageUrl);
+    maybeDeleteLocal(item.thumbUrl);
+
+    return res.json({ ok: true });
+  } catch (e) {
+    if (process.env.NODE_ENV !== 'production')
+      console.error('DELETE /specialists/me/portfolio/:id', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
 /* ─────────────────────────────────────────────────────────────────────
  * RUTA PÚBLICA AL FINAL: GET /specialists/:id
  * ────────────────────────────────────────────────────────────────────*/
+
+/** GET /specialists/:id/portfolio */
+router.get('/:id/portfolio', async (req, res) => {
+  try {
+    const specialistId = String(req.params.id ?? '').trim();
+    if (!specialistId) return res.status(400).json({ ok: false, error: 'invalid_id' });
+
+    const spec = await prisma.specialistProfile.findUnique({
+      where: { id: specialistId },
+      select: { id: true },
+    });
+
+    if (!spec) return res.status(404).json({ ok: false, error: 'not_found' });
+
+    const items = await prisma.specialistPortfolioImage.findMany({
+      where: { specialistId },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+      select: {
+        id: true,
+        imageUrl: true,
+        thumbUrl: true,
+        caption: true,
+        sortOrder: true,
+        createdAt: true,
+      },
+    });
+
+    return res.json({
+      ok: true,
+      items: items.map((x) => ({
+        ...x,
+        imageUrl: toAbsoluteUrl(x.imageUrl),
+        thumbUrl: x.thumbUrl ? toAbsoluteUrl(x.thumbUrl) : null,
+      })),
+    });
+  } catch (e) {
+    if (process.env.NODE_ENV !== 'production') console.error('GET /specialists/:id/portfolio', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
 
 router.get('/:id', async (req, res) => {
   try {

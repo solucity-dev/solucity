@@ -76,6 +76,7 @@ model SpecialistProfile {
   serviceModes      ServiceMode[]
   businessName      String?                    @db.VarChar(80)
   kycSubmissions    KycSubmission[]
+   portfolioImages   SpecialistPortfolioImage[]
   orders            ServiceOrder[]             @relation("SpecialistOrders")
   backgroundCheck   SpecialistBackgroundCheck?
   certifications    SpecialistCertification[]
@@ -420,6 +421,20 @@ model SpecialistBackgroundCheck {
   specialist      SpecialistProfile     @relation(fields: [specialistId], references: [id], onDelete: Cascade)
 
   @@index([status])
+}
+
+model SpecialistPortfolioImage {
+  id           String            @id @default(cuid())
+  specialistId String
+  imageUrl     String
+  thumbUrl     String?
+  caption      String?           @db.VarChar(140)
+  sortOrder    Int               @default(0)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  specialist   SpecialistProfile @relation(fields: [specialistId], references: [id], onDelete: Cascade)
+
+  @@index([specialistId, sortOrder, createdAt])
 }
 
 enum Role {

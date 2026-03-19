@@ -38,6 +38,7 @@ const groups: GroupSeed[] = [
       'Aberturas',
       'Impermeabilización',
       'Zinguería',
+      'Tapizado',
     ],
   },
   {
@@ -71,7 +72,6 @@ const groups: GroupSeed[] = [
       'Clases particulares',
       'Paseador de perros',
       'Cuidado de mascotas',
-      'Fletes',
       'Diseño de interiores',
       'Organización de eventos',
       'Fotografía y video',
@@ -89,6 +89,7 @@ const groups: GroupSeed[] = [
       'Nutricionista',
       'Psicopedagoga',
       'Kinesiología',
+      'Cuidador de pacientes',
     ],
   },
   {
@@ -129,6 +130,11 @@ const groups: GroupSeed[] = [
       'Spa / Estética corporal',
       'Cejas y pestañas',
     ],
+  },
+  {
+    name: 'Transporte',
+    slug: 'transporte',
+    rubros: ['Traslado de pasajeros', 'Chofer particular', 'Fletes', 'Auxilio vehicular'],
   },
   {
     name: 'Alquiler',
@@ -182,7 +188,6 @@ const REQUIRES_CERTIFICATION = new Set<string>([
   'cercos-electricos-perimetrales',
 
   // Servicios
-  'fletes',
   'diseno-de-interiores',
 
   // Salud
@@ -193,6 +198,7 @@ const REQUIRES_CERTIFICATION = new Set<string>([
   'nutricionista',
   'psicopedagoga',
   'kinesiologia',
+  'cuidador de pacientes',
 
   // Profesionales
   'abogado',
@@ -201,6 +207,12 @@ const REQUIRES_CERTIFICATION = new Set<string>([
   'arquitecto',
   'ingeniero',
   'pas-productor-asesor-de-seguros',
+
+  // Transporte
+  'fletes',
+  'traslado-de-pasajeros',
+  'chofer-particular',
+  'Auxilio vehicular',
 ]);
 
 async function upsertCategories() {

@@ -110,6 +110,30 @@ router.post('/register/start', async (req, res) => {
       return res.status(429).json({ ok: false, error: 'too_many_requests' });
     }
 
+    if (msg === 'email_provider_quota_exceeded') {
+      return res.status(429).json({
+        ok: false,
+        error: 'email_temporarily_unavailable',
+        message: 'No pudimos enviar el código en este momento. Intentá nuevamente más tarde.',
+      });
+    }
+
+    if (msg === 'email_provider_rate_limited') {
+      return res.status(429).json({
+        ok: false,
+        error: 'email_temporarily_unavailable',
+        message: 'Estamos recibiendo muchas solicitudes. Intentá nuevamente en unos minutos.',
+      });
+    }
+
+    if (msg === 'email_delivery_unavailable') {
+      return res.status(503).json({
+        ok: false,
+        error: 'email_service_unavailable',
+        message: 'El servicio de correo no está disponible temporalmente.',
+      });
+    }
+
     if (status !== 500) {
       return res.status(status).json({ ok: false, error: msg });
     }

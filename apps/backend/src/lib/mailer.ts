@@ -1,4 +1,4 @@
-// src/services/mailer.ts
+// src/lib/mailer.ts
 import nodemailer, { type Transporter } from 'nodemailer';
 import { Resend } from 'resend';
 

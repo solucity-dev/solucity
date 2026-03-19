@@ -1159,35 +1159,35 @@ function normalizeOfficeAddressText(input: string): string {
 
   if (!s) return s;
 
-  // Normaliza espacios y separadores raros
   s = s.replace(/\s*,\s*/g, ', ');
   s = s.replace(/\s+/g, ' ').trim();
 
-  // Expansión MUY conservadora de abreviaturas comunes de calles
-  // Solo tocamos casos frecuentes para no romper direcciones válidas.
   const replacements: [RegExp, string][] = [
-    [/\bpje\.?\b/gi, 'pasaje'],
-    [/\bpas\.?\b/gi, 'pasaje'],
-    [/\bav\.?\b/gi, 'avenida'],
-    [/\bavda\.?\b/gi, 'avenida'],
-    [/\bbv\.?\b/gi, 'boulevard'],
-    [/\bblvd\.?\b/gi, 'boulevard'],
-    [/\bgral\.?\b/gi, 'general'],
-    [/\bdr\.?\b/gi, 'doctor'],
+    [/\b(pje|pje\.)\s+/gi, 'pasaje '],
+    [/\b(pas|pas\.)\s+/gi, 'pasaje '],
+    [/\b(av|av\.)\s+/gi, 'avenida '],
+    [/\b(avda|avda\.)\s+/gi, 'avenida '],
+    [/\b(bv|bv\.)\s+/gi, 'boulevard '],
+    [/\b(blvd|blvd\.)\s+/gi, 'boulevard '],
+    [/\b(gral|gral\.)\s+/gi, 'general '],
+    [/\b(dr|dr\.)\s+/gi, 'doctor '],
   ];
 
   for (const [regex, value] of replacements) {
     s = s.replace(regex, value);
   }
 
-  // Caso típico: "pasaje.drago" -> "pasaje drago"
   s = s.replace(/\.(?=[A-Za-zÁÉÍÓÚáéíóúÑñ])/g, ' ');
-
-  // Limpieza final
   s = s.replace(/\s+/g, ' ').trim();
   s = s.replace(/\s*,\s*/g, ', ');
 
   return s;
+}
+
+function deaccent(input: string): string {
+  return String(input ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
 }
 
 async function geocodeOfficeAddressWithFallback(params: {
@@ -1202,46 +1202,48 @@ async function geocodeOfficeAddressWithFallback(params: {
     .map((s) => s.trim())
     .filter(Boolean);
 
+  const streetPart = String(parts[0] ?? '').trim();
   const inferredLocality = (locality ?? String(parts[1] ?? '').trim()) || null;
 
-  const buildCandidate = (base: string) => {
-    let candidate = String(base ?? '').trim();
+  const candidates = new Set<string>();
 
-    const low = candidate.toLowerCase();
+  const pushCandidate = (value?: string | null) => {
+    const v = String(value ?? '')
+      .replace(/\s+/g, ' ')
+      .replace(/\s*,\s*/g, ', ')
+      .trim();
 
-    if (inferredLocality && !low.includes(inferredLocality.toLowerCase())) {
-      candidate = `${candidate}, ${inferredLocality}`;
-    }
-
-    const low2 = candidate.toLowerCase();
-    const hasCordoba = low2.includes('córdoba') || low2.includes('cordoba');
-
-    if (!hasCordoba) {
-      candidate = `${candidate}, Córdoba, Argentina`;
-    }
-
-    return candidate;
+    if (v) candidates.add(v);
   };
 
   const normalizedOriginal = normalizeOfficeAddressText(originalFormatted);
+  const normalizedStreet = normalizeOfficeAddressText(streetPart);
 
-  const candidates = Array.from(
-    new Set(
-      [
-        originalFormatted,
-        buildCandidate(originalFormatted),
-        normalizedOriginal,
-        buildCandidate(normalizedOriginal),
-      ]
-        .map((x) => String(x ?? '').trim())
-        .filter(Boolean),
-    ),
-  );
+  pushCandidate(originalFormatted);
+  pushCandidate(normalizedOriginal);
+
+  if (streetPart && inferredLocality) {
+    pushCandidate(`${streetPart}, ${inferredLocality}, Córdoba, Argentina`);
+    pushCandidate(`${normalizedStreet}, ${inferredLocality}, Córdoba, Argentina`);
+    pushCandidate(`${streetPart}, ${inferredLocality}, Cordoba, Argentina`);
+    pushCandidate(`${normalizedStreet}, ${inferredLocality}, Cordoba, Argentina`);
+  }
+
+  if (streetPart) {
+    pushCandidate(`${streetPart}, Córdoba, Argentina`);
+    pushCandidate(`${normalizedStreet}, Córdoba, Argentina`);
+    pushCandidate(`${streetPart}, Cordoba, Argentina`);
+    pushCandidate(`${normalizedStreet}, Cordoba, Argentina`);
+  }
+
+  for (const c of Array.from(candidates)) {
+    pushCandidate(deaccent(c));
+  }
 
   let geo: any = null;
-  let usedFormatted = candidates[0] ?? originalFormatted;
+  let usedFormatted = originalFormatted;
 
-  for (const candidate of candidates) {
+  for (const candidate of Array.from(candidates)) {
     try {
       const result = await geocodeAddress(candidate);
 
@@ -1256,7 +1258,7 @@ async function geocodeOfficeAddressWithFallback(params: {
         break;
       }
     } catch {
-      // seguimos con el siguiente candidate
+      // seguimos
     }
   }
 

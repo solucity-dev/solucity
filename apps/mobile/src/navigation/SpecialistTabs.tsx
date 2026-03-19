@@ -81,6 +81,7 @@ export default function SpecialistTabs() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
+        tabBarHideOnKeyboard: true,
         tabBarShowLabel: true,
         tabBarActiveTintColor: '#0B6B76',
         tabBarInactiveTintColor: '#6B7B87',

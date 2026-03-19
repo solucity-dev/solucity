@@ -13,6 +13,7 @@ import {
   Alert,
   Image,
   InteractionManager,
+  Keyboard,
   Modal,
   Pressable,
   ScrollView as RNScrollView,
@@ -68,6 +69,13 @@ type SpecProfile = {
   avatarUrl?: string | null;
   name?: string | null;
   businessName?: string | null; // ✅ NUEVO: nombre de empresa/local/pyme (visible al cliente)
+  officeAddress?: {
+    id: string;
+    formatted: string;
+    lat?: number | null;
+    lng?: number | null;
+    placeId?: string | null;
+  } | null;
   centerLat?: number | null;
   centerLng?: number | null;
   stats?: {
@@ -356,10 +364,10 @@ export default function SpecialistHome() {
 
   // ✅ Copiamos el mismo filtrado que CreateOrder
   const filteredOfficeLocalities = useMemo(() => {
-    const q = officeLocalityQuery.trim().toLowerCase();
+    const q = normalizeText(officeLocalityQuery);
     if (!q) return LOCALITIES_CORDOBA;
 
-    return LOCALITIES_CORDOBA.filter((x) => x.toLowerCase().includes(q));
+    return LOCALITIES_CORDOBA.filter((x) => normalizeText(x).includes(q));
   }, [officeLocalityQuery]);
 
   // avatar
@@ -734,10 +742,8 @@ export default function SpecialistHome() {
         setServiceModes(normalizeModes((p as any).serviceModes));
 
         // 🔥 Cargar dirección del local si existe (soporta string u objeto)
-        const oa = (p as any).officeAddress;
-
-        const formatted =
-          typeof oa === 'string' ? oa : typeof oa?.formatted === 'string' ? oa.formatted : null;
+        const oa = p.officeAddress ?? null;
+        const formatted = typeof oa?.formatted === 'string' ? oa.formatted : null;
 
         if (formatted) {
           const street = streetOnly(formatted);
@@ -745,11 +751,16 @@ export default function SpecialistHome() {
           setSavedOfficeAddress(formatted);
 
           const match = LOCALITIES_CORDOBA.find((loc) =>
-            formatted.toLowerCase().includes(loc.toLowerCase()),
+            normalizeText(formatted).includes(normalizeText(loc)),
           );
-          if (match) setOfficeLocality(match);
+
+          setOfficeLocality(match ?? 'Río Cuarto');
         } else {
+          setOfficeAddress('');
           setSavedOfficeAddress('');
+          setOfficeLocality('Río Cuarto');
+          setOfficeLocalityQuery('');
+          setOfficeLocalityOpen(false);
         }
 
         // ✅ baseline Modalidad de servicio (snapshots)
@@ -763,7 +774,7 @@ export default function SpecialistHome() {
           streetBase = streetOnly(formatted);
 
           const matchBase = LOCALITIES_CORDOBA.find((loc) =>
-            formatted.toLowerCase().includes(loc.toLowerCase()),
+            normalizeText(formatted).includes(normalizeText(loc)),
           );
           if (matchBase) localityBase = matchBase;
         }
@@ -1428,13 +1439,24 @@ export default function SpecialistHome() {
           return;
         }
 
-        const loc = String(officeLocality ?? '').trim();
-        if (!loc) {
-          Alert.alert('Debés elegir la localidad de tu oficina.');
-          return;
+        const loc = String(officeLocality ?? '').trim() || 'Río Cuarto';
+
+        let formatted = street;
+
+        if (!normalizeText(formatted).includes(normalizeText(loc))) {
+          formatted = `${formatted}, ${loc}`;
         }
 
-        const formatted = `${street}, ${loc}, Córdoba, Argentina`;
+        if (!normalizeText(formatted).includes('cordoba')) {
+          formatted = `${formatted}, Córdoba`;
+        }
+
+        if (!normalizeText(formatted).includes('argentina')) {
+          formatted = `${formatted}, Argentina`;
+        }
+
+        formatted = formatted.replace(/\s*,\s*/g, ', ').trim();
+
         payload.officeAddress = formatted;
         setSavedOfficeAddress(formatted);
       } else {
@@ -1452,14 +1474,18 @@ export default function SpecialistHome() {
 
       // ✅ actualizamos baseline para que el botón se apague
       const streetForSnap = payload.serviceModes.includes('OFFICE')
-        ? streetOnly(officeAddress)
+        ? streetOnly(payload.officeAddress ?? officeAddress)
         : '';
+
+      const localityForSnap = payload.serviceModes.includes('OFFICE')
+        ? String(officeLocality ?? '').trim() || 'Río Cuarto'
+        : '';
+
       serviceModesSnapRef.current = serviceModesSnapshot(
         payload.serviceModes,
         streetForSnap,
-        officeLocality,
+        localityForSnap,
       );
-
       Alert.alert('Listo', 'Modalidades guardadas correctamente.');
 
       // opcional pero recomendado para refrescar profile y que no quede desync
@@ -1471,7 +1497,15 @@ export default function SpecialistHome() {
 
       Alert.alert(
         'Error',
-        data?.error ? String(data.error) : 'No se pudieron guardar las modalidades.',
+        data?.message
+          ? String(data.message)
+          : data?.error === 'office_geocode_failed'
+            ? 'No pudimos ubicar esa dirección. Revisá la calle, la altura y la localidad.'
+            : data?.error === 'office_address_required'
+              ? 'Debés completar la dirección de tu oficina/local.'
+              : data?.error === 'office_coords_outside_cordoba'
+                ? 'La dirección quedó fuera de Córdoba. Revisá la localidad ingresada.'
+                : 'No se pudieron guardar las modalidades.',
       );
     } finally {
       setSavingKey('serviceModes', false);
@@ -1798,10 +1832,13 @@ export default function SpecialistHome() {
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           enableOnAndroid
-          extraScrollHeight={16}
+          extraScrollHeight={90}
+          extraHeight={140}
+          enableResetScrollToCoords={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           enableAutomaticScroll
+          onScrollBeginDrag={Keyboard.dismiss}
         >
           {/* Vista previa (como te ve el cliente en la lista) */}
           <View style={styles.card}>
@@ -3110,7 +3147,7 @@ const styles = StyleSheet.create({
   },
   notifBadgeText: { color: '#fff', fontSize: 9, fontWeight: '800' },
 
-  content: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 120 },
+  content: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 190 },
 
   card: {
     backgroundColor: 'rgba(0, 35, 40, 0.28)',

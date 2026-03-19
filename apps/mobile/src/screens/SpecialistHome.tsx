@@ -234,6 +234,40 @@ function streetOnly(s: string) {
     .trim();
 }
 
+function extractOfficeLocalityFromFormatted(formatted?: string | null) {
+  const normalize = (s: string) =>
+    String(s)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+
+  const parts = String(formatted ?? '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  if (!parts.length) return 'Río Cuarto';
+
+  const candidates = parts.slice(1).filter((part) => {
+    const n = normalize(part);
+    return !!n && n !== 'cordoba' && n !== 'argentina';
+  });
+
+  for (const part of candidates) {
+    const normalizedPart = normalize(part);
+
+    const match = LOCALITIES_CORDOBA.find((loc) => {
+      const normalizedLoc = normalize(loc);
+      return normalizedPart.includes(normalizedLoc) || normalizedLoc.includes(normalizedPart);
+    });
+
+    if (match) return match;
+  }
+
+  return 'Río Cuarto';
+}
+
 // ✅ Snapshot estable para evitar "a veces" (mismos criterios en baseline y dirty)
 function serviceModesSnapshot(modes: any, officeAddr: string, locality: string): string {
   const normalized = normalizeModes(modes);
@@ -747,14 +781,11 @@ export default function SpecialistHome() {
 
         if (formatted) {
           const street = streetOnly(formatted);
+          const parsedLocality = extractOfficeLocalityFromFormatted(formatted);
+
           setOfficeAddress(street);
           setSavedOfficeAddress(formatted);
-
-          const match = LOCALITIES_CORDOBA.find((loc) =>
-            normalizeText(formatted).includes(normalizeText(loc)),
-          );
-
-          setOfficeLocality(match ?? 'Río Cuarto');
+          setOfficeLocality(parsedLocality);
         } else {
           setOfficeAddress('');
           setSavedOfficeAddress('');
@@ -772,11 +803,7 @@ export default function SpecialistHome() {
 
         if (formatted) {
           streetBase = streetOnly(formatted);
-
-          const matchBase = LOCALITIES_CORDOBA.find((loc) =>
-            normalizeText(formatted).includes(normalizeText(loc)),
-          );
-          if (matchBase) localityBase = matchBase;
+          localityBase = extractOfficeLocalityFromFormatted(formatted);
         }
 
         // guardamos baseline consistente
@@ -1422,18 +1449,25 @@ export default function SpecialistHome() {
     try {
       setSavingKey('serviceModes', true);
 
-      // ✅ Siempre guardamos serviceModes
-      const payload: any = { serviceModes: normalizeModes(serviceModes) };
+      const normalizedModes = normalizeModes(serviceModes);
 
-      // ✅ Si incluye OFFICE, validamos dirección y la mandamos
-      if (payload.serviceModes.includes('OFFICE')) {
+      const payload: {
+        serviceModes: ('HOME' | 'OFFICE' | 'ONLINE')[];
+        officeAddress?: {
+          formatted: string;
+          locality: string;
+        } | null;
+      } = {
+        serviceModes: normalizedModes,
+      };
+
+      if (normalizedModes.includes('OFFICE')) {
         if (!officeAddress.trim()) {
           Alert.alert('Debés cargar la dirección de tu oficina.');
           return;
         }
 
         const street = streetOnly(officeAddress);
-
         if (!street) {
           Alert.alert('Debés cargar la dirección de tu oficina.');
           return;
@@ -1457,39 +1491,24 @@ export default function SpecialistHome() {
 
         formatted = formatted.replace(/\s*,\s*/g, ', ').trim();
 
-        payload.officeAddress = formatted;
-        setSavedOfficeAddress(formatted);
+        payload.officeAddress = {
+          formatted,
+          locality: loc,
+        };
       } else {
-        // ✅ Si NO incluye OFFICE, limpiamos officeAddress (para no dejar basura)
         payload.officeAddress = null;
+      }
 
-        setOfficeAddress('');
-        setSavedOfficeAddress('');
-        setOfficeLocalityQuery('');
-        setOfficeLocalityOpen(false);
-        // 👇 NO borres officeLocality, dejalo como último valor elegido
+      if (__DEV__) {
+        console.log('[saveServiceModes] payload', JSON.stringify(payload, null, 2));
       }
 
       await api.patch('/specialists/me', payload);
 
-      // ✅ actualizamos baseline para que el botón se apague
-      const streetForSnap = payload.serviceModes.includes('OFFICE')
-        ? streetOnly(payload.officeAddress ?? officeAddress)
-        : '';
-
-      const localityForSnap = payload.serviceModes.includes('OFFICE')
-        ? String(officeLocality ?? '').trim() || 'Río Cuarto'
-        : '';
-
-      serviceModesSnapRef.current = serviceModesSnapshot(
-        payload.serviceModes,
-        streetForSnap,
-        localityForSnap,
-      );
-      Alert.alert('Listo', 'Modalidades guardadas correctamente.');
-
-      // opcional pero recomendado para refrescar profile y que no quede desync
+      // ✅ refrescamos desde backend y dejamos que esa sea la única fuente de verdad
       await reloadProfileAndSubscription({ silent: true });
+
+      Alert.alert('Listo', 'Modalidades guardadas correctamente.');
     } catch (e: any) {
       const status = e?.response?.status;
       const data = e?.response?.data;

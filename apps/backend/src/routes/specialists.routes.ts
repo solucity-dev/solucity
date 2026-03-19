@@ -1195,7 +1195,7 @@ async function geocodeOfficeAddressWithFallback(params: {
   locality?: string | null;
 }) {
   const originalFormatted = String(params.formatted ?? '').trim();
-  const locality = String(params.locality ?? '').trim() || null;
+  const explicitLocality = String(params.locality ?? '').trim() || null;
 
   const parts = originalFormatted
     .split(',')
@@ -1203,7 +1203,9 @@ async function geocodeOfficeAddressWithFallback(params: {
     .filter(Boolean);
 
   const streetPart = String(parts[0] ?? '').trim();
-  const inferredLocality = (locality ?? String(parts[1] ?? '').trim()) || null;
+
+  // ✅ priorizamos la localidad explícita si vino del frontend
+  const inferredLocality = explicitLocality || String(parts[1] ?? '').trim() || null;
 
   const candidates = new Set<string>();
 
@@ -1218,26 +1220,47 @@ async function geocodeOfficeAddressWithFallback(params: {
 
   const normalizedOriginal = normalizeOfficeAddressText(originalFormatted);
   const normalizedStreet = normalizeOfficeAddressText(streetPart);
+  const normalizedLocality = inferredLocality ? normalizeOfficeAddressText(inferredLocality) : null;
 
+  // ✅ 1) primero probamos exactamente lo recibido
   pushCandidate(originalFormatted);
-  pushCandidate(normalizedOriginal);
 
+  // ✅ 2) luego la versión normalizada completa
+  if (normalizedOriginal && normalizedOriginal !== originalFormatted) {
+    pushCandidate(normalizedOriginal);
+  }
+
+  // ✅ 3) si hay calle + localidad, armamos variantes precisas
   if (streetPart && inferredLocality) {
     pushCandidate(`${streetPart}, ${inferredLocality}, Córdoba, Argentina`);
     pushCandidate(`${normalizedStreet}, ${inferredLocality}, Córdoba, Argentina`);
+
+    if (normalizedLocality && normalizedLocality !== inferredLocality) {
+      pushCandidate(`${streetPart}, ${normalizedLocality}, Córdoba, Argentina`);
+      pushCandidate(`${normalizedStreet}, ${normalizedLocality}, Córdoba, Argentina`);
+    }
+
     pushCandidate(`${streetPart}, ${inferredLocality}, Cordoba, Argentina`);
     pushCandidate(`${normalizedStreet}, ${inferredLocality}, Cordoba, Argentina`);
+
+    if (normalizedLocality && normalizedLocality !== inferredLocality) {
+      pushCandidate(`${streetPart}, ${normalizedLocality}, Cordoba, Argentina`);
+      pushCandidate(`${normalizedStreet}, ${normalizedLocality}, Cordoba, Argentina`);
+    }
   }
 
-  if (streetPart) {
+  // ✅ 4) solo si NO hay localidad explícita/inferida, recién probamos Córdoba genérico
+  if (streetPart && !inferredLocality) {
     pushCandidate(`${streetPart}, Córdoba, Argentina`);
     pushCandidate(`${normalizedStreet}, Córdoba, Argentina`);
     pushCandidate(`${streetPart}, Cordoba, Argentina`);
     pushCandidate(`${normalizedStreet}, Cordoba, Argentina`);
   }
 
+  // ✅ 5) versiones sin tildes al final
   for (const c of Array.from(candidates)) {
-    pushCandidate(deaccent(c));
+    const deaccented = deaccent(c);
+    if (deaccented !== c) pushCandidate(deaccented);
   }
 
   let geo: any = null;
@@ -1258,7 +1281,7 @@ async function geocodeOfficeAddressWithFallback(params: {
         break;
       }
     } catch {
-      // seguimos
+      // seguimos con el siguiente candidate
     }
   }
 

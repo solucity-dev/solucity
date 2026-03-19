@@ -1205,6 +1205,12 @@ function deaccent(input: string): string {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
+function stripStreetNumber(input: string): string {
+  return String(input ?? '')
+    .replace(/\s+\d+[A-Za-z]?(?:\s*(?:bis|BIS))?\s*$/i, '')
+    .trim();
+}
+
 async function geocodeOfficeAddressWithFallback(params: {
   formatted: string;
   locality?: string | null;
@@ -1235,11 +1241,13 @@ async function geocodeOfficeAddressWithFallback(params: {
   const normalizedStreet = normalizeOfficeAddressText(streetPart);
   const normalizedLocality = inferredLocality ? normalizeOfficeAddressText(inferredLocality) : null;
 
-  // variante sin tipo de calle: "pasaje Alfredo..." -> "Alfredo..."
   const streetWithoutPrefix = normalizedStreet.replace(
     /^(pasaje|avenida|boulevard|general|doctor)\s+/i,
     '',
   );
+
+  const streetWithoutNumber = stripStreetNumber(normalizedStreet);
+  const streetWithoutPrefixAndNumber = stripStreetNumber(streetWithoutPrefix);
 
   // 1) exacta
   pushCandidate(originalFormatted);
@@ -1249,7 +1257,7 @@ async function geocodeOfficeAddressWithFallback(params: {
     pushCandidate(normalizedOriginal);
   }
 
-  // 3) variantes precisas con localidad
+  // 3) variantes con localidad
   if (streetPart && inferredLocality) {
     pushCandidate(`${streetPart}, ${inferredLocality}, Córdoba, Argentina`);
     pushCandidate(`${normalizedStreet}, ${inferredLocality}, Córdoba, Argentina`);
@@ -1259,7 +1267,7 @@ async function geocodeOfficeAddressWithFallback(params: {
       pushCandidate(`${normalizedStreet}, ${normalizedLocality}, Córdoba, Argentina`);
     }
 
-    // sin prefijo de calle
+    // sin prefijo
     if (streetWithoutPrefix && streetWithoutPrefix !== normalizedStreet) {
       pushCandidate(`${streetWithoutPrefix}, ${inferredLocality}, Córdoba, Argentina`);
       if (normalizedLocality) {
@@ -1267,7 +1275,31 @@ async function geocodeOfficeAddressWithFallback(params: {
       }
     }
 
-    // variantes sin "Córdoba" por si el proveedor responde mejor más corto
+    // ✅ sin altura
+    if (streetWithoutNumber && streetWithoutNumber !== normalizedStreet) {
+      pushCandidate(`${streetWithoutNumber}, ${inferredLocality}, Córdoba, Argentina`);
+      pushCandidate(`${streetWithoutNumber}, ${inferredLocality}, Argentina`);
+
+      if (normalizedLocality) {
+        pushCandidate(`${streetWithoutNumber}, ${normalizedLocality}, Córdoba, Argentina`);
+      }
+    }
+
+    // ✅ sin prefijo y sin altura
+    if (
+      streetWithoutPrefixAndNumber &&
+      streetWithoutPrefixAndNumber !== streetWithoutPrefix &&
+      streetWithoutPrefixAndNumber !== normalizedStreet
+    ) {
+      pushCandidate(`${streetWithoutPrefixAndNumber}, ${inferredLocality}, Córdoba, Argentina`);
+      pushCandidate(`${streetWithoutPrefixAndNumber}, ${inferredLocality}, Argentina`);
+
+      if (normalizedLocality) {
+        pushCandidate(`${streetWithoutPrefixAndNumber}, ${normalizedLocality}, Córdoba, Argentina`);
+      }
+    }
+
+    // variantes más cortas
     pushCandidate(`${streetPart}, ${inferredLocality}, Argentina`);
     pushCandidate(`${normalizedStreet}, ${inferredLocality}, Argentina`);
 
@@ -1279,7 +1311,7 @@ async function geocodeOfficeAddressWithFallback(params: {
     pushCandidate(`${normalizedStreet}, ${inferredLocality}, Cordoba, Argentina`);
   }
 
-  // 4) si no hubo localidad, recién ahí Córdoba genérico
+  // 4) si no hubo localidad, recién ahí usamos variantes genéricas
   if (streetPart && !inferredLocality) {
     pushCandidate(`${streetPart}, Córdoba, Argentina`);
     pushCandidate(`${normalizedStreet}, Córdoba, Argentina`);
@@ -1288,11 +1320,16 @@ async function geocodeOfficeAddressWithFallback(params: {
       pushCandidate(`${streetWithoutPrefix}, Córdoba, Argentina`);
     }
 
+    if (streetWithoutNumber && streetWithoutNumber !== normalizedStreet) {
+      pushCandidate(`${streetWithoutNumber}, Córdoba, Argentina`);
+      pushCandidate(`${streetWithoutNumber}, Argentina`);
+    }
+
     pushCandidate(`${streetPart}, Argentina`);
     pushCandidate(`${normalizedStreet}, Argentina`);
   }
 
-  // 5) sin tildes
+  // 5) variantes sin tildes
   for (const c of Array.from(candidates)) {
     const deaccented = deaccent(c);
     if (deaccented !== c) pushCandidate(deaccented);

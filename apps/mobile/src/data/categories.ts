@@ -271,7 +271,7 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     {
       id: 'registro-de-marcas',
       title: 'Registro de marcas',
-      icon: { set: 'mdi', name: 'stamp-outline' },
+      icon: { set: 'ion', name: 'pricetag-outline' },
     },
   ],
 
@@ -384,7 +384,7 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     {
       id: 'costura-modista',
       title: 'Costura / Modista',
-      icon: { set: 'mdi', name: 'needle-thread' },
+      icon: { set: 'ion', name: 'shirt-outline' },
     },
   ],
 };

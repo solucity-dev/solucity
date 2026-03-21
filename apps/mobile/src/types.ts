@@ -7,15 +7,12 @@ export type RootCategoryId =
   | 'seguridad'
   | 'servicios'
   | 'salud'
-  | 'gastronomia'
+  | 'holistico-bienestar'
+  | 'digital'
   | 'profesionales'
   | 'estetica'
   | 'transporte'
-  | 'alquiler';
-/**
- * Slugs de rubros (categorías hijas).
- * ✅ Regla: minúsculas, sin tildes, sin espacios, sin "/" y con guiones.
- */
+  | 'arreglos-reparaciones';
 
 /**
  * Slugs de rubros (categorías hijas).
@@ -39,14 +36,15 @@ export type CategorySlug =
   | 'aberturas'
   | 'impermeabilizacion'
   | 'zingueria'
+  | 'tapizado'
   // ── Informática & Electrónica ─────────────────────────────
   | 'climatizacion'
-  | 'servicio-tecnico-electronica'
-  | 'servicio-tecnico-electrodomesticos'
-  | 'servicio-tecnico-informatica'
   | 'carteleria'
+  | 'servicio-tecnico-electronica'
   | 'reparacion-de-celulares'
+  | 'servicio-tecnico-electrodomesticos'
   | 'servicio-tecnico-audiovisual'
+  | 'servicio-tecnico-informatica'
   // ── Seguridad ─────────────────────────────────────────────
   | 'cerrajeria'
   | 'camaras-y-alarmas'
@@ -56,9 +54,8 @@ export type CategorySlug =
   | 'limpieza'
   | 'clases-particulares'
   | 'paseador-de-perros'
-  | 'fletes'
-  | 'diseno-de-interiores'
   | 'cuidado-de-mascotas'
+  | 'diseno-de-interiores'
   | 'organizacion-de-eventos'
   | 'fotografia-y-video'
   | 'atencion-al-cliente'
@@ -71,13 +68,19 @@ export type CategorySlug =
   | 'psicopedagoga'
   | 'kinesiologia'
   | 'cuidador-de-pacientes'
-  // ── Gastronomía ───────────────────────────────────────────
-  | 'camarero-mozo'
-  | 'cocinero'
-  | 'bartender'
-  | 'catering'
-  | 'ayudante-de-cocina'
-  | 'bachero'
+  // ── Holístico y bienestar ─────────────────────────────────
+  | 'reiki'
+  | 'yoga'
+  | 'meditacion-guiada'
+  | 'terapias-holisticas'
+  | 'masajes-holisticos'
+  // ── Digital ───────────────────────────────────────────────
+  | 'marketing-digital'
+  | 'diseno-grafico'
+  | 'diseno-de-logos'
+  | 'community-manager'
+  | 'desarrollo-web'
+  | 'registro-de-marcas'
   // ── Profesionales ─────────────────────────────────────────
   | 'abogado'
   | 'contador'
@@ -85,6 +88,7 @@ export type CategorySlug =
   | 'arquitecto'
   | 'ingeniero'
   | 'pas-productor-asesor-de-seguros'
+  | 'mandatario-del-automotor'
   // ── Estética ──────────────────────────────────────────────
   | 'peluqueria'
   | 'barberia'
@@ -95,21 +99,21 @@ export type CategorySlug =
   | 'masajes'
   | 'spa-estetica-corporal'
   | 'cejas-y-pestanas'
-  // ── Transporte ──────────────────────────────────────────────
+  | 'tatuajes'
+  | 'piercing'
+  // ── Transporte ────────────────────────────────────────────
   | 'traslado-de-pasajeros'
   | 'chofer-particular'
+  | 'fletes'
   | 'auxilio-vehicular'
-  // ── Alquiler ──────────────────────────────────────────────
-  | 'alquiler-de-herramientas'
-  | 'alquiler-de-maquinaria-liviana'
-  | 'alquiler-de-maquinaria-pesada'
-  | 'alquiler-de-generadores'
-  | 'alquiler-de-andamios'
-  | 'alquiler-de-hidrolavadoras'
-  | 'alquiler-de-hormigoneras'
-  | 'alquiler-de-elevadores'
-  | 'alquiler-de-equipos-de-sonido-e-iluminacion'
-  | 'alquiler-de-carpas-y-mobiliario';
+  | 'reparacion-de-bicicletas'
+  | 'mecanico-automotor'
+  | 'electricidad-del-automotor'
+  | 'mecanica-de-motos'
+  // ── Arreglos y reparaciones ───────────────────────────────
+  | 'reparacion-de-calzado'
+  | 'arreglos-de-indumentaria'
+  | 'costura-modista';
 
 /** Tabs principales del cliente */
 export type ClientTabsParamList = {

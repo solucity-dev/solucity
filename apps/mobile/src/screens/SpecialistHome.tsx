@@ -146,32 +146,62 @@ const SPECIALTY_OPTIONS = [
   'piscinas',
   'desagote-y-banos-quimicos',
   'soldador',
+  'porcelanato-liquido',
+  'vidrieria',
+  'aberturas',
+  'impermeabilizacion',
+  'zingueria',
+  'tapizado',
 
   // ── Informática & Electrónica ─────────────────────────────
   'climatizacion',
+  'carteleria',
   'servicio-tecnico-electronica',
+  'reparacion-de-celulares',
   'servicio-tecnico-electrodomesticos',
+  'servicio-tecnico-audiovisual',
   'servicio-tecnico-informatica',
 
   // ── Seguridad ─────────────────────────────────────────────
-  'cerrajeria',
   'camaras-y-alarmas',
+  'cerrajeria',
   'personal-de-seguridad',
+  'cercos-electricos-perimetrales',
 
-  // ── Servicios Generales ───────────────────────────────────
+  // ── Servicios ─────────────────────────────────────────────
   'limpieza',
   'clases-particulares',
   'paseador-de-perros',
-  'acompanante-terapeutico',
-  'fletes',
+  'cuidado-de-mascotas',
   'diseno-de-interiores',
+  'organizacion-de-eventos',
+  'fotografia-y-video',
+  'atencion-al-cliente',
 
-  // ── Gastronomía ───────────────────────────────────────────
-  'camarero-mozo',
-  'cocinero',
-  'bartender',
-  'catering',
-  'ayudante-de-cocina',
+  // ── Salud ─────────────────────────────────────────────────
+  'acompanante-terapeutico',
+  'psicologo',
+  'psiquiatra',
+  'asistencia-medica',
+  'nutricionista',
+  'psicopedagoga',
+  'kinesiologia',
+  'cuidador-de-pacientes',
+
+  // ── Holístico y bienestar ─────────────────────────────────
+  'reiki',
+  'yoga',
+  'meditacion-guiada',
+  'terapias-holisticas',
+  'masajes-holisticos',
+
+  // ── Digital ───────────────────────────────────────────────
+  'marketing-digital',
+  'diseno-grafico',
+  'diseno-de-logos',
+  'community-manager',
+  'desarrollo-web',
+  'registro-de-marcas',
 
   // ── Profesionales ─────────────────────────────────────────
   'abogado',
@@ -179,32 +209,84 @@ const SPECIALTY_OPTIONS = [
   'escribano',
   'arquitecto',
   'ingeniero',
+  'pas-productor-asesor-de-seguros',
+  'mandatario-del-automotor',
+
+  // ── Estética ──────────────────────────────────────────────
+  'peluqueria',
+  'barberia',
+  'manicuria-unas',
+  'maquillaje',
+  'depilacion',
+  'cosmetologia',
+  'masajes',
+  'spa-estetica-corporal',
+  'cejas-y-pestanas',
+  'tatuajes',
+  'piercing',
 
   // ── Transporte ────────────────────────────────────────────
   'traslado-de-pasajeros',
   'chofer-particular',
+  'fletes',
   'auxilio-vehicular',
+  'reparacion-de-bicicletas',
+  'mecanico-automotor',
+  'electricidad-del-automotor',
+  'mecanica-de-motos',
+
+  // ── Arreglos y reparaciones ───────────────────────────────
+  'reparacion-de-calzado',
+  'arreglos-de-indumentaria',
+  'costura-modista',
 ] as const;
 
 const REQUIRES_CERT_FALLBACK = new Set([
-  'plomeria-gasista',
+  // Construcción
   'electricidad',
+  'plomeria-gasista',
+  'desagote-y-banos-quimicos',
+
+  // Informática y electrónica
   'climatizacion',
   'servicio-tecnico-electronica',
   'servicio-tecnico-electrodomesticos',
   'servicio-tecnico-informatica',
+  'servicio-tecnico-audiovisual',
+
+  // Seguridad
   'camaras-y-alarmas',
-  'personal-de-seguridad',
   'cerrajeria',
-  'acompanante-terapeutico',
+  'personal-de-seguridad',
+  'cercos-electricos-perimetrales',
+
+  // Servicios
   'diseno-de-interiores',
+
+  // Salud
+  'acompanante-terapeutico',
+  'psicologo',
+  'psiquiatra',
+  'asistencia-medica',
+  'nutricionista',
+  'psicopedagoga',
+  'kinesiologia',
+  'cuidador-de-pacientes',
+
+  // Profesionales
   'abogado',
   'contador',
   'escribano',
   'arquitecto',
   'ingeniero',
-  'psicologo',
-  'psiquiatra',
+  'pas-productor-asesor-de-seguros',
+  'mandatario-del-automotor',
+
+  // Transporte
+  'fletes',
+  'traslado-de-pasajeros',
+  'chofer-particular',
+  'auxilio-vehicular',
 ]);
 
 // 🔒 Rubros legacy que queremos ocultar SOLO en SpecialistHome

@@ -6,7 +6,7 @@ import * as Font from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Modal, Pressable, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -34,13 +34,52 @@ export default function App() {
   const [versionLoading, setVersionLoading] = useState(true);
   const [versionInfo, setVersionInfo] = useState<VersionCheckResult | null>(null);
   const [dismissedSoftUpdate, setDismissedSoftUpdate] = useState(false);
+  const lastVersionCodeRef = useRef<number | null>(null);
 
+  const runVersionCheck = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent ?? false;
+
+    try {
+      if (!silent) {
+        setVersionLoading(true);
+      }
+
+      const result = await checkAppVersion();
+
+      setVersionInfo(result ?? null);
+
+      const nextLatest = result?.latestVersionCode ?? null;
+      const prevLatest = lastVersionCodeRef.current;
+
+      if (nextLatest != null && prevLatest != null && nextLatest > prevLatest) {
+        setDismissedSoftUpdate(false);
+      }
+
+      if (nextLatest != null) {
+        lastVersionCodeRef.current = nextLatest;
+      }
+    } catch (e) {
+      if (__DEV__) console.log('[versionCheck] error', e);
+      if (!silent) {
+        setVersionInfo(null);
+      }
+    } finally {
+      if (!silent) {
+        setVersionLoading(false);
+      }
+    }
+  }, []);
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       focusManager.setFocused(state === 'active');
+
+      if (state === 'active') {
+        runVersionCheck({ silent: true });
+      }
     });
+
     return () => sub.remove();
-  }, []);
+  }, [runVersionCheck]);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,30 +101,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const result = await checkAppVersion();
-        if (!cancelled) {
-          setVersionInfo(result);
-        }
-      } catch (e) {
-        if (__DEV__) console.log('[versionCheck] error', e);
-        if (!cancelled) {
-          setVersionInfo(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setVersionLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    runVersionCheck();
+  }, [runVersionCheck]);
 
   if (!fontsReady || versionLoading) {
     return null;

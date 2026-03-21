@@ -15,17 +15,30 @@ export const ROOT_CATEGORIES: { id: RootCategoryId; title: string; icon: IconSpe
     title: 'Informática y electrónica',
     icon: { set: 'mdi', name: 'laptop' },
   },
-  { id: 'seguridad', title: 'Seguridad', icon: { set: 'mdi', name: 'shield-lock-outline' } },
-  { id: 'servicios', title: 'Servicios', icon: { set: 'mdi', name: 'hand-heart-outline' } },
+  {
+    id: 'seguridad',
+    title: 'Seguridad',
+    icon: { set: 'mdi', name: 'shield-lock-outline' },
+  },
+  {
+    id: 'servicios',
+    title: 'Servicios',
+    icon: { set: 'mdi', name: 'hand-heart-outline' },
+  },
   {
     id: 'salud',
     title: 'Salud',
     icon: { set: 'mdi', name: 'hospital-box-outline' },
   },
   {
-    id: 'gastronomia',
-    title: 'Gastronomía',
-    icon: { set: 'mdi', name: 'silverware-fork-knife' },
+    id: 'holistico-bienestar',
+    title: 'Holístico y bienestar',
+    icon: { set: 'mdi', name: 'meditation' },
+  },
+  {
+    id: 'digital',
+    title: 'Digital',
+    icon: { set: 'mdi', name: 'monitor-dashboard' },
   },
   {
     id: 'profesionales',
@@ -35,7 +48,7 @@ export const ROOT_CATEGORIES: { id: RootCategoryId; title: string; icon: IconSpe
   {
     id: 'estetica',
     title: 'Estética',
-    icon: { set: 'mdi', name: 'face-woman-shimmer' }, // alternativa: 'content-cut' o 'spa'
+    icon: { set: 'mdi', name: 'face-woman-shimmer' },
   },
   {
     id: 'transporte',
@@ -43,9 +56,9 @@ export const ROOT_CATEGORIES: { id: RootCategoryId; title: string; icon: IconSpe
     icon: { set: 'mdi', name: 'car-multiple' },
   },
   {
-    id: 'alquiler',
-    title: 'Alquiler',
-    icon: { set: 'mdi', name: 'warehouse' },
+    id: 'arreglos-reparaciones',
+    title: 'Arreglos y reparaciones',
+    icon: { set: 'mdi', name: 'wrench-cog' },
   },
 ];
 
@@ -53,10 +66,13 @@ export const ROOT_CATEGORIES: { id: RootCategoryId; title: string; icon: IconSpe
 export const ROOT_CATEGORY_MAP: Record<
   RootCategoryId,
   { id: RootCategoryId; title: string; icon: IconSpec }
-> = ROOT_CATEGORIES.reduce((acc, c) => {
-  acc[c.id] = c;
-  return acc;
-}, {} as any);
+> = ROOT_CATEGORIES.reduce(
+  (acc, c) => {
+    acc[c.id] = c;
+    return acc;
+  },
+  {} as Record<RootCategoryId, { id: RootCategoryId; title: string; icon: IconSpec }>,
+);
 
 export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
   'construccion-mantenimiento': [
@@ -65,21 +81,18 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     { id: 'yeseria-durlock', title: 'Yesería / Durlock', icon: { set: 'mdi', name: 'saw-blade' } },
     { id: 'carpinteria', title: 'Carpintería', icon: { set: 'mdi', name: 'ruler-square' } },
     { id: 'herreria', title: 'Herrería', icon: { set: 'mdi', name: 'anvil' } },
-
-    // ✅ slug real del backend
     {
       id: 'plomeria-gasista',
       title: 'Plomería / Gasista',
       icon: { set: 'mdi', name: 'pipe-wrench' },
     },
-
     { id: 'pintura', title: 'Pintura', icon: { set: 'mdi', name: 'format-paint' } },
     { id: 'jardineria', title: 'Jardinería', icon: { set: 'mdi', name: 'shovel' } },
     { id: 'piscinas', title: 'Piscinas', icon: { set: 'mdi', name: 'pool' } },
     {
       id: 'desagote-y-banos-quimicos',
       title: 'Desagote y baños químicos',
-      icon: { set: 'mdi', name: 'toilet' }, // o 'truck-water' si preferís
+      icon: { set: 'mdi', name: 'toilet' },
     },
     { id: 'soldador', title: 'Soldador', icon: { set: 'mdi', name: 'torch' } },
     {
@@ -95,9 +108,7 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
   ],
 
   'informatica-electronica': [
-    // ✅ Climatización va acá (NO en construcción)
     { id: 'climatizacion', title: 'Climatización', icon: { set: 'mdi', name: 'air-conditioner' } },
-
     {
       id: 'servicio-tecnico-electronica',
       title: 'Servicio técnico (electrónica)',
@@ -156,11 +167,10 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
       icon: { set: 'mdi', name: 'calendar-star' },
     },
     { id: 'fotografia-y-video', title: 'Fotografía y video', icon: { set: 'mdi', name: 'camera' } },
-
     {
       id: 'diseno-de-interiores',
       title: 'Diseño de interiores',
-      icon: { set: 'mdi', name: 'sofa' }, // o 'palette-swatch'
+      icon: { set: 'mdi', name: 'sofa' },
     },
     {
       id: 'atencion-al-cliente',
@@ -212,20 +222,56 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     },
   ],
 
-  gastronomia: [
-    { id: 'camarero-mozo', title: 'Camarero / Mozo', icon: { set: 'mdi', name: 'account-tie' } },
-    { id: 'cocinero', title: 'Cocinero', icon: { set: 'mdi', name: 'chef-hat' } },
-    { id: 'bartender', title: 'Bartender', icon: { set: 'mdi', name: 'glass-cocktail' } },
-    { id: 'catering', title: 'Catering', icon: { set: 'mdi', name: 'food' } },
+  'holistico-bienestar': [
+    { id: 'reiki', title: 'Reiki', icon: { set: 'mdi', name: 'hands-pray' } },
+    { id: 'yoga', title: 'Yoga', icon: { set: 'mdi', name: 'yoga' } },
     {
-      id: 'ayudante-de-cocina',
-      title: 'Ayudante de cocina',
-      icon: { set: 'mdi', name: 'silverware' },
+      id: 'meditacion-guiada',
+      title: 'Meditación guiada',
+      icon: { set: 'mdi', name: 'meditation' },
     },
     {
-      id: 'bachero',
-      title: 'Bachero',
-      icon: { set: 'mdi', name: 'dishwasher' }, // si no existe, usá 'silverware-clean' o 'broom'
+      id: 'terapias-holisticas',
+      title: 'Terapias holísticas',
+      icon: { set: 'mdi', name: 'leaf-circle-outline' },
+    },
+    {
+      id: 'masajes-holisticos',
+      title: 'Masajes holísticos',
+      icon: { set: 'mdi', name: 'spa' },
+    },
+  ],
+
+  digital: [
+    {
+      id: 'marketing-digital',
+      title: 'Marketing digital',
+      icon: { set: 'mdi', name: 'bullhorn-outline' },
+    },
+    {
+      id: 'diseno-grafico',
+      title: 'Diseño gráfico',
+      icon: { set: 'mdi', name: 'palette-outline' },
+    },
+    {
+      id: 'diseno-de-logos',
+      title: 'Diseño de logos',
+      icon: { set: 'mdi', name: 'shape-outline' },
+    },
+    {
+      id: 'community-manager',
+      title: 'Community manager',
+      icon: { set: 'mdi', name: 'account-group-outline' },
+    },
+    {
+      id: 'desarrollo-web',
+      title: 'Desarrollo web',
+      icon: { set: 'mdi', name: 'web' },
+    },
+    {
+      id: 'registro-de-marcas',
+      title: 'Registro de marcas',
+      icon: { set: 'mdi', name: 'stamp-outline' },
     },
   ],
 
@@ -240,6 +286,11 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
       title: 'PAS - Productor asesor de seguros',
       icon: { set: 'mdi', name: 'shield-check-outline' },
     },
+    {
+      id: 'mandatario-del-automotor',
+      title: 'Mandatario del automotor',
+      icon: { set: 'mdi', name: 'file-document-edit-outline' },
+    },
   ],
 
   estetica: [
@@ -253,16 +304,26 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     { id: 'maquillaje', title: 'Maquillaje', icon: { set: 'mdi', name: 'brush' } },
     { id: 'depilacion', title: 'Depilación', icon: { set: 'mdi', name: 'razor-double-edge' } },
     { id: 'cosmetologia', title: 'Cosmetología', icon: { set: 'mdi', name: 'lotion' } },
-    { id: 'masajes', title: 'Masajes', icon: { set: 'mdi', name: 'spa' } },
+    { id: 'masajes', title: 'Masajes', icon: { set: 'mdi', name: 'spa-outline' } },
     {
       id: 'spa-estetica-corporal',
       title: 'Spa / Estética corporal',
-      icon: { set: 'mdi', name: 'spa-outline' },
+      icon: { set: 'mdi', name: 'flower-tulip-outline' },
     },
     {
       id: 'cejas-y-pestanas',
       title: 'Cejas y pestañas',
       icon: { set: 'mdi', name: 'eye-outline' },
+    },
+    {
+      id: 'tatuajes',
+      title: 'Tatuajes',
+      icon: { set: 'mdi', name: 'needle' },
+    },
+    {
+      id: 'piercing',
+      title: 'Piercing',
+      icon: { set: 'mdi', name: 'circle-outline' },
     },
   ],
 
@@ -287,58 +348,43 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
       title: 'Auxilio vehicular',
       icon: { set: 'mdi', name: 'car-wrench' },
     },
+    {
+      id: 'reparacion-de-bicicletas',
+      title: 'Reparación de bicicletas',
+      icon: { set: 'mdi', name: 'bike' },
+    },
+    {
+      id: 'mecanico-automotor',
+      title: 'Mecánico automotor',
+      icon: { set: 'mdi', name: 'engine' },
+    },
+    {
+      id: 'electricidad-del-automotor',
+      title: 'Electricidad del automotor',
+      icon: { set: 'mdi', name: 'car-electric' },
+    },
+    {
+      id: 'mecanica-de-motos',
+      title: 'Mecánica de motos',
+      icon: { set: 'mdi', name: 'motorbike' },
+    },
   ],
 
-  alquiler: [
+  'arreglos-reparaciones': [
     {
-      id: 'alquiler-de-herramientas',
-      title: 'Alquiler de herramientas',
-      icon: { set: 'mdi', name: 'toolbox-outline' },
+      id: 'reparacion-de-calzado',
+      title: 'Reparación de calzado',
+      icon: { set: 'mdi', name: 'shoe-formal' },
     },
     {
-      id: 'alquiler-de-maquinaria-liviana',
-      title: 'Alquiler de maquinaria liviana',
-      icon: { set: 'mdi', name: 'engine-outline' },
+      id: 'arreglos-de-indumentaria',
+      title: 'Arreglos de indumentaria',
+      icon: { set: 'mdi', name: 'hanger' },
     },
     {
-      id: 'alquiler-de-maquinaria-pesada',
-      title: 'Alquiler de maquinaria pesada',
-      icon: { set: 'mdi', name: 'excavator' },
-    },
-    {
-      id: 'alquiler-de-generadores',
-      title: 'Alquiler de generadores',
-      icon: { set: 'mdi', name: 'generator-mobile' },
-    },
-    {
-      id: 'alquiler-de-andamios',
-      title: 'Alquiler de andamios',
-      icon: { set: 'mdi', name: 'stairs' },
-    },
-    {
-      id: 'alquiler-de-hidrolavadoras',
-      title: 'Alquiler de hidrolavadoras',
-      icon: { set: 'mdi', name: 'water-pump' },
-    },
-    {
-      id: 'alquiler-de-hormigoneras',
-      title: 'Alquiler de hormigoneras',
-      icon: { set: 'mdi', name: 'truck' },
-    },
-    {
-      id: 'alquiler-de-elevadores',
-      title: 'Alquiler de elevadores',
-      icon: { set: 'mdi', name: 'elevator' },
-    },
-    {
-      id: 'alquiler-de-equipos-de-sonido-e-iluminacion',
-      title: 'Alquiler de sonido e iluminación',
-      icon: { set: 'mdi', name: 'speaker-multiple' },
-    },
-    {
-      id: 'alquiler-de-carpas-y-mobiliario',
-      title: 'Alquiler de carpas y mobiliario',
-      icon: { set: 'mdi', name: 'tent' },
+      id: 'costura-modista',
+      title: 'Costura / Modista',
+      icon: { set: 'mdi', name: 'needle-thread' },
     },
   ],
 };

@@ -15,6 +15,7 @@ type GroupSeed = {
   name: string;
   slug: string;
   rubros: string[];
+  isActive?: boolean;
 };
 
 const groups: GroupSeed[] = [
@@ -93,15 +94,20 @@ const groups: GroupSeed[] = [
     ],
   },
   {
-    name: 'Gastronomía',
-    slug: 'gastronomia',
+    name: 'Holístico y bienestar',
+    slug: 'holistico-bienestar',
+    rubros: ['Reiki', 'Yoga', 'Meditación guiada', 'Terapias holísticas', 'Masajes holísticos'],
+  },
+  {
+    name: 'Digital',
+    slug: 'digital',
     rubros: [
-      'Camarero / Mozo',
-      'Cocinero',
-      'Bartender',
-      'Catering',
-      'Ayudante de cocina',
-      'Bachero',
+      'Marketing digital',
+      'Diseño gráfico',
+      'Diseño de logos',
+      'Community manager',
+      'Desarrollo web',
+      'Registro de marcas',
     ],
   },
   {
@@ -114,6 +120,7 @@ const groups: GroupSeed[] = [
       'Arquitecto',
       'Ingeniero',
       'PAS - Productor Asesor de Seguros',
+      'Mandatario del automotor',
     ],
   },
   {
@@ -129,16 +136,46 @@ const groups: GroupSeed[] = [
       'Masajes',
       'Spa / Estética corporal',
       'Cejas y pestañas',
+      'Tatuajes',
+      'Piercing',
     ],
   },
   {
     name: 'Transporte',
     slug: 'transporte',
-    rubros: ['Traslado de pasajeros', 'Chofer particular', 'Fletes', 'Auxilio vehicular'],
+    rubros: [
+      'Traslado de pasajeros',
+      'Chofer particular',
+      'Fletes',
+      'Auxilio vehicular',
+      'Reparación de bicicletas',
+      'Mecánico automotor',
+      'Electricidad del automotor',
+      'Mecánica de motos',
+    ],
+  },
+  {
+    name: 'Arreglos y reparaciones',
+    slug: 'arreglos-reparaciones',
+    rubros: ['Reparación de calzado', 'Arreglos de indumentaria', 'Costura / Modista'],
+  },
+  {
+    name: 'Gastronomía',
+    slug: 'gastronomia',
+    isActive: false,
+    rubros: [
+      'Camarero / Mozo',
+      'Cocinero',
+      'Bartender',
+      'Catering',
+      'Ayudante de cocina',
+      'Bachero',
+    ],
   },
   {
     name: 'Alquiler',
     slug: 'alquiler',
+    isActive: false,
     rubros: [
       'Alquiler de herramientas',
       'Alquiler de maquinaria liviana',
@@ -207,6 +244,7 @@ const REQUIRES_CERTIFICATION = new Set<string>([
   'arquitecto',
   'ingeniero',
   'pas-productor-asesor-de-seguros',
+  'mandatario-del-automotor',
 
   // Transporte
   'fletes',
@@ -216,21 +254,27 @@ const REQUIRES_CERTIFICATION = new Set<string>([
 ]);
 
 async function upsertCategories() {
+  const seededGroupSlugs = new Set<string>();
+  const seededCategorySlugs = new Set<string>();
+
   for (let i = 0; i < groups.length; i++) {
     const g = groups[i];
+    const groupIsActive = g.isActive ?? true;
+
+    seededGroupSlugs.add(g.slug);
 
     const group = await prisma.serviceCategoryGroup.upsert({
       where: { slug: g.slug },
       update: {
         name: g.name,
         sortOrder: i + 1,
-        isActive: true,
+        isActive: groupIsActive,
       },
       create: {
         name: g.name,
         slug: g.slug,
         sortOrder: i + 1,
-        isActive: true,
+        isActive: groupIsActive,
       },
     });
 
@@ -238,24 +282,42 @@ async function upsertCategories() {
       const slug = slugify(r);
       const requiresCertification = REQUIRES_CERTIFICATION.has(slug);
 
+      seededCategorySlugs.add(slug);
+
       await prisma.serviceCategory.upsert({
         where: { slug },
         update: {
           name: r,
-          groupId: group.id, // por si antes estaba mal asociado
-          isActive: true,
+          groupId: group.id,
+          isActive: groupIsActive,
           requiresCertification,
         },
         create: {
           name: r,
           slug,
           groupId: group.id,
-          isActive: true,
+          isActive: groupIsActive,
           requiresCertification,
         },
       });
     }
   }
+
+  // Desactivar grupos que ya no estén en el seed
+  await prisma.serviceCategoryGroup.updateMany({
+    where: {
+      slug: { notIn: Array.from(seededGroupSlugs) },
+    },
+    data: { isActive: false },
+  });
+
+  // Desactivar categorías que ya no estén en el seed
+  await prisma.serviceCategory.updateMany({
+    where: {
+      slug: { notIn: Array.from(seededCategorySlugs) },
+    },
+    data: { isActive: false },
+  });
 }
 
 async function createDemoUsers() {
@@ -454,7 +516,15 @@ async function createDemoUsers() {
  * ========= NUEVO: especialistas demo para TODOS los rubros =========
  */
 async function createDemoSpecialists() {
-  const allCats = await prisma.serviceCategory.findMany({ include: { group: true } });
+  const allCats = await prisma.serviceCategory.findMany({
+    where: {
+      isActive: true,
+      group: {
+        isActive: true,
+      },
+    },
+    include: { group: true },
+  });
   if (!allCats.length) {
     console.warn('⚠️ Aún no hay categorías. Llamá a upsertCategories() antes.');
     return;

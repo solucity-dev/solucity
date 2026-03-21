@@ -198,7 +198,7 @@ const REQUIRES_CERTIFICATION = new Set<string>([
   'nutricionista',
   'psicopedagoga',
   'kinesiologia',
-  'cuidador de pacientes',
+  'cuidador-de-pacientes',
 
   // Profesionales
   'abogado',
@@ -212,7 +212,7 @@ const REQUIRES_CERTIFICATION = new Set<string>([
   'fletes',
   'traslado-de-pasajeros',
   'chofer-particular',
-  'Auxilio vehicular',
+  'auxilio-vehicular',
 ]);
 
 async function upsertCategories() {

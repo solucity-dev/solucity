@@ -15,6 +15,7 @@ import { geocodeAddress } from '../services/geocode';
 import { notifyBackgroundCheckStatus } from '../services/notifyBackgroundCheck';
 import { notifyKycStatus } from '../services/notifyKyc';
 import { canSpecialistBeVisible } from '../services/subscriptionGate';
+import { getOrCreateSubscriptionForSpecialist } from '../services/subscriptionService';
 import { dbg, debugUploads } from '../utils/debug';
 
 /** ========= Storage local (MVP) ========= **/
@@ -315,6 +316,22 @@ async function hasApprovedBackgroundCheck(specialistId: string) {
     select: { status: true },
   });
   return bg?.status === 'APPROVED';
+}
+
+async function getMaxAllowedRadiusKmForUser(userId: string): Promise<number> {
+  const spec = await prisma.specialistProfile.findUnique({
+    where: { userId },
+    select: {
+      specialties: {
+        select: {
+          category: { select: { slug: true } },
+        },
+      },
+    },
+  });
+
+  const slugs = spec?.specialties.map((s) => s.category.slug) ?? [];
+  return slugs.includes('auxilio-vehicular') ? 200 : 30;
 }
 
 /** ===== helper: disponibilidad real (KYC + BG + horario + toggle + user ok) ===== */
@@ -1023,7 +1040,7 @@ router.post('/register', auth, async (req: AuthReq, res: Response) => {
     const schema = z.object({
       specialties: z.array(z.string().min(1)).min(1),
       visitPrice: z.coerce.number().int().nonnegative().optional(),
-      radiusKm: z.coerce.number().positive().optional(),
+      radiusKm: z.coerce.number().int().min(1).max(200).optional(),
       pricingLabel: z.string().max(40).optional().nullable(), // ✅ NUEVO (opt)
       availability: z.any().optional(),
       bio: z.string().optional().default(''),
@@ -1125,9 +1142,13 @@ router.post('/register', auth, async (req: AuthReq, res: Response) => {
 
     const token = signToken({ sub: updatedUser.id, role: updatedUser.role });
 
-    // 5) sync index
+    // 5) asegurar suscripción/trial inicial
+    await getOrCreateSubscriptionForSpecialist(userId);
+    console.log(`[spec/register] t3 after_subscription_init ms=${Date.now() - t0}`);
+
+    // 6) sync index
     await syncSearchIndexForUser(userId);
-    console.log(`[spec/register] t3 after_search_index ms=${Date.now() - t0}`);
+    console.log(`[spec/register] t4 after_search_index ms=${Date.now() - t0}`);
 
     console.log(`[spec/register] tEnd total_ms=${Date.now() - t0}`);
 
@@ -1394,7 +1415,7 @@ const PatchMeSchema = z.object({
   bio: z.string().max(1000).optional(),
   specialtyHeadline: z.string().max(60).optional().nullable(),
   available: z.boolean().optional(),
-  radiusKm: z.coerce.number().int().min(0).max(30).optional(),
+  radiusKm: z.coerce.number().int().min(0).max(200).optional(),
   visitPrice: z.coerce.number().int().min(0).max(10_000_000).optional(),
 
   // ✅ NUEVO: etiqueta de forma de cobro
@@ -1622,6 +1643,16 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
     }
 
     const data = parsed.data;
+
+    const maxAllowedRadiusKm = await getMaxAllowedRadiusKmForUser(userId);
+
+    if (data.radiusKm !== undefined && data.radiusKm > maxAllowedRadiusKm) {
+      return res.status(400).json({
+        ok: false,
+        error: 'radius_exceeds_allowed_max',
+        maxAllowedRadiusKm,
+      });
+    }
 
     const current = await prisma.specialistProfile.findUnique({
       where: { userId },
@@ -1927,9 +1958,31 @@ router.patch('/specialties', auth, async (req: AuthReq, res: Response) => {
       skipDuplicates: true,
     });
 
+    const maxAllowedRadiusKm = await getMaxAllowedRadiusKmForUser(userId);
+
+    const currentProfile = await prisma.specialistProfile.findUnique({
+      where: { userId },
+      select: { id: true, radiusKm: true },
+    });
+
+    if (
+      currentProfile &&
+      currentProfile.radiusKm != null &&
+      currentProfile.radiusKm > maxAllowedRadiusKm
+    ) {
+      await prisma.specialistProfile.update({
+        where: { id: currentProfile.id },
+        data: { radiusKm: maxAllowedRadiusKm },
+      });
+    }
+
     await syncSearchIndexForUser(userId);
 
-    return res.json({ ok: true, count: cats.length });
+    return res.json({
+      ok: true,
+      count: cats.length,
+      maxAllowedRadiusKm,
+    });
   } catch (err) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ ok: false, error: 'invalid_input', details: err.flatten() });

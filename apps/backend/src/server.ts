@@ -33,6 +33,7 @@ import seedRoutes from './routes/seed.routes';
 import specialistAvatarRoutes from './routes/specialistAvatar.routes';
 import { specialistsRoutes } from './routes/specialists.routes';
 import { subscriptionsRouter } from './routes/subscriptions';
+import { versionRouter } from './routes/version';
 
 const app = express();
 
@@ -172,6 +173,7 @@ app.use('/chat', chat);
 app.use('/auth', profileRoutes);
 app.use('/notifications', notificationsRouter);
 app.use('/subscriptions', subscriptionsRouter);
+app.use('/version', versionRouter);
 app.use('/customers', customerLocationRoutes);
 app.use('/customers', customersMeRoutes);
 app.use('/admin/seed', seedRoutes);

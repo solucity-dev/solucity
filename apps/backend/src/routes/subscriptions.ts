@@ -26,17 +26,55 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
 
     const sub = await getOrCreateSubscriptionForSpecialist(userId);
 
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[GET /subscriptions/me] evaluated subscription', {
+        userId,
+        subscriptionId: sub?.id ?? null,
+        status: sub?.status ?? null,
+        trialEnd: sub?.trialEnd?.toISOString?.() ?? null,
+        currentPeriodEnd: sub?.currentPeriodEnd?.toISOString?.() ?? null,
+      });
+    }
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[GET /subscriptions/me] resolved subscription', {
+        userId,
+        subId: sub?.id ?? null,
+        status: sub?.status ?? null,
+        trialEnd: sub?.trialEnd ?? null,
+        currentPeriodEnd: sub?.currentPeriodEnd ?? null,
+      });
+    }
+
     if (!sub) {
       return res.status(403).json({ ok: false, error: 'no_specialist_profile' });
     }
 
     const now = new Date();
-    let daysRemaining: number | null = null;
 
-    if (sub.trialEnd) {
-      const diffMs = sub.trialEnd.getTime() - now.getTime();
-      daysRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
-    }
+    const trialDaysRemaining =
+      sub.status === 'TRIALING' && sub.trialEnd && sub.trialEnd > now
+        ? Math.max(0, Math.ceil((sub.trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+        : 0;
+
+    const subscriptionDaysRemaining =
+      sub.status === 'ACTIVE' && sub.currentPeriodEnd && sub.currentPeriodEnd > now
+        ? Math.max(
+            0,
+            Math.ceil((sub.currentPeriodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
+          )
+        : 0;
+
+    const isTrialActive = sub.status === 'TRIALING' && trialDaysRemaining > 0;
+    const isSubscriptionActive = sub.status === 'ACTIVE' && subscriptionDaysRemaining > 0;
+
+    const canPay = !isTrialActive && !isSubscriptionActive;
+
+    const accessUntil = isTrialActive
+      ? sub.trialEnd
+      : isSubscriptionActive
+        ? sub.currentPeriodEnd
+        : null;
 
     return res.json({
       ok: true,
@@ -46,7 +84,13 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
         currentPeriodStart: sub.currentPeriodStart.toISOString(),
         currentPeriodEnd: sub.currentPeriodEnd.toISOString(),
         trialEnd: sub.trialEnd ? sub.trialEnd.toISOString() : null,
-        daysRemaining,
+
+        trialDaysRemaining,
+        subscriptionDaysRemaining,
+        isTrialActive,
+        isSubscriptionActive,
+        canPay,
+        accessUntil: accessUntil ? accessUntil.toISOString() : null,
       },
     });
   } catch (e) {
@@ -71,6 +115,9 @@ router.post('/pay/link', auth, async (req: AuthReq, res: Response) => {
 
     if (msg.includes('trial_active')) {
       return res.status(400).json({ ok: false, error: 'trial_active' });
+    }
+    if (msg.includes('subscription_already_active')) {
+      return res.status(400).json({ ok: false, error: 'subscription_already_active' });
     }
     if (msg.includes('no_specialist_profile')) {
       return res.status(403).json({ ok: false, error: 'no_specialist_profile' });

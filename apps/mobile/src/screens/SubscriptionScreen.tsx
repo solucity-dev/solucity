@@ -26,7 +26,13 @@ type SubscriptionDTO = {
   currentPeriodStart: string;
   currentPeriodEnd: string;
   trialEnd: string | null;
-  daysRemaining: number | null;
+
+  trialDaysRemaining: number;
+  subscriptionDaysRemaining: number;
+  isTrialActive: boolean;
+  isSubscriptionActive: boolean;
+  canPay: boolean;
+  accessUntil: string | null;
 };
 
 function formatDate(iso: string | null | undefined) {
@@ -61,7 +67,7 @@ export default function SubscriptionScreen() {
   // Si estás en TRIALING y el backend no permite pagar, devolverá trial_active (lo manejamos).
   const canPay = useMemo(() => {
     if (!sub) return false;
-    return sub.status !== 'ACTIVE';
+    return sub.canPay;
   }, [sub]);
 
   const fetchMe = useCallback(async () => {
@@ -116,8 +122,18 @@ export default function SubscriptionScreen() {
       if (err === 'trial_active') {
         Alert.alert(
           'Prueba gratis activa',
-          'Todavía no es necesario pagar. Tu prueba gratis sigue activa. (Esto está perfecto: el botón está para que puedas probar el flujo).',
+          'Todavía tenés días gratis disponibles. No necesitás pagar por ahora.',
         );
+        await fetchMe();
+        return;
+      }
+
+      if (err === 'subscription_already_active') {
+        Alert.alert(
+          'Suscripción activa',
+          'Tu suscripción ya está activa. No hace falta volver a pagar en este momento.',
+        );
+        await fetchMe();
         return;
       }
 
@@ -125,21 +141,27 @@ export default function SubscriptionScreen() {
     } finally {
       setPayLoading(false);
     }
-  }, [canPay]);
+  }, [canPay, fetchMe]);
 
   const pill = sub ? statusPill(sub.status) : null;
 
   const headerSubtitle = useMemo(() => {
     if (!sub) return '';
-    if (sub.status === 'TRIALING') {
-      const d = sub.daysRemaining ?? 0;
-      if (d > 0) {
-        return `Tenés ${d} día${d === 1 ? '' : 's'} gratis. No es necesario pagar todavía.`;
-      }
-      return 'Tu prueba terminó. Para seguir visible, necesitás activar el plan.';
+
+    if (sub.isTrialActive) {
+      const d = sub.trialDaysRemaining ?? 0;
+      return `Tenés ${d} día${d === 1 ? '' : 's'} gratis. No es necesario pagar todavía.`;
     }
-    if (sub.status === 'ACTIVE') return 'Estás activo y visible para clientes.';
-    if (sub.status === 'PAST_DUE') return 'Tenés un pago pendiente. Activá para seguir visible.';
+
+    if (sub.isSubscriptionActive) {
+      const d = sub.subscriptionDaysRemaining ?? 0;
+      return `Tu suscripción está activa. Te quedan ${d} día${d === 1 ? '' : 's'} de acceso.`;
+    }
+
+    if (sub.status === 'PAST_DUE') {
+      return 'Tenés un pago pendiente. Activá para seguir visible.';
+    }
+
     return 'Tu suscripción está inactiva. Activá para aparecer en búsquedas.';
   }, [sub]);
 
@@ -206,30 +228,50 @@ export default function SubscriptionScreen() {
                     icon={<Ionicons name="calendar-outline" size={18} color="#E9FEFF" />}
                     label={`Inicio del período: ${formatDate(sub.currentPeriodStart)}`}
                   />
-                  <InfoRow
-                    icon={<Ionicons name="calendar" size={18} color="#E9FEFF" />}
-                    label={`Fin del período: ${formatDate(sub.currentPeriodEnd)}`}
-                  />
-                  {sub.trialEnd ? (
-                    <InfoRow
-                      icon={<Ionicons name="gift-outline" size={18} color="#E9FEFF" />}
-                      label={`Prueba hasta: ${formatDate(sub.trialEnd)}`}
-                    />
-                  ) : null}
 
-                  {sub.status === 'TRIALING' && (sub.daysRemaining ?? 0) > 0 ? (
-                    <View style={styles.noticeBox}>
-                      <MDI name="information-outline" size={18} color="#E9FEFF" />
-                      <Text style={styles.noticeText}>
-                        Te quedan{' '}
-                        <Text style={{ fontWeight: '900' }}>
-                          {sub.daysRemaining} día{sub.daysRemaining === 1 ? '' : 's'}
-                        </Text>{' '}
-                        gratis. Si querés, podés tocar “Activar ahora” para probar el flujo (no es
-                        obligatorio todavía).
-                      </Text>
-                    </View>
-                  ) : null}
+                  {sub.isTrialActive ? (
+                    <>
+                      <InfoRow
+                        icon={<Ionicons name="gift-outline" size={18} color="#E9FEFF" />}
+                        label={`Prueba gratis hasta: ${formatDate(sub.trialEnd)}`}
+                      />
+
+                      <View style={styles.noticeBox}>
+                        <MDI name="information-outline" size={18} color="#E9FEFF" />
+                        <Text style={styles.noticeText}>
+                          Te quedan{' '}
+                          <Text style={{ fontWeight: '900' }}>
+                            {sub.trialDaysRemaining} día{sub.trialDaysRemaining === 1 ? '' : 's'}
+                          </Text>{' '}
+                          gratis. El pago se habilitará cuando termine ese período.
+                        </Text>
+                      </View>
+                    </>
+                  ) : sub.isSubscriptionActive ? (
+                    <>
+                      <InfoRow
+                        icon={<Ionicons name="calendar" size={18} color="#E9FEFF" />}
+                        label={`Suscripción activa hasta: ${formatDate(sub.currentPeriodEnd)}`}
+                      />
+
+                      <View style={styles.noticeBox}>
+                        <MDI name="check-circle-outline" size={18} color="#E9FEFF" />
+                        <Text style={styles.noticeText}>
+                          Tenés tu suscripción activa con{' '}
+                          <Text style={{ fontWeight: '900' }}>
+                            {sub.subscriptionDaysRemaining} día
+                            {sub.subscriptionDaysRemaining === 1 ? '' : 's'}
+                          </Text>{' '}
+                          restantes.
+                        </Text>
+                      </View>
+                    </>
+                  ) : (
+                    <InfoRow
+                      icon={<Ionicons name="calendar" size={18} color="#E9FEFF" />}
+                      label={`Fin del período: ${formatDate(sub.currentPeriodEnd)}`}
+                    />
+                  )}
                 </View>
 
                 <Pressable onPress={fetchMe} style={[styles.btnOutline, { marginTop: 12 }]}>
@@ -288,21 +330,24 @@ export default function SubscriptionScreen() {
                     <>
                       <Ionicons name="flash-outline" size={18} color="#015A69" />
                       <Text style={styles.btnPrimaryText}>
-                        {sub.status === 'ACTIVE' ? 'Plan activo ✅' : 'Activar ahora'}
+                        {sub.isSubscriptionActive
+                          ? 'Plan activo ✅'
+                          : sub.isTrialActive
+                            ? 'Prueba gratis en curso'
+                            : 'Activar ahora'}
                       </Text>
                     </>
                   )}
                 </Pressable>
 
-                {sub.status === 'ACTIVE' ? (
+                {sub.isSubscriptionActive ? (
                   <Text style={styles.hint}>
-                    Tu plan ya está activo. Si necesitás, podés volver a esta pantalla para ver tu
-                    estado.
+                    Tu plan ya está activo. Desde acá podés revisar hasta cuándo tenés acceso.
                   </Text>
-                ) : sub.status === 'TRIALING' && (sub.daysRemaining ?? 0) > 0 ? (
+                ) : sub.isTrialActive ? (
                   <Text style={styles.hint}>
-                    No es necesario pagar hasta que termine la prueba. “Activar ahora” está para que
-                    puedas probar el flujo desde la app.
+                    Tenés una prueba gratis activa. El botón de pago queda bloqueado hasta que ese
+                    período termine.
                   </Text>
                 ) : (
                   <Text style={styles.hint}>

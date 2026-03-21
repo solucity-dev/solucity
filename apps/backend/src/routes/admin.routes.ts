@@ -698,8 +698,6 @@ adminRouter.get('/orders/:id', async (req, res) => {
  * GET /admin/specialists
  */
 adminRouter.get('/specialists', async (_req, res) => {
-  const now = new Date();
-
   const users = await prisma.user.findMany({
     where: {
       role: 'SPECIALIST',
@@ -745,12 +743,29 @@ adminRouter.get('/specialists', async (_req, res) => {
   });
 
   const result = users.map((u) => {
+    const now = new Date();
     const sub = u.specialist?.subscription;
-    const end = sub?.trialEnd ?? sub?.currentPeriodEnd ?? null;
 
-    const daysLeft = end
-      ? Math.max(0, Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
-      : null;
+    const trialEnd = sub?.trialEnd ?? null;
+    const currentPeriodEnd = sub?.currentPeriodEnd ?? null;
+
+    const trialDaysRemaining =
+      sub?.status === 'TRIALING' && trialEnd && trialEnd > now
+        ? Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+        : 0;
+
+    const subscriptionDaysRemaining =
+      sub?.status === 'ACTIVE' && currentPeriodEnd && currentPeriodEnd > now
+        ? Math.max(
+            0,
+            Math.ceil((currentPeriodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
+          )
+        : 0;
+
+    const isTrialActive = sub?.status === 'TRIALING' && trialDaysRemaining > 0;
+    const isSubscriptionActive = sub?.status === 'ACTIVE' && subscriptionDaysRemaining > 0;
+
+    const accessUntil = isTrialActive ? trialEnd : isSubscriptionActive ? currentPeriodEnd : null;
 
     const specSpecialties = u.specialist?.specialties ?? [];
 
@@ -779,11 +794,15 @@ adminRouter.get('/specialists', async (_req, res) => {
         ? {
             status: sub.status,
             trialEnd: sub.trialEnd,
+            currentPeriodStart: sub.currentPeriodStart,
             currentPeriodEnd: sub.currentPeriodEnd,
+            isTrialActive,
+            isSubscriptionActive,
+            trialDaysRemaining,
+            subscriptionDaysRemaining,
+            accessUntil,
           }
         : null,
-
-      daysLeft,
 
       specialties,
       specialtySlugs,
@@ -815,7 +834,12 @@ adminRouter.get('/specialists/:id', async (req, res) => {
     avatarUrl: true,
 
     subscription: {
-      select: { status: true, trialEnd: true, currentPeriodEnd: true },
+      select: {
+        status: true,
+        trialEnd: true,
+        currentPeriodStart: true,
+        currentPeriodEnd: true,
+      },
     },
 
     specialties: {
@@ -908,10 +932,24 @@ adminRouter.get('/specialists/:id', async (req, res) => {
 
   const now = new Date();
   const sub = spec.subscription;
-  const end = sub?.trialEnd ?? sub?.currentPeriodEnd ?? null;
-  const daysLeft = end
-    ? Math.max(0, Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
-    : null;
+
+  const trialEnd = sub?.trialEnd ?? null;
+  const currentPeriodEnd = sub?.currentPeriodEnd ?? null;
+
+  const trialDaysRemaining =
+    sub?.status === 'TRIALING' && trialEnd && trialEnd > now
+      ? Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+      : 0;
+
+  const subscriptionDaysRemaining =
+    sub?.status === 'ACTIVE' && currentPeriodEnd && currentPeriodEnd > now
+      ? Math.max(0, Math.ceil((currentPeriodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+      : 0;
+
+  const isTrialActive = sub?.status === 'TRIALING' && trialDaysRemaining > 0;
+  const isSubscriptionActive = sub?.status === 'ACTIVE' && subscriptionDaysRemaining > 0;
+
+  const accessUntil = isTrialActive ? trialEnd : isSubscriptionActive ? currentPeriodEnd : null;
 
   const certifications = (spec.certifications ?? []).map((c) => ({
     id: c.id,
@@ -985,8 +1023,13 @@ adminRouter.get('/specialists/:id', async (req, res) => {
       ? {
           status: sub.status,
           trialEnd: sub.trialEnd ? sub.trialEnd.toISOString() : null,
+          currentPeriodStart: sub.currentPeriodStart ? sub.currentPeriodStart.toISOString() : null,
           currentPeriodEnd: sub.currentPeriodEnd ? sub.currentPeriodEnd.toISOString() : null,
-          daysLeft,
+          isTrialActive,
+          isSubscriptionActive,
+          trialDaysRemaining,
+          subscriptionDaysRemaining,
+          accessUntil: accessUntil ? accessUntil.toISOString() : null,
         }
       : null,
 

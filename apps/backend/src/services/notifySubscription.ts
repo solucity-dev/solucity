@@ -15,21 +15,35 @@ type NotifyArgs = {
   data?: Record<string, any>;
 };
 
+function buildEventKey(args: NotifyArgs) {
+  const explicitKey = args.data?.subscriptionEventKey;
+  if (explicitKey) return String(explicitKey);
+
+  return String(args.type);
+}
+
 /**
- * ✅ Crea notificación en DB con dedupe simple (24h)
- * ✅ Push con notificationId (tap → mark-as-read / deep link)
- * ✅ Sin duplicar lógica de batching (lo hace pushExpo.ts)
+ * ✅ Crea notificación en DB con dedupe más preciso
+ * ✅ Push con notificationId
+ * ✅ Logs claros para debug
  */
 export async function notifySubscription(args: NotifyArgs) {
   const { userId, type, title, body, data } = args;
 
+  const subscriptionEventKey = buildEventKey(args);
+
   if (process.env.NODE_ENV !== 'production') {
-    console.log('[notifySubscription]', { userId, type, time: new Date().toISOString() });
+    console.log('[notifySubscription] start', {
+      userId,
+      type,
+      subscriptionEventKey,
+      time: new Date().toISOString(),
+    });
   }
 
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-  // ✅ DEDUPE: misma combinación (type + subscriptionEvent) en últimas 24h
+  // ✅ DEDUPE por clave exacta del evento
   const exists = await prisma.notification.findFirst({
     where: {
       userId,
@@ -38,8 +52,8 @@ export async function notifySubscription(args: NotifyArgs) {
       AND: [
         {
           data: {
-            path: ['subscriptionEvent'],
-            equals: type,
+            path: ['subscriptionEventKey'],
+            equals: subscriptionEventKey,
           },
         },
       ],
@@ -49,12 +63,18 @@ export async function notifySubscription(args: NotifyArgs) {
 
   if (exists) {
     if (process.env.NODE_ENV !== 'production') {
-      console.log('[notifySubscription] deduped -> notificationId=', exists.id);
+      console.log('[notifySubscription] deduped', {
+        userId,
+        type,
+        subscriptionEventKey,
+        notificationId: exists.id,
+      });
     }
+
     return { ok: true, skipped: true, notificationId: exists.id };
   }
 
-  // 1) DB notification
+  // 1) Guardar en DB
   const notif = await createNotification({
     userId,
     type: type as NotificationType,
@@ -62,11 +82,21 @@ export async function notifySubscription(args: NotifyArgs) {
     body,
     data: {
       ...(data ?? {}),
-      subscriptionEvent: type, // ✅ clave dedupe
+      subscriptionEvent: type,
+      subscriptionEventKey,
     } as any,
   });
 
-  // 2) tokens
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[notifySubscription] db notification created', {
+      userId,
+      type,
+      subscriptionEventKey,
+      notificationId: notif.id,
+    });
+  }
+
+  // 2) Buscar tokens push
   const tokens = await prisma.pushToken.findMany({
     where: { userId, enabled: true },
     select: { token: true },
@@ -74,14 +104,25 @@ export async function notifySubscription(args: NotifyArgs) {
 
   const toList = tokens.map((t) => t.token).filter(Boolean);
 
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[notifySubscription] push tokens', {
+      userId,
+      count: toList.length,
+    });
+  }
+
   if (!toList.length) {
     if (process.env.NODE_ENV !== 'production') {
-      console.log('[notifySubscription] no tokens -> dbOnly notificationId=', notif.id);
+      console.log('[notifySubscription] no tokens, db only', {
+        userId,
+        notificationId: notif.id,
+      });
     }
+
     return { ok: true, notificationId: notif.id, pushed: false };
   }
 
-  // 3) push (no rompe si falla)
+  // 3) Push
   try {
     await sendExpoPush(
       toList.map((to) => ({
@@ -94,15 +135,25 @@ export async function notifySubscription(args: NotifyArgs) {
         data: {
           ...(data ?? {}),
           subscriptionEvent: type,
+          subscriptionEventKey,
           type,
           notificationId: notif.id,
+          screen: data?.screen ?? 'Subscription',
         },
       })),
     );
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[notifySubscription] push sent', {
+        userId,
+        notificationId: notif.id,
+        tokens: toList.length,
+      });
+    }
+
+    return { ok: true, notificationId: notif.id, pushed: true };
   } catch (e) {
     console.warn('[notifySubscription] sendExpoPush failed', e);
     return { ok: true, notificationId: notif.id, pushed: false };
   }
-
-  return { ok: true, notificationId: notif.id, pushed: true };
 }

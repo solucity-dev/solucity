@@ -31,6 +31,15 @@ type NotificationsContextValue = {
 
 const NotificationsContext = createContext<NotificationsContextValue | undefined>(undefined);
 
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 /**
  * ✅ Extrae orderId/threadId/notificationDbId/type de cualquier payload común
  * OJO: resp.notification.request.identifier NO es el id de tu DB.
@@ -263,25 +272,38 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
         if (__DEV__) {
           console.log('[push] expoPushToken =', pushToken);
+          console.log('[push] ready =', ready, 'userId =', user?.id ?? null);
         }
 
-        // ✅ NO mandamos null al backend
-        if (!pushToken) return;
+        if (!pushToken) {
+          if (__DEV__) console.log('[push] no token generated, skip backend register');
+          return;
+        }
 
-        await api.post(
+        const resp = await api.post(
           '/notifications/push-token',
           { token: pushToken, platform: Platform.OS },
           { headers: { 'Cache-Control': 'no-cache' } },
         );
-      } catch (e) {
-        if (__DEV__) console.log('[push] registerForPush failed', e);
+
+        if (__DEV__) {
+          console.log('[push] token registered in backend', resp?.data);
+        }
+      } catch (e: any) {
+        if (__DEV__) {
+          console.log('[push] registerForPush failed', {
+            status: e?.response?.status,
+            data: e?.response?.data,
+            message: e?.message,
+          });
+        }
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [ready, token]);
+  }, [ready, token, user?.id]);
 
   // ✅ Polling de unread
   useEffect(() => {
@@ -376,7 +398,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       }
 
       // ✅ 2) navegar: CHAT_MESSAGE -> thread; fallback -> order
-      if (String(type) === 'CHAT_MESSAGE' && threadId) {
+      if ((String(type) === 'CHAT_MESSAGE' || String(type) === 'NEW_CHAT_MESSAGE') && threadId) {
         navigateToChatThread(String(threadId), orderId ? String(orderId) : null);
         return;
       }

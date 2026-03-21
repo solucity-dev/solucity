@@ -56,15 +56,18 @@ function formatDate(dateStr?: string | null) {
 }
 
 function renderSubscriptionMainText(sub: SubscriptionInfo) {
-  if (sub.status === 'TRIALING') {
-    if (typeof sub.daysRemaining === 'number') {
-      if (sub.daysRemaining <= 0) return 'Tu prueba termina hoy.';
-      if (sub.daysRemaining === 1) return 'Te queda 1 día de prueba.';
-      return `Te quedan ${sub.daysRemaining} días de prueba.`;
-    }
-    return 'Tenés una prueba activa.';
+  if (sub.isTrialActive) {
+    if (sub.trialDaysRemaining <= 0) return 'Tu prueba termina hoy.';
+    if (sub.trialDaysRemaining === 1) return 'Te queda 1 día de prueba.';
+    return `Te quedan ${sub.trialDaysRemaining} días de prueba.`;
   }
-  if (sub.status === 'ACTIVE') return 'Tu suscripción está activa.';
+
+  if (sub.isSubscriptionActive) {
+    if (sub.subscriptionDaysRemaining <= 0) return 'Tu suscripción vence hoy.';
+    if (sub.subscriptionDaysRemaining === 1) return 'Te queda 1 día de suscripción activa.';
+    return `Te quedan ${sub.subscriptionDaysRemaining} días de suscripción activa.`;
+  }
+
   if (sub.status === 'PAST_DUE') return 'Tu suscripción tiene un pago pendiente.';
   return 'Tu suscripción está inactiva.';
 }
@@ -188,7 +191,7 @@ export default function ProfileScreen() {
 
         const [specRes, subRes] = await Promise.allSettled([
           api.get<any>('/specialists/me', { headers: { 'Cache-Control': 'no-cache' } }),
-          getMySubscription(),
+          getMySubscription({ force: true }),
         ]);
 
         if (!mountedRef.current || requestIdRef.current !== myReqId) return;
@@ -636,9 +639,9 @@ export default function ProfileScreen() {
                 <View style={{ marginTop: 4, gap: 6 }}>
                   <View style={styles.subPill}>
                     <Text style={styles.subPillText}>
-                      {subscription.status === 'TRIALING'
+                      {subscription.isTrialActive
                         ? 'Período de prueba'
-                        : subscription.status === 'ACTIVE'
+                        : subscription.isSubscriptionActive
                           ? 'Suscripción activa'
                           : subscription.status === 'PAST_DUE'
                             ? 'Pago pendiente'
@@ -648,22 +651,26 @@ export default function ProfileScreen() {
 
                   <Text style={styles.subMainText}>{renderSubscriptionMainText(subscription)}</Text>
 
-                  {subscription.status === 'TRIALING' &&
-                  typeof subscription.daysRemaining === 'number' ? (
+                  {subscription.isTrialActive ? (
                     <Text style={styles.subSecondaryText}>
                       Te quedan{' '}
                       <Text style={styles.subDaysHighlight}>
-                        {subscription.daysRemaining <= 0
+                        {subscription.trialDaysRemaining <= 0
                           ? 'menos de 1 día'
-                          : `${subscription.daysRemaining} días`}
+                          : `${subscription.trialDaysRemaining} día${subscription.trialDaysRemaining === 1 ? '' : 's'}`}
                       </Text>{' '}
                       de prueba.
                     </Text>
                   ) : null}
 
-                  {subscription.status === 'ACTIVE' && subscription.currentPeriodEnd ? (
+                  {subscription.isSubscriptionActive && subscription.currentPeriodEnd ? (
                     <Text style={styles.subSecondaryText}>
-                      Próxima renovación: {formatDate(subscription.currentPeriodEnd)}
+                      Activa hasta: {formatDate(subscription.currentPeriodEnd)} ·{' '}
+                      <Text style={styles.subDaysHighlight}>
+                        {subscription.subscriptionDaysRemaining} día
+                        {subscription.subscriptionDaysRemaining === 1 ? '' : 's'}
+                      </Text>{' '}
+                      restantes
                     </Text>
                   ) : null}
                 </View>

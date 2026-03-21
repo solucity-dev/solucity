@@ -86,7 +86,10 @@ export async function getOrCreateSubscriptionForSpecialist(userId: string) {
       type: 'SUBSCRIPTION_TRIAL_ENDED',
       title: 'Terminó tu prueba gratuita',
       body: 'Para seguir apareciendo en búsquedas y recibir trabajos, activá tu suscripción.',
-      data: { screen: 'Subscription' },
+      data: {
+        screen: 'Subscription',
+        subscriptionEventKey: `trial-ended-${existing.id}`,
+      },
     });
 
     return updated;
@@ -106,7 +109,11 @@ export async function getOrCreateSubscriptionForSpecialist(userId: string) {
           daysRemaining === 1
             ? 'Te queda 1 día gratis. Podés activar la suscripción cuando quieras.'
             : `Te quedan ${daysRemaining} días gratis. Podés activar la suscripción cuando quieras.`,
-        data: { daysRemaining, screen: 'Subscription' },
+        data: {
+          daysRemaining,
+          screen: 'Subscription',
+          subscriptionEventKey: `trial-ending-${daysRemaining}-${existing.id}`,
+        },
       });
     }
   }
@@ -127,6 +134,16 @@ export async function createSubscriptionPaymentLink(userId: string) {
 
   const sub = await getOrCreateSubscriptionForSpecialist(userId);
   if (!sub) throw new Error('no_specialist_profile');
+
+  const now = new Date();
+
+  if (sub.status === 'TRIALING' && sub.trialEnd && sub.trialEnd > now) {
+    throw new Error('trial_active');
+  }
+
+  if (sub.status === 'ACTIVE' && sub.currentPeriodEnd && sub.currentPeriodEnd > now) {
+    throw new Error('subscription_already_active');
+  }
 
   const publicBackend = getPublicBackendUrl();
 
@@ -257,7 +274,11 @@ export async function handleMercadoPagoWebhook(paymentId: string) {
       type: 'SUBSCRIPTION_ACTIVE',
       title: 'Suscripción activa ✅',
       body: 'Tu suscripción está activa. Ya podés recibir nuevos trabajos.',
-      data: { screen: 'Subscription' },
+      data: {
+        screen: 'Subscription',
+        subscriptionEventKey: `subscription-active-${paymentId}`,
+        paymentId,
+      },
     });
   }
 }

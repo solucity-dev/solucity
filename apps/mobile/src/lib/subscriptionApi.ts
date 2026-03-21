@@ -9,9 +9,14 @@ export type SubscriptionInfo = {
   currentPeriodStart: string;
   currentPeriodEnd: string;
   trialEnd: string | null;
-  daysRemaining: number | null;
-};
 
+  trialDaysRemaining: number;
+  subscriptionDaysRemaining: number;
+  isTrialActive: boolean;
+  isSubscriptionActive: boolean;
+  canPay: boolean;
+  accessUntil: string | null;
+};
 // 🔒 cache en memoria (vive mientras la app esté abierta)
 let cachedSubscription: SubscriptionInfo | null = null;
 let inFlight: Promise<SubscriptionInfo | null> | null = null;

@@ -179,6 +179,11 @@ const SPECIALTY_OPTIONS = [
   'escribano',
   'arquitecto',
   'ingeniero',
+
+  // ── Transporte ────────────────────────────────────────────
+  'traslado-de-pasajeros',
+  'chofer-particular',
+  'auxilio-vehicular',
 ] as const;
 
 const REQUIRES_CERT_FALLBACK = new Set([
@@ -430,6 +435,11 @@ export default function SpecialistHome() {
   const [portfolioModalOpen, setPortfolioModalOpen] = useState(false);
   const [portfolioPreviewOpen, setPortfolioPreviewOpen] = useState(false);
   const [portfolioPreviewUri, setPortfolioPreviewUri] = useState<string | null>(null);
+
+  // ✅ NUEVO: preview antes de subir imagen de trabajo realizado
+  const [portfolioUploadPreviewOpen, setPortfolioUploadPreviewOpen] = useState(false);
+  const [portfolioLocalUri, setPortfolioLocalUri] = useState<string | null>(null);
+
   const portfolioLoadedOnceRef = useRef(false);
 
   // catálogo rubros
@@ -522,6 +532,10 @@ export default function SpecialistHome() {
 
   // suscripción
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
+
+  const maxAllowedRadiusKm = useMemo(() => {
+    return specialties.includes('auxilio-vehicular') ? 200 : 30;
+  }, [specialties]);
 
   // ubicación: auto-update una sola vez, sin bloquear
   const locationRequestedRef = useRef(false);
@@ -881,7 +895,7 @@ export default function SpecialistHome() {
 
       // 3) SUSCRIPCIÓN (background)
       try {
-        const sub = await getMySubscription();
+        const sub = await getMySubscription({ force: true });
         setSubscription(sub);
       } catch (e) {
         if (__DEV__) console.log('[Subscription] error al cargar', e);
@@ -1040,20 +1054,8 @@ export default function SpecialistHome() {
 
   // ✅ Suscripción OK: ACTIVE o TRIALING con días > 0
   const subscriptionOk = useMemo(() => {
-    if (!subscription) return false; // fail-closed
-    if (subscription.status === 'ACTIVE') return true;
-
-    if (subscription.status === 'TRIALING') {
-      // si backend manda daysRemaining, lo respetamos
-      if (typeof subscription.daysRemaining === 'number') {
-        return subscription.daysRemaining > 0;
-      }
-      // si no viene daysRemaining, asumimos trial vigente
-      return true;
-    }
-
-    // PAST_DUE / CANCELLED / INACTIVE / etc.
-    return false;
+    if (!subscription) return false;
+    return subscription.isTrialActive || subscription.isSubscriptionActive;
   }, [subscription]);
 
   const canToggleAvailability =
@@ -1169,16 +1171,33 @@ export default function SpecialistHome() {
       const res = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 1,
-        allowsEditing: true,
-        aspect: [4, 3],
+        allowsEditing: false, // ✅ desactivamos editor nativo confuso
       });
 
       if (res.canceled || !res.assets?.[0]?.uri) return;
 
+      // ✅ mostramos preview propio antes de subir
+      setPortfolioLocalUri(res.assets[0].uri);
+      setPortfolioUploadPreviewOpen(true);
+    } catch (e) {
+      if (__DEV__) console.log('[handleAddPortfolioImage] picker error', e);
+      Alert.alert('Ups', 'No se pudo seleccionar la imagen.');
+    }
+  }
+
+  async function confirmPortfolioImageUpload() {
+    if (!portfolioLocalUri) return;
+
+    try {
+      if (portfolio.length >= 8) {
+        Alert.alert('Límite alcanzado', 'Podés subir hasta 8 imágenes de trabajos realizados.');
+        return;
+      }
+
       setSavingKey('portfolio', true);
 
       const manipulated = await ImageManipulator.manipulateAsync(
-        res.assets[0].uri,
+        portfolioLocalUri,
         [{ resize: { width: 1600 } }],
         { compress: 0.88, format: ImageManipulator.SaveFormat.JPEG },
       );
@@ -1203,6 +1222,10 @@ export default function SpecialistHome() {
       });
 
       await refreshPortfolio();
+
+      setPortfolioUploadPreviewOpen(false);
+      setPortfolioLocalUri(null);
+
       Alert.alert('Listo', 'Imagen agregada a tus trabajos realizados.');
     } catch (e: any) {
       const msg =
@@ -1211,6 +1234,7 @@ export default function SpecialistHome() {
           : e?.response?.data?.error === 'low_quality'
             ? 'La imagen es muy chica. Probá con otra más nítida.'
             : 'No se pudo subir la imagen.';
+
       Alert.alert('Ups', msg);
     } finally {
       setSavingKey('portfolio', false);
@@ -1294,7 +1318,7 @@ export default function SpecialistHome() {
     if (!subscriptionOk) {
       Alert.alert(
         'Suscripción requerida',
-        'Para activarte y aparecer en búsquedas necesitás tener la suscripción activa.',
+        'Para activarte y aparecer en búsquedas necesitás tener una suscripción activa o una prueba gratuita vigente.',
         [
           { text: 'Cancelar', style: 'cancel' },
           { text: 'Ver suscripción', onPress: () => (navigation as any).navigate('Subscription') },
@@ -1392,6 +1416,9 @@ export default function SpecialistHome() {
 
       await api.patch('/specialists/specialties', { specialties: cleaned });
 
+      // ✅ refrescamos porque el backend puede haber ajustado radiusKm
+      await reloadProfileAndSubscription({ silent: true });
+
       specialtiesSnapRef.current = JSON.stringify(Array.from(new Set(cleaned)).sort());
 
       Alert.alert('Listo', 'Rubros actualizados.');
@@ -1411,7 +1438,7 @@ export default function SpecialistHome() {
 
       // ⛔ clamp radio: 0 → 30 km
       const radiusNum = Math.max(0, Number(radius) || 0);
-      const radiusKm = Math.min(30, radiusNum);
+      const radiusKm = Math.min(maxAllowedRadiusKm, radiusNum);
 
       const label = pricingLabel.trim();
       const pricingLabelSafe = label.length ? label.slice(0, 40) : null;
@@ -1570,16 +1597,12 @@ export default function SpecialistHome() {
   }
 
   function renderSubscriptionMainText(sub: SubscriptionInfo) {
-    if (sub.status === 'TRIALING') {
-      // ✅ Evitamos repetir el “Te quedan X días…” (eso ya lo mostramos abajo)
-      if (typeof sub.daysRemaining === 'number') {
-        if (sub.daysRemaining <= 0) return 'Tu prueba termina hoy.';
-        return 'Tenés una prueba gratuita activa como especialista.';
-      }
+    if (sub.isTrialActive) {
+      if (sub.trialDaysRemaining <= 0) return 'Tu prueba gratuita termina hoy.';
       return 'Tenés una prueba gratuita activa como especialista.';
     }
 
-    if (sub.status === 'ACTIVE') {
+    if (sub.isSubscriptionActive) {
       return 'Tu suscripción está activa. Seguís apareciendo en las búsquedas y podés recibir nuevos trabajos.';
     }
 
@@ -1779,7 +1802,7 @@ export default function SpecialistHome() {
     const visitPrice = Math.max(0, Math.floor(Number(price) || 0));
 
     const radiusNum = Math.max(0, Number(radius) || 0);
-    const radiusKm = Math.min(30, radiusNum); // ✅ igual que savePriceAndRadius
+    const radiusKm = Math.min(maxAllowedRadiusKm, radiusNum);
 
     const current = JSON.stringify({
       visitPrice,
@@ -1788,7 +1811,7 @@ export default function SpecialistHome() {
     });
 
     return current !== priceRadiusSnapRef.current;
-  }, [price, radius, pricingLabel]);
+  }, [price, radius, pricingLabel, maxAllowedRadiusKm]);
 
   const specialtiesDirty = useMemo(() => {
     const cleaned = Array.from(
@@ -1970,9 +1993,9 @@ export default function SpecialistHome() {
               <View style={styles.subHeaderRow}>
                 <View style={styles.subPill}>
                   <Text style={styles.subPillText}>
-                    {subscription.status === 'TRIALING'
+                    {subscription.isTrialActive
                       ? 'Período de prueba'
-                      : subscription.status === 'ACTIVE'
+                      : subscription.isSubscriptionActive
                         ? 'Suscripción activa'
                         : subscription.status === 'PAST_DUE'
                           ? 'Pago pendiente'
@@ -1981,7 +2004,7 @@ export default function SpecialistHome() {
                 </View>
 
                 <Ionicons
-                  name={subscription.status === 'ACTIVE' ? 'checkmark-circle' : 'time-outline'}
+                  name={subscription.isSubscriptionActive ? 'checkmark-circle' : 'time-outline'}
                   size={20}
                   color="#E9FEFF"
                 />
@@ -1989,27 +2012,31 @@ export default function SpecialistHome() {
 
               <Text style={styles.subMainText}>{renderSubscriptionMainText(subscription)}</Text>
 
-              {subscription.status === 'TRIALING' &&
-              typeof subscription.daysRemaining === 'number' ? (
+              {subscription.isTrialActive ? (
                 <Text style={styles.subSecondaryText}>
                   Te quedan{' '}
                   <Text style={styles.subDaysHighlight}>
-                    {subscription.daysRemaining <= 0
+                    {subscription.trialDaysRemaining <= 0
                       ? 'menos de 1 día'
-                      : `${subscription.daysRemaining} días`}
+                      : `${subscription.trialDaysRemaining} día${subscription.trialDaysRemaining === 1 ? '' : 's'}`}
                   </Text>{' '}
                   de prueba gratuita.
                 </Text>
               ) : null}
 
-              {subscription.status === 'ACTIVE' && subscription.currentPeriodEnd ? (
+              {subscription.isSubscriptionActive && subscription.currentPeriodEnd ? (
                 <Text style={styles.subSecondaryText}>
-                  Próxima renovación: {formatDate(subscription.currentPeriodEnd)}
+                  Activa hasta: {formatDate(subscription.currentPeriodEnd)} ·{' '}
+                  <Text style={styles.subDaysHighlight}>
+                    {subscription.subscriptionDaysRemaining} día
+                    {subscription.subscriptionDaysRemaining === 1 ? '' : 's'}
+                  </Text>{' '}
+                  restantes
                 </Text>
               ) : null}
 
               {/* ✅ CTA cuando hace falta pagar / activar */}
-              {subscription.status !== 'ACTIVE' ? (
+              {!subscription.isTrialActive && !subscription.isSubscriptionActive ? (
                 <View style={{ marginTop: 10 }}>
                   <View
                     style={{
@@ -2025,11 +2052,9 @@ export default function SpecialistHome() {
                     }}
                   >
                     <Text style={{ color: '#FFE29B', fontWeight: '900', flex: 1 }}>
-                      {subscription.status === 'TRIALING'
-                        ? 'Activá tu suscripción para seguir recibiendo trabajos.'
-                        : subscription.status === 'PAST_DUE'
-                          ? 'Tenés un pago pendiente. Tocá para regularizar.'
-                          : 'Tu suscripción está inactiva. Tocá para activarla.'}
+                      {subscription.status === 'PAST_DUE'
+                        ? 'Tenés un pago pendiente. Tocá para regularizar.'
+                        : 'Tu suscripción está inactiva. Tocá para activarla.'}
                     </Text>
                     <Ionicons name="chevron-forward" size={18} color="#FFE29B" />
                   </View>
@@ -2060,8 +2085,8 @@ export default function SpecialistHome() {
             {!canToggleAvailability ? (
               <Text style={[styles.muted, { marginTop: 6 }]}>
                 {!subscriptionOk
-                  ? 'Tu disponibilidad requiere suscripción activa. Tocá la tarjeta de Suscripción para activarla.'
-                  : 'Tu disponibilidad se habilita cuando validemos tú identidad y el certificado de buena conducta esté aprobado.'}
+                  ? 'Tu disponibilidad requiere una suscripción activa o una prueba gratuita vigente. Tocá la tarjeta de Suscripción para revisarla.'
+                  : 'Tu disponibilidad se habilita cuando validemos tu identidad y el certificado de buena conducta esté aprobado.'}
               </Text>
             ) : null}
 
@@ -2078,7 +2103,11 @@ export default function SpecialistHome() {
                   },
                 ]}
               >
-                <Text style={[styles.btnT, { color: '#FFE29B' }]}>Activar suscripción</Text>
+                <Text style={[styles.btnT, { color: '#FFE29B' }]}>
+                  {subscription?.status === 'PAST_DUE'
+                    ? 'Regularizar suscripción'
+                    : 'Activar suscripción'}
+                </Text>
               </Pressable>
             ) : null}
             <Pressable
@@ -2391,14 +2420,14 @@ export default function SpecialistHome() {
               value={radius}
               onChangeText={setRadius}
               keyboardType="numeric"
-              placeholder="30"
+              placeholder={String(maxAllowedRadiusKm)}
               placeholderTextColor="#9ec9cd"
               style={styles.input}
             />
             <Text style={styles.muted}>
-              Distancia máxima desde tu ubicación actual. El radio máximo permitido es de 30 km.
+              Distancia máxima desde tu ubicación actual. El radio máximo permitido es de{' '}
+              {maxAllowedRadiusKm} km.
             </Text>
-
             <Pressable
               onPress={savePriceAndRadius}
               disabled={!priceRadiusDirty || savingBy.priceRadius}
@@ -3127,6 +3156,67 @@ export default function SpecialistHome() {
             >
               <Text style={styles.btnT}>Cerrar</Text>
             </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal: preview antes de subir trabajo realizado */}
+      <Modal
+        transparent
+        visible={portfolioUploadPreviewOpen}
+        animationType="fade"
+        onRequestClose={() => {
+          if (savingBy.portfolio) return;
+          setPortfolioUploadPreviewOpen(false);
+          setPortfolioLocalUri(null);
+        }}
+      >
+        <View style={styles.previewBG}>
+          <View style={styles.previewCard}>
+            {portfolioLocalUri ? (
+              <Image source={{ uri: portfolioLocalUri }} style={styles.previewImg} />
+            ) : null}
+
+            <Text
+              style={{
+                color: '#0A5B63',
+                fontWeight: '800',
+                textAlign: 'center',
+                marginTop: 12,
+              }}
+            >
+              ¿Querés subir esta imagen a tus trabajos realizados?
+            </Text>
+
+            <View style={styles.previewRow}>
+              <Pressable
+                style={[styles.btn, { flex: 1, backgroundColor: 'rgba(10,91,99,0.12)' }]}
+                disabled={savingBy.portfolio}
+                onPress={() => {
+                  setPortfolioUploadPreviewOpen(false);
+                  setPortfolioLocalUri(null);
+                }}
+              >
+                <Text style={[styles.btnT, { color: '#0A5B63' }]}>Cancelar</Text>
+              </Pressable>
+
+              <View style={{ width: 10 }} />
+
+              <Pressable
+                style={[styles.btn, { flex: 1 }]}
+                disabled={savingBy.portfolio}
+                onPress={confirmPortfolioImageUpload}
+              >
+                {savingBy.portfolio ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <ActivityIndicator />
+                    <Text style={styles.btnT}>Subiendo…</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.btnT}>Usar imagen</Text>
+                )}
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>

@@ -3,7 +3,7 @@
 module.exports = {
   name: 'Solucity',
   slug: 'solucity',
-  version: '1.1.18',
+  version: '1.1.19',
   orientation: 'portrait',
   scheme: 'solucity',
 

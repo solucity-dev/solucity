@@ -1,4 +1,5 @@
 //apps/mobile/src/notifications/registerForPush.ts
+import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
@@ -23,12 +24,28 @@ export async function registerForPush(): Promise<string | null> {
       finalStatus = status;
     }
 
-    if (finalStatus !== 'granted') return null;
+    if (finalStatus !== 'granted') {
+      if (__DEV__) console.log('[push] permission not granted');
+      return null;
+    }
 
-    const token = (await Notifications.getExpoPushTokenAsync()).data;
+    const projectId =
+      Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId ?? undefined;
+
+    const tokenResponse = projectId
+      ? await Notifications.getExpoPushTokenAsync({ projectId })
+      : await Notifications.getExpoPushTokenAsync();
+
+    const token = tokenResponse?.data ?? null;
+
+    if (__DEV__) {
+      console.log('[push] token generated =', token);
+      console.log('[push] projectId =', projectId);
+    }
+
     return token;
   } catch (e) {
-    if (__DEV__) console.log('[push] registerForPush error (ignored)', e);
+    if (__DEV__) console.log('[push] registerForPush error', e);
     return null;
   }
 }

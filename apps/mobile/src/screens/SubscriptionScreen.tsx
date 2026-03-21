@@ -307,7 +307,7 @@ export default function SubscriptionScreen() {
                   />
                   <Benefit
                     icon={<Ionicons name="infinite-outline" size={18} color="#E9FEFF" />}
-                    text="Trabajos ilimitados"
+                    text="Recibí nuevos trabajos desde la app"
                   />
                   <Benefit
                     icon={<MDI name="percent-outline" size={18} color="#E9FEFF" />}

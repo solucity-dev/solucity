@@ -61,6 +61,37 @@ function safeJson(obj: any) {
   }
 }
 
+function normalizeAddressText(input: string): string {
+  let s = String(input ?? '').trim();
+
+  if (!s) return s;
+
+  s = s.replace(/\s*,\s*/g, ', ');
+  s = s.replace(/\s+/g, ' ').trim();
+
+  const replacements: [RegExp, string][] = [
+    [/\b(pje|pje\.)\s+/gi, 'pasaje '],
+    [/\b(pas|pas\.)\s+/gi, 'pasaje '],
+    [/\b(psje|psje\.)\s+/gi, 'pasaje '],
+    [/\b(av|av\.)\s+/gi, 'avenida '],
+    [/\b(avda|avda\.)\s+/gi, 'avenida '],
+    [/\b(bv|bv\.)\s+/gi, 'boulevard '],
+    [/\b(blvd|blvd\.)\s+/gi, 'boulevard '],
+    [/\b(gral|gral\.)\s+/gi, 'general '],
+    [/\b(dr|dr\.)\s+/gi, 'doctor '],
+  ];
+
+  for (const [regex, value] of replacements) {
+    s = s.replace(regex, value);
+  }
+
+  s = s.replace(/\.(?=[A-Za-zÁÉÍÓÚáéíóúÑñ])/g, ' ');
+  s = s.replace(/\s+/g, ' ').trim();
+  s = s.replace(/\s*,\s*/g, ', ');
+
+  return s;
+}
+
 export default function CreateOrderScreen() {
   const insets = useSafeAreaInsets();
   const rawTabH = useBottomTabBarHeight();
@@ -338,8 +369,8 @@ export default function CreateOrderScreen() {
         );
       }
 
-      const baseAddress = address.trim();
-      const loc = (locality ?? '').trim();
+      const baseAddress = normalizeAddressText(address.trim());
+      const loc = normalizeAddressText((locality ?? '').trim());
 
       // ✅ Dirección obligatoria SOLO si es a domicilio
       if (placeMode === 'AT_HOME' && !baseAddress) {
@@ -349,7 +380,9 @@ export default function CreateOrderScreen() {
 
       // ✅ Armamos addressText según modalidad
       const typedFormatted =
-        placeMode === 'AT_HOME' ? (loc ? `${baseAddress}, ${loc}, Córdoba` : baseAddress) : null;
+        placeMode === 'AT_HOME'
+          ? [baseAddress, loc, 'Córdoba', 'Argentina'].filter(Boolean).join(', ')
+          : null;
 
       if (mode === 'schedule' && !scheduledAt) {
         Alert.alert('Faltan datos', 'Indicá fecha y hora o elegí “Ahora”.');
@@ -494,6 +527,7 @@ export default function CreateOrderScreen() {
         isUrgent: urgent,
         ...(locationIdToSend ? { locationId: locationIdToSend } : {}),
         ...(typedFormatted ? { address: typedFormatted, addressText: typedFormatted } : {}),
+        ...(placeMode === 'AT_HOME' && loc ? { locality: loc } : {}),
       };
 
       if (mode === 'now') payload.preferredAt = new Date().toISOString();
@@ -666,23 +700,28 @@ export default function CreateOrderScreen() {
           )}
 
           {/* Localidad */}
-          <Text style={[styles.label, { marginTop: 10 }]}>Localidad</Text>
+          {placeMode === 'AT_HOME' ? (
+            <>
+              {/* Localidad */}
+              <Text style={[styles.label, { marginTop: 10 }]}>Localidad</Text>
 
-          <Pressable
-            style={styles.inputRow}
-            onPress={() => {
-              setLocalityQuery('');
-              setLocalityOpen(true);
-            }}
-          >
-            <MDI name="map-marker-radius-outline" size={18} color="#06494F" />
+              <Pressable
+                style={styles.inputRow}
+                onPress={() => {
+                  setLocalityQuery('');
+                  setLocalityOpen(true);
+                }}
+              >
+                <MDI name="map-marker-radius-outline" size={18} color="#06494F" />
 
-            <Text style={{ flex: 1, color: '#06494F', fontWeight: '800' }}>
-              {locality || 'Seleccionar localidad'}
-            </Text>
+                <Text style={{ flex: 1, color: '#06494F', fontWeight: '800' }}>
+                  {locality || 'Seleccionar localidad'}
+                </Text>
 
-            <Ionicons name="chevron-down" size={18} color="#06494F" />
-          </Pressable>
+                <Ionicons name="chevron-down" size={18} color="#06494F" />
+              </Pressable>
+            </>
+          ) : null}
 
           <Modal
             visible={localityOpen}

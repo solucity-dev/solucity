@@ -84,6 +84,186 @@ const normalizeWhatsappPhone = (phone?: string | null): string | null => {
   return digits;
 };
 
+function normalizeAddressText(input: string): string {
+  let s = String(input ?? '').trim();
+
+  if (!s) return s;
+
+  s = s.replace(/\s*,\s*/g, ', ');
+  s = s.replace(/\s+/g, ' ').trim();
+
+  const replacements: [RegExp, string][] = [
+    [/\b(pje|pje\.)\s+/gi, 'pasaje '],
+    [/\b(pas|pas\.)\s+/gi, 'pasaje '],
+    [/\b(psje|psje\.)\s+/gi, 'pasaje '],
+    [/\b(av|av\.)\s+/gi, 'avenida '],
+    [/\b(avda|avda\.)\s+/gi, 'avenida '],
+    [/\b(bv|bv\.)\s+/gi, 'boulevard '],
+    [/\b(blvd|blvd\.)\s+/gi, 'boulevard '],
+    [/\b(gral|gral\.)\s+/gi, 'general '],
+    [/\b(dr|dr\.)\s+/gi, 'doctor '],
+  ];
+
+  for (const [regex, value] of replacements) {
+    s = s.replace(regex, value);
+  }
+
+  s = s.replace(/\.(?=[A-Za-zÁÉÍÓÚáéíóúÑñ])/g, ' ');
+  s = s.replace(/\s+/g, ' ').trim();
+  s = s.replace(/\s*,\s*/g, ', ');
+
+  return s;
+}
+
+function deaccent(input: string): string {
+  return String(input ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function stripStreetNumber(input: string): string {
+  return String(input ?? '')
+    .replace(/\s+\d+[A-Za-z]?(?:\s*(?:bis|BIS))?\s*$/i, '')
+    .trim();
+}
+
+async function geocodeHomeAddressWithFallback(params: {
+  formatted: string;
+  locality?: string | null;
+}) {
+  const originalFormatted = String(params.formatted ?? '').trim();
+  const explicitLocality = String(params.locality ?? '').trim() || null;
+
+  const parts = originalFormatted
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const streetPart = String(parts[0] ?? '').trim();
+  const inferredLocality = explicitLocality || String(parts[1] ?? '').trim() || null;
+
+  const candidates = new Set<string>();
+
+  const pushCandidate = (value?: string | null) => {
+    const v = String(value ?? '')
+      .replace(/\s+/g, ' ')
+      .replace(/\s*,\s*/g, ', ')
+      .trim();
+
+    if (v) candidates.add(v);
+  };
+
+  const normalizedOriginal = normalizeAddressText(originalFormatted);
+  const normalizedStreet = normalizeAddressText(streetPart);
+  const normalizedLocality = inferredLocality ? normalizeAddressText(inferredLocality) : null;
+
+  const streetWithoutPrefix = normalizedStreet.replace(
+    /^(pasaje|avenida|boulevard|general|doctor)\s+/i,
+    '',
+  );
+
+  const streetWithoutNumber = stripStreetNumber(normalizedStreet);
+  const streetWithoutPrefixAndNumber = stripStreetNumber(streetWithoutPrefix);
+
+  pushCandidate(originalFormatted);
+
+  if (normalizedOriginal && normalizedOriginal !== originalFormatted) {
+    pushCandidate(normalizedOriginal);
+  }
+
+  if (streetPart && inferredLocality) {
+    pushCandidate(`${streetPart}, ${inferredLocality}, Córdoba, Argentina`);
+    pushCandidate(`${normalizedStreet}, ${inferredLocality}, Córdoba, Argentina`);
+
+    if (normalizedLocality && normalizedLocality !== inferredLocality) {
+      pushCandidate(`${streetPart}, ${normalizedLocality}, Córdoba, Argentina`);
+      pushCandidate(`${normalizedStreet}, ${normalizedLocality}, Córdoba, Argentina`);
+    }
+
+    if (streetWithoutPrefix && streetWithoutPrefix !== normalizedStreet) {
+      pushCandidate(`${streetWithoutPrefix}, ${inferredLocality}, Córdoba, Argentina`);
+      if (normalizedLocality) {
+        pushCandidate(`${streetWithoutPrefix}, ${normalizedLocality}, Córdoba, Argentina`);
+      }
+    }
+
+    if (streetWithoutNumber && streetWithoutNumber !== normalizedStreet) {
+      pushCandidate(`${streetWithoutNumber}, ${inferredLocality}, Córdoba, Argentina`);
+      pushCandidate(`${streetWithoutNumber}, ${inferredLocality}, Argentina`);
+
+      if (normalizedLocality) {
+        pushCandidate(`${streetWithoutNumber}, ${normalizedLocality}, Córdoba, Argentina`);
+      }
+    }
+
+    if (
+      streetWithoutPrefixAndNumber &&
+      streetWithoutPrefixAndNumber !== streetWithoutPrefix &&
+      streetWithoutPrefixAndNumber !== normalizedStreet
+    ) {
+      pushCandidate(`${streetWithoutPrefixAndNumber}, ${inferredLocality}, Córdoba, Argentina`);
+      pushCandidate(`${streetWithoutPrefixAndNumber}, ${inferredLocality}, Argentina`);
+
+      if (normalizedLocality) {
+        pushCandidate(`${streetWithoutPrefixAndNumber}, ${normalizedLocality}, Córdoba, Argentina`);
+      }
+    }
+
+    pushCandidate(`${streetPart}, ${inferredLocality}, Argentina`);
+    pushCandidate(`${normalizedStreet}, ${inferredLocality}, Argentina`);
+    pushCandidate(`${streetPart}, ${inferredLocality}, Cordoba, Argentina`);
+    pushCandidate(`${normalizedStreet}, ${inferredLocality}, Cordoba, Argentina`);
+  }
+
+  if (streetPart && !inferredLocality) {
+    pushCandidate(`${streetPart}, Córdoba, Argentina`);
+    pushCandidate(`${normalizedStreet}, Córdoba, Argentina`);
+    pushCandidate(`${streetPart}, Argentina`);
+    pushCandidate(`${normalizedStreet}, Argentina`);
+
+    if (streetWithoutNumber && streetWithoutNumber !== normalizedStreet) {
+      pushCandidate(`${streetWithoutNumber}, Córdoba, Argentina`);
+      pushCandidate(`${streetWithoutNumber}, Argentina`);
+    }
+  }
+
+  for (const c of Array.from(candidates)) {
+    const deaccented = deaccent(c);
+    if (deaccented !== c) pushCandidate(deaccented);
+  }
+
+  let geo: any = null;
+  let usedFormatted = originalFormatted;
+
+  dbg(debugOrders, '[orders][geocodeHomeAddressWithFallback][candidates]', Array.from(candidates));
+
+  for (const candidate of Array.from(candidates)) {
+    try {
+      const result = await geocodeAddress(candidate);
+
+      if (
+        result?.lat != null &&
+        result?.lng != null &&
+        !Number.isNaN(result.lat) &&
+        !Number.isNaN(result.lng)
+      ) {
+        geo = result;
+        usedFormatted = candidate;
+        break;
+      }
+    } catch {
+      // seguimos
+    }
+  }
+
+  return {
+    geo,
+    usedFormatted,
+    inferredLocality,
+    originalFormatted,
+  };
+}
+
 // ✅ Normaliza categorySlug (compat / alias)
 function normalizeCategorySlug(raw: any): string | null {
   if (typeof raw !== 'string') return null;
@@ -471,18 +651,21 @@ orders.post('/', auth, async (req, res) => {
 
     let addressText =
       typeof rawAddressInput === 'string'
-        ? rawAddressInput.trim()
+        ? normalizeAddressText(rawAddressInput.trim())
         : typeof rawAddressInput?.formatted === 'string'
-          ? rawAddressInput.formatted.trim()
+          ? normalizeAddressText(rawAddressInput.formatted.trim())
           : null;
 
-    // ✅ NUEVO: locality opcional desde address object
+    // ✅ locality opcional: puede venir dentro de address o arriba del payload
     const locality =
-      rawAddressInput &&
-      typeof rawAddressInput === 'object' &&
-      typeof (rawAddressInput as any).locality === 'string'
-        ? (rawAddressInput as any).locality.trim()
-        : null;
+      typeof (req.body as any)?.locality === 'string' && (req.body as any).locality.trim()
+        ? (req.body as any).locality.trim()
+        : rawAddressInput &&
+            typeof rawAddressInput === 'object' &&
+            typeof (rawAddressInput as any).locality === 'string' &&
+            (rawAddressInput as any).locality.trim()
+          ? (rawAddressInput as any).locality.trim()
+          : null;
 
     if (!customerId) {
       const cust = await prisma.customerProfile.findUnique({
@@ -599,39 +782,33 @@ orders.post('/', auth, async (req, res) => {
     // 🔍 Geocode solo aplica a HOME
     if (finalServiceMode === 'HOME') {
       if (!finalLocationId && addressText) {
-        // ✅ CAMBIO MÍNIMO 2: Normalizar dirección HOME ANTES del geocode
-        let full = addressText;
-
-        if (locality) {
-          const lowFull = full.toLowerCase();
-          const lowLoc = locality.toLowerCase();
-          if (!lowFull.includes(lowLoc)) {
-            full = `${full}, ${locality}`;
-          }
-        }
-
-        const low = full.toLowerCase();
-        const hasCordoba = low.includes('córdoba') || low.includes('cordoba');
-        if (!hasCordoba) {
-          full = `${full}, Córdoba`;
-        }
-
-        addressText = full;
-
         try {
-          const geo = await geocodeAddress(addressText);
+          const result = await geocodeHomeAddressWithFallback({
+            formatted: addressText,
+            locality,
+          });
+
+          const geo = result.geo;
+          const usedFormatted = result.usedFormatted;
+
+          dbg(debugOrders, '[POST /orders][HOME geocode result]', {
+            originalFormatted: result.originalFormatted,
+            usedFormatted,
+            locality,
+            inferredLocality: result.inferredLocality,
+            geo,
+          });
 
           if (geo) {
             const formatted =
               typeof geo.formatted === 'string' && geo.formatted.trim()
-                ? geo.formatted.trim()
-                : addressText;
+                ? normalizeAddressText(geo.formatted.trim())
+                : normalizeAddressText(usedFormatted);
 
-            // ✅ CAMBIO MÍNIMO 3: validar que el resultado esté dentro de Córdoba
-            const lowF = formatted.toLowerCase();
-            const okCordoba = lowF.includes('córdoba') || lowF.includes('cordoba');
+            const inCordoba =
+              geo.lat >= -35.5 && geo.lat <= -29.0 && geo.lng >= -66.8 && geo.lng <= -62.0;
 
-            if (!okCordoba) {
+            if (!inCordoba) {
               return res.status(409).json({
                 ok: false,
                 error: 'address_outside_cordoba',
@@ -650,6 +827,14 @@ orders.post('/', auth, async (req, res) => {
             }
 
             if (!addrId) {
+              const sameFormatted = await prisma.address.findFirst({
+                where: { formatted },
+                select: { id: true },
+              });
+              if (sameFormatted) addrId = sameFormatted.id;
+            }
+
+            if (!addrId) {
               const newAddr = await prisma.address.create({
                 data: {
                   formatted,
@@ -663,9 +848,10 @@ orders.post('/', auth, async (req, res) => {
             }
 
             finalLocationId = addrId;
+            addressText = formatted;
           }
         } catch (e) {
-          console.warn('[POST /orders] geocode failed', e);
+          console.warn('[POST /orders] HOME geocode failed', e);
         }
       }
 
@@ -679,7 +865,6 @@ orders.post('/', auth, async (req, res) => {
         });
       }
     }
-
     // Resolver categoryId desde categorySlug (si viene)
     let requestedCategoryId: string | null = null;
     if (bodyCategorySlug) {

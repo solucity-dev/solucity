@@ -48,6 +48,8 @@ function httpError(message: string, status = 400) {
 export async function startEmailRegistration(email: string) {
   const normalized = email.trim().toLowerCase();
 
+  console.log('[REGISTER/SERVICE] email normalizado:', normalized);
+
   const trace = otpTraceEnabled(normalized);
   const ehash = emailHash(normalized);
 
@@ -57,6 +59,8 @@ export async function startEmailRegistration(email: string) {
   const exists = await prisma.user.findUnique({
     where: { email: normalized },
   });
+
+  console.log('[REGISTER/SERVICE] usuario encontrado por email:', exists);
 
   if (exists) throw httpError('email_in_use', 409);
 

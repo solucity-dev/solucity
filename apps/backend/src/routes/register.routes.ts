@@ -92,6 +92,8 @@ router.post('/register/start', async (req, res) => {
 
     const { email } = schema.parse(req.body);
 
+    console.log('[REGISTER/START route] email recibido:', email);
+
     const result = await startEmailRegistration(email);
     return res.json({ ok: true, ...result });
   } catch (err: any) {

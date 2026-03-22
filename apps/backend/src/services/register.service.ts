@@ -48,6 +48,8 @@ function httpError(message: string, status = 400) {
 export async function startEmailRegistration(email: string) {
   const normalized = email.trim().toLowerCase();
 
+  console.log('[REGISTER/SERVICE] start OTP flow for:', normalized);
+
   console.log('[REGISTER/SERVICE] email normalizado:', normalized);
 
   const trace = otpTraceEnabled(normalized);
@@ -84,6 +86,8 @@ export async function startEmailRegistration(email: string) {
     },
   });
 
+  console.log('[REGISTER/SERVICE] recent OTP count:', recentCount);
+
   if (recentCount >= OTP_RATE_MAX_PER_WINDOW) {
     if (trace) {
       console.log(`[OTP/start] e=${ehash} fail=too_many_requests recentCount=${recentCount}`);
@@ -102,6 +106,18 @@ export async function startEmailRegistration(email: string) {
     },
     orderBy: { createdAt: 'desc' },
   });
+
+  console.log(
+    '[REGISTER/SERVICE] active OTP found:',
+    activeOtp
+      ? {
+          id: activeOtp.id,
+          createdAt: activeOtp.createdAt,
+          expiresAt: activeOtp.expiresAt,
+          usedAt: activeOtp.usedAt,
+        }
+      : null,
+  );
 
   // 5) Cooldown corto: si ya existe OTP activo y fue creado hace menos de X segundos,
   //    bloqueamos el reenvío para no quemar cuota innecesariamente.
@@ -172,8 +188,18 @@ export async function startEmailRegistration(email: string) {
   // 7) Intentar enviar el mail ANTES de persistir cambios destructivos.
   //    Así evitamos crear OTP basura o invalidar OTP útil si el proveedor falla.
   try {
+    console.log('[REGISTER/SERVICE] sending OTP email to:', normalized);
+
     await sendOtpEmail(normalized, otpToUse.code);
+
+    console.log('[REGISTER/SERVICE] OTP email send OK to:', normalized);
   } catch (err: any) {
+    console.log('[REGISTER/SERVICE] OTP email send FAILED:', {
+      email: normalized,
+      status: err?.status ?? err?.statusCode,
+      name: err?.name,
+      message: err?.message,
+    });
     const resendStatus = err?.status ?? err?.statusCode;
     const resendName = err?.name ?? '';
     const resendMessage = err?.message ?? '';
@@ -214,6 +240,7 @@ export async function startEmailRegistration(email: string) {
       },
     });
 
+    console.log('[REGISTER/SERVICE] OTP persisted in DB for:', normalized);
     otpToUse = {
       id: created.id,
       email: created.email,

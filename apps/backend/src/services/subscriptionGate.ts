@@ -19,19 +19,28 @@ export async function canSpecialistBeVisible(userId: string): Promise<Subscripti
 
   const sub = await prisma.subscription.findUnique({
     where: { specialistId: specialist.id },
-    select: { status: true, trialEnd: true },
+    select: { status: true, trialEnd: true, currentPeriodEnd: true },
   });
 
   if (!sub) return { ok: false, reason: 'SUBSCRIPTION_REQUIRED', status: null };
 
   const now = new Date();
 
-  if (sub.status === 'TRIALING' && sub.trialEnd && sub.trialEnd < now) {
+  // Trial vigente
+  if (sub.status === 'TRIALING') {
+    if (sub.trialEnd && sub.trialEnd > now) {
+      return { ok: true, status: 'TRIALING' };
+    }
     return { ok: false, reason: 'SUBSCRIPTION_REQUIRED', status: 'PAST_DUE' };
   }
 
-  if (sub.status === 'ACTIVE') return { ok: true, status: 'ACTIVE' };
-  if (sub.status === 'TRIALING') return { ok: true, status: 'TRIALING' };
+  // Suscripción activa vigente
+  if (sub.status === 'ACTIVE') {
+    if (sub.currentPeriodEnd && sub.currentPeriodEnd > now) {
+      return { ok: true, status: 'ACTIVE' };
+    }
+    return { ok: false, reason: 'SUBSCRIPTION_REQUIRED', status: 'PAST_DUE' };
+  }
 
   return { ok: false, reason: 'SUBSCRIPTION_REQUIRED', status: sub.status };
 }

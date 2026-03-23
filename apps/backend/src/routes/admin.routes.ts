@@ -419,11 +419,13 @@ adminRouter.get('/metrics', async (_req, res) => {
       },
     }),
 
-    prisma.subscription.groupBy({
-      by: ['status'],
-      _count: { _all: true },
+    prisma.subscription.findMany({
+      select: {
+        status: true,
+        trialEnd: true,
+        currentPeriodEnd: true,
+      },
     }),
-
     prisma.kycSubmission.count({ where: { status: 'PENDING' } }),
 
     // 🆕 MATRÍCULAS
@@ -433,7 +435,43 @@ adminRouter.get('/metrics', async (_req, res) => {
     prisma.specialistBackgroundCheck.count({ where: { status: 'PENDING' } }),
   ]);
 
-  const subs = Object.fromEntries(subsByStatus.map((x) => [x.status, x._count._all]));
+  const now = new Date();
+
+  const subs = {
+    TRIALING: 0,
+    ACTIVE: 0,
+    PAST_DUE: 0,
+    CANCELLED: 0,
+  };
+
+  for (const sub of subsByStatus) {
+    if (sub.status === 'TRIALING') {
+      if (sub.trialEnd && sub.trialEnd > now) {
+        subs.TRIALING += 1;
+      } else {
+        subs.PAST_DUE += 1;
+      }
+      continue;
+    }
+
+    if (sub.status === 'ACTIVE') {
+      if (sub.currentPeriodEnd && sub.currentPeriodEnd > now) {
+        subs.ACTIVE += 1;
+      } else {
+        subs.PAST_DUE += 1;
+      }
+      continue;
+    }
+
+    if (sub.status === 'PAST_DUE') {
+      subs.PAST_DUE += 1;
+      continue;
+    }
+
+    if (sub.status === 'CANCELLED') {
+      subs.CANCELLED += 1;
+    }
+  }
 
   res.json({
     users: {
@@ -765,7 +803,22 @@ adminRouter.get('/specialists', async (_req, res) => {
     const isTrialActive = sub?.status === 'TRIALING' && trialDaysRemaining > 0;
     const isSubscriptionActive = sub?.status === 'ACTIVE' && subscriptionDaysRemaining > 0;
 
+    const effectiveStatus = !sub
+      ? null
+      : isTrialActive
+        ? 'TRIALING'
+        : isSubscriptionActive
+          ? 'ACTIVE'
+          : sub.status === 'CANCELLED'
+            ? 'CANCELLED'
+            : 'PAST_DUE';
+
     const accessUntil = isTrialActive ? trialEnd : isSubscriptionActive ? currentPeriodEnd : null;
+    const daysLeft = isTrialActive
+      ? trialDaysRemaining
+      : isSubscriptionActive
+        ? subscriptionDaysRemaining
+        : 0;
 
     const specSpecialties = u.specialist?.specialties ?? [];
 
@@ -792,7 +845,7 @@ adminRouter.get('/specialists', async (_req, res) => {
 
       subscription: sub
         ? {
-            status: sub.status,
+            status: effectiveStatus,
             trialEnd: sub.trialEnd,
             currentPeriodStart: sub.currentPeriodStart,
             currentPeriodEnd: sub.currentPeriodEnd,
@@ -801,8 +854,10 @@ adminRouter.get('/specialists', async (_req, res) => {
             trialDaysRemaining,
             subscriptionDaysRemaining,
             accessUntil,
+            daysLeft,
           }
         : null,
+      daysLeft,
 
       specialties,
       specialtySlugs,
@@ -949,7 +1004,22 @@ adminRouter.get('/specialists/:id', async (req, res) => {
   const isTrialActive = sub?.status === 'TRIALING' && trialDaysRemaining > 0;
   const isSubscriptionActive = sub?.status === 'ACTIVE' && subscriptionDaysRemaining > 0;
 
+  const effectiveStatus = !sub
+    ? null
+    : isTrialActive
+      ? 'TRIALING'
+      : isSubscriptionActive
+        ? 'ACTIVE'
+        : sub.status === 'CANCELLED'
+          ? 'CANCELLED'
+          : 'PAST_DUE';
+
   const accessUntil = isTrialActive ? trialEnd : isSubscriptionActive ? currentPeriodEnd : null;
+  const daysLeft = isTrialActive
+    ? trialDaysRemaining
+    : isSubscriptionActive
+      ? subscriptionDaysRemaining
+      : 0;
 
   const certifications = (spec.certifications ?? []).map((c) => ({
     id: c.id,
@@ -1021,7 +1091,7 @@ adminRouter.get('/specialists/:id', async (req, res) => {
 
     subscription: sub
       ? {
-          status: sub.status,
+          status: effectiveStatus,
           trialEnd: sub.trialEnd ? sub.trialEnd.toISOString() : null,
           currentPeriodStart: sub.currentPeriodStart ? sub.currentPeriodStart.toISOString() : null,
           currentPeriodEnd: sub.currentPeriodEnd ? sub.currentPeriodEnd.toISOString() : null,
@@ -1030,6 +1100,7 @@ adminRouter.get('/specialists/:id', async (req, res) => {
           trialDaysRemaining,
           subscriptionDaysRemaining,
           accessUntil: accessUntil ? accessUntil.toISOString() : null,
+          daysLeft,
         }
       : null,
 
@@ -1770,13 +1841,15 @@ adminRouter.patch('/specialists/:specialistId/grant-days', async (req, res) => {
   } | null = null;
 
   if (!spec.subscription) {
+    const newTrialEnd = new Date(now.getTime() + ms);
+
     updatedSub = await prisma.subscription.create({
       data: {
         specialistId,
         status: 'TRIALING',
         currentPeriodStart: now,
-        currentPeriodEnd: new Date(now.getTime() + ms),
-        trialEnd: new Date(now.getTime() + ms),
+        currentPeriodEnd: newTrialEnd,
+        trialEnd: newTrialEnd,
       },
       select: {
         id: true,
@@ -1789,10 +1862,18 @@ adminRouter.patch('/specialists/:specialistId/grant-days', async (req, res) => {
   } else {
     const sub = spec.subscription;
 
-    if (sub.status === 'TRIALING' && sub.trialEnd) {
+    if (sub.status === 'TRIALING') {
+      const baseTrialEnd = sub.trialEnd && sub.trialEnd > now ? sub.trialEnd : now;
+      const newTrialEnd = new Date(baseTrialEnd.getTime() + ms);
+
       updatedSub = await prisma.subscription.update({
         where: { specialistId },
-        data: { trialEnd: new Date(sub.trialEnd.getTime() + ms) },
+        data: {
+          status: 'TRIALING',
+          trialEnd: newTrialEnd,
+          currentPeriodEnd: newTrialEnd,
+          currentPeriodStart: sub.currentPeriodStart ?? now,
+        },
         select: {
           id: true,
           status: true,
@@ -1802,10 +1883,17 @@ adminRouter.patch('/specialists/:specialistId/grant-days', async (req, res) => {
         },
       });
     } else {
-      const baseEnd = sub.currentPeriodEnd ?? now;
+      const baseEnd =
+        sub.currentPeriodEnd && sub.currentPeriodEnd > now ? sub.currentPeriodEnd : now;
+      const newPeriodEnd = new Date(baseEnd.getTime() + ms);
+
       updatedSub = await prisma.subscription.update({
         where: { specialistId },
-        data: { currentPeriodEnd: new Date(baseEnd.getTime() + ms) },
+        data: {
+          status: 'ACTIVE',
+          currentPeriodEnd: newPeriodEnd,
+          currentPeriodStart: sub.currentPeriodStart ?? now,
+        },
         select: {
           id: true,
           status: true,

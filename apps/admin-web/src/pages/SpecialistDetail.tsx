@@ -25,8 +25,16 @@ type Tone = 'neutral' | 'good' | 'warn' | 'bad';
 type SubscriptionDTO = {
   status: 'TRIALING' | 'ACTIVE' | 'PAST_DUE' | 'CANCELLED' | string;
   trialEnd: string | null;
+  currentPeriodStart?: string | null;
   currentPeriodEnd: string | null;
-  daysLeft?: number | null;
+
+  isTrialActive?: boolean;
+  isSubscriptionActive?: boolean;
+
+  trialDaysRemaining?: number;
+  subscriptionDaysRemaining?: number;
+
+  accessUntil?: string | null;
 };
 
 type GrantDaysResponse = {
@@ -69,13 +77,6 @@ function formatDateAR(iso?: string | null) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
   return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
-
-function formatDaysLeft(days?: number | null) {
-  if (days == null) return '';
-  if (days <= 0) return ' (termina hoy)';
-  if (days === 1) return ' (queda 1 día)';
-  return ` (quedan ${days} días)`;
 }
 
 function getAdminToken(): string {
@@ -174,7 +175,6 @@ export default function SpecialistDetail() {
   }, [typed?.avatarUrl, avatarFailed]);
 
   const sub = (typed?.subscription ?? null) as SubscriptionDTO | null;
-  const daysLeft = sub?.daysLeft ?? null;
 
   const API_URL = String(import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
@@ -1092,18 +1092,26 @@ export default function SpecialistDetail() {
                       <strong>{sub.status}</strong>
                     </div>
 
-                    <div className="k">
-                      <span>Trial end</span>
-                      <strong>
-                        {formatDateAR(sub.trialEnd)}
-                        {formatDaysLeft(daysLeft)}
-                      </strong>
-                    </div>
+<div className="k">
+  <span>Trial end</span>
+  <strong>{formatDateAR(sub.trialEnd)}</strong>
+</div>
 
-                    <div className="k">
-                      <span>Period end</span>
-                      <strong>{formatDateAR(sub.currentPeriodEnd)}</strong>
-                    </div>
+<div className="k">
+  <span>Period end</span>
+  <strong>{formatDateAR(sub.currentPeriodEnd)}</strong>
+</div>
+
+<div className="k">
+  <span>Días vigentes</span>
+  <strong>
+    {sub.isTrialActive
+      ? `${sub.trialDaysRemaining ?? 0} (trial)`
+      : sub.isSubscriptionActive
+        ? `${sub.subscriptionDaysRemaining ?? 0} (activa)`
+        : '0'}
+  </strong>
+</div>
                   </div>
                 </>
               )}

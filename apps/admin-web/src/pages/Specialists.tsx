@@ -318,7 +318,20 @@ export default function Specialists() {
 
                     </td>
 
-                    <td>{r.daysLeft ?? '-'}</td>
+<td>
+  {r.subscription ? (
+    <span>
+      {r.subscription.daysLeft ?? 0}{' '}
+      {r.subscription.isTrialActive
+        ? 'trial'
+        : r.subscription.isSubscriptionActive
+          ? 'activos'
+          : ''}
+    </span>
+  ) : (
+    '-'
+  )}
+</td>
 
                     <td>
                       <Pill>{r.status}</Pill>

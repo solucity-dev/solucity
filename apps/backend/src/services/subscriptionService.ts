@@ -95,6 +95,31 @@ export async function getOrCreateSubscriptionForSpecialist(userId: string) {
     return updated;
   }
 
+  // ⛔ Suscripción activa vencida → PAST_DUE + notificación
+  if (
+    existing.status === 'ACTIVE' &&
+    existing.currentPeriodEnd &&
+    existing.currentPeriodEnd < now
+  ) {
+    const updated = await prisma.subscription.update({
+      where: { id: existing.id },
+      data: { status: 'PAST_DUE' },
+    });
+
+    await notifySubscription({
+      userId,
+      type: 'SUBSCRIPTION_PAST_DUE',
+      title: 'Tu suscripción venció',
+      body: 'Tu suscripción mensual venció. Activala nuevamente para seguir apareciendo en búsquedas.',
+      data: {
+        screen: 'Subscription',
+        subscriptionEventKey: `subscription-expired-${existing.id}`,
+      },
+    });
+
+    return updated;
+  }
+
   // 🔔 Avisos (3 y 1 día)
   if (existing.status === 'TRIALING' && existing.trialEnd && existing.trialEnd > now) {
     const diffMs = existing.trialEnd.getTime() - now.getTime();

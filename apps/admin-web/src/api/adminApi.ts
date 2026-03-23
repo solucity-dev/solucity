@@ -47,9 +47,18 @@ export type UserStatus = 'ACTIVE' | 'BLOCKED';
 export type SubscriptionStatus = 'TRIALING' | 'ACTIVE' | 'PAST_DUE' | 'CANCELLED';
 
 export type SubscriptionDTO = {
-  status: SubscriptionStatus;
+  status: SubscriptionStatus | null;
   trialEnd?: string | null;
+  currentPeriodStart?: string | null;
   currentPeriodEnd?: string | null;
+
+  isTrialActive?: boolean;
+  isSubscriptionActive?: boolean;
+
+  trialDaysRemaining?: number;
+  subscriptionDaysRemaining?: number;
+
+  accessUntil?: string | null;
   daysLeft?: number | null;
 };
 
@@ -164,7 +173,8 @@ export type AdminSpecialistDetail = {
 
   specialties: { id: string; name: string; slug: string }[];
 
-  subscription: (SubscriptionDTO & { daysLeft?: number | null }) | null;
+  subscription: SubscriptionDTO | null;
+  daysLeft?: number | null;
 
   kyc: AdminKycSubmission | null;
   backgroundCheck: AdminBackgroundCheck | null;

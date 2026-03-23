@@ -11,9 +11,11 @@ import {
   rejectCertification,
   rejectKyc,
   requestBackgroundCheckUpdate,
-  setAdminSpecialistStatus, // ✅ NUEVO
+  setAdminSpecialistStatus,
+  updateSubscriptionStatus,
   type AdminSpecialistDetail,
-  type UserStatus, // ✅ NUEVO
+  type AdminSubscriptionManualAction,
+  type UserStatus,
 } from '../api/adminApi';
 
 import { useAdminSpecialistDetail } from '../hooks/useAdminSpecialistDetail';
@@ -110,6 +112,12 @@ export default function SpecialistDetail() {
   const [grantLoading, setGrantLoading] = useState(false);
   const [grantError, setGrantError] = useState<string | null>(null);
   const [grantOk, setGrantOk] = useState<string | null>(null);
+
+    // UI manual subscription actions
+  const [subActionLoading, setSubActionLoading] = useState(false);
+  const [subActionError, setSubActionError] = useState<string | null>(null);
+  const [subActionOk, setSubActionOk] = useState<string | null>(null);
+  const [subscriptionReason, setSubscriptionReason] = useState('');
 
   // UI KYC actions
   const [kycActionLoading, setKycActionLoading] = useState(false);
@@ -244,6 +252,57 @@ export default function SpecialistDetail() {
       setGrantError(e instanceof Error ? e.message : 'Error de red');
     } finally {
       setGrantLoading(false);
+    }
+  }
+
+    async function handleSubscriptionAction(action: AdminSubscriptionManualAction) {
+    if (!typed?.specialistId) return;
+
+    const reason = subscriptionReason.trim();
+
+    const confirmMessage =
+      action === 'activate'
+        ? '¿Activar suscripción paga manualmente por 30 días?'
+        : action === 'past_due'
+          ? '¿Marcar la suscripción como pago pendiente?'
+          : '¿Cancelar la suscripción manualmente?';
+
+    const ok = window.confirm(confirmMessage);
+    if (!ok) return;
+
+    setSubActionError(null);
+    setSubActionOk(null);
+    setSubActionLoading(true);
+
+    try {
+      const resp = await updateSubscriptionStatus(
+        typed.specialistId,
+        action,
+        reason || undefined,
+      );
+
+      if (!resp.ok) {
+        throw new Error(resp.error || 'No se pudo actualizar la suscripción.');
+      }
+
+      const msg =
+        action === 'activate'
+          ? 'Suscripción activada manualmente ✅'
+          : action === 'past_due'
+            ? 'Suscripción marcada como pago pendiente ⏳'
+            : 'Suscripción cancelada manualmente ❌';
+
+      setSubActionOk(msg);
+      setSubscriptionReason('');
+      await reload();
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error
+          ? e.message
+          : 'No se pudo actualizar el estado de la suscripción.';
+      setSubActionError(msg);
+    } finally {
+      setSubActionLoading(false);
     }
   }
 
@@ -1063,9 +1122,17 @@ export default function SpecialistDetail() {
                 <div className="sdMuted">No hay suscripción asociada.</div>
               ) : (
                 <>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 10,
+                      alignItems: 'center',
+                      marginBottom: 12,
+                      flexWrap: 'wrap',
+                    }}
+                  >
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <span className="sdMuted">Agregar días:</span>
+                      <span className="sdMuted">Agregar días gratis:</span>
                       <input
                         type="number"
                         min={1}
@@ -1081,7 +1148,67 @@ export default function SpecialistDetail() {
                     <button className="sdBtn" onClick={handleGrantDays} disabled={grantLoading}>
                       {grantLoading ? 'Agregando…' : 'Agregar'}
                     </button>
+                  </div>
 
+                  <div
+                    style={{
+                      marginBottom: 14,
+                      padding: 12,
+                      borderRadius: 12,
+                      background: 'rgba(255,255,255,0.05)',
+                    }}
+                  >
+                    <div className="sdMuted" style={{ marginBottom: 8 }}>
+                      Acciones manuales de suscripción paga
+                    </div>
+
+                    <textarea
+                      className="sdInput"
+                      placeholder="Motivo opcional. Ej: Pagó por Mercado Pago pero sigue figurando en trial…"
+                      value={subscriptionReason}
+                      onChange={(e) => setSubscriptionReason(e.target.value)}
+                      rows={3}
+                      style={{ width: '100%', marginBottom: 10 }}
+                      disabled={subActionLoading}
+                    />
+
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <button
+                        className="sdBtn"
+                        onClick={() => handleSubscriptionAction('activate')}
+                        disabled={subActionLoading}
+                      >
+                        {subActionLoading ? 'Procesando…' : '✅ Activar suscripción'}
+                      </button>
+
+                      <button
+                        className="sdBtn"
+                        onClick={() => handleSubscriptionAction('past_due')}
+                        disabled={subActionLoading}
+                        style={{ backgroundColor: '#fff4d6', color: '#8a5a00' }}
+                      >
+                        {subActionLoading ? 'Procesando…' : '⏳ Marcar pago pendiente'}
+                      </button>
+
+                      <button
+                        className="sdBtn"
+                        onClick={() => handleSubscriptionAction('cancel')}
+                        disabled={subActionLoading}
+                        style={{ backgroundColor: '#ffe6e6', color: '#8b0000' }}
+                      >
+                        {subActionLoading ? 'Procesando…' : '❌ Cancelar suscripción'}
+                      </button>
+                    </div>
+
+                    {subActionOk && <div className="sdState" style={{ marginTop: 10 }}>{subActionOk}</div>}
+                    {subActionError && (
+                      <div className="sdState sdError" style={{ marginTop: 10 }}>
+                        {subActionError}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ marginBottom: 10 }}>
                     {grantOk && <span className="sdMuted">{grantOk}</span>}
                     {grantError && <span className="sdState sdError">{grantError}</span>}
                   </div>
@@ -1092,26 +1219,26 @@ export default function SpecialistDetail() {
                       <strong>{sub.status}</strong>
                     </div>
 
-<div className="k">
-  <span>Trial end</span>
-  <strong>{formatDateAR(sub.trialEnd)}</strong>
-</div>
+                    <div className="k">
+                      <span>Trial end</span>
+                      <strong>{formatDateAR(sub.trialEnd)}</strong>
+                    </div>
 
-<div className="k">
-  <span>Period end</span>
-  <strong>{formatDateAR(sub.currentPeriodEnd)}</strong>
-</div>
+                    <div className="k">
+                      <span>Period end</span>
+                      <strong>{formatDateAR(sub.currentPeriodEnd)}</strong>
+                    </div>
 
-<div className="k">
-  <span>Días vigentes</span>
-  <strong>
-    {sub.isTrialActive
-      ? `${sub.trialDaysRemaining ?? 0} (trial)`
-      : sub.isSubscriptionActive
-        ? `${sub.subscriptionDaysRemaining ?? 0} (activa)`
-        : '0'}
-  </strong>
-</div>
+                    <div className="k">
+                      <span>Días vigentes</span>
+                      <strong>
+                        {sub.isTrialActive
+                          ? `${sub.trialDaysRemaining ?? 0} (trial)`
+                          : sub.isSubscriptionActive
+                            ? `${sub.subscriptionDaysRemaining ?? 0} (activa)`
+                            : '0'}
+                      </strong>
+                    </div>
                   </div>
                 </>
               )}

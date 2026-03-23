@@ -125,6 +125,66 @@ async function notifyAccountStatusChange(params: {
   return notif.id;
 }
 
+async function notifySubscriptionStatusChange(params: {
+  userId: string;
+  action: 'activate' | 'past_due' | 'cancel';
+  reason?: string | null;
+  adminId?: string | null;
+  subscriptionId?: string | null;
+  specialistId?: string | null;
+}) {
+  let title = '';
+  let body = '';
+
+  if (params.action === 'activate') {
+    title = 'Suscripción activa';
+    body = 'Tu suscripción fue activada. Ya podés seguir recibiendo trabajos.';
+  } else if (params.action === 'past_due') {
+    title = 'Pago pendiente';
+    body =
+      'Tu suscripción está en estado de pago pendiente. Se activará cuando se acredite el pago.';
+  } else {
+    title = 'Suscripción cancelada';
+    body = 'Tu suscripción fue cancelada. Podés volver a activarla desde la app.';
+  }
+
+  const notif = await prisma.notification.create({
+    data: {
+      userId: params.userId,
+      type: 'SUBSCRIPTION_STATUS_CHANGED',
+      title,
+      body,
+      data: {
+        action: params.action,
+        reason: params.reason ?? null,
+        adminId: params.adminId ?? null,
+        subscriptionId: params.subscriptionId ?? null,
+        specialistId: params.specialistId ?? null,
+      } as any,
+    },
+    select: { id: true, title: true, body: true },
+  });
+
+  try {
+    await pushToUser({
+      userId: params.userId,
+      title: notif.title ?? title,
+      body: notif.body ?? body,
+      data: {
+        notificationId: notif.id,
+        type: 'SUBSCRIPTION_STATUS_CHANGED',
+        action: params.action,
+        subscriptionId: params.subscriptionId ?? null,
+        specialistId: params.specialistId ?? null,
+      },
+    });
+  } catch (e) {
+    dbg(debugPush, '[push] SUBSCRIPTION_STATUS_CHANGED failed', errMsg(e));
+  }
+
+  return notif.id;
+}
+
 /**
  * PATCH /admin/users/:userId/status
  * Body: { status: 'ACTIVE' | 'BLOCKED', reason?: string }
@@ -1325,6 +1385,11 @@ const RejectBgSchema = z.object({
   reviewerId: z.string().optional().nullable(),
 });
 
+const UpdateSubscriptionStatusSchema = z.object({
+  action: z.enum(['activate', 'past_due', 'cancel']),
+  reason: z.string().min(2).max(500).optional().nullable(),
+});
+
 /** GET /admin/background-checks/pending */
 adminRouter.get('/background-checks/pending', async (_req, res) => {
   const items = await prisma.specialistBackgroundCheck.findMany({
@@ -1968,6 +2033,227 @@ adminRouter.patch('/specialists/:specialistId/grant-days', async (req, res) => {
       name: fullName || null,
       userId: spec.userId,
     },
+  });
+});
+
+adminRouter.patch('/specialists/:specialistId/subscription/status', async (req, res) => {
+  const specialistId = String(req.params.specialistId ?? '').trim();
+  if (!specialistId) {
+    return res.status(400).json({ ok: false, error: 'specialistId_required' });
+  }
+
+  const parsed = UpdateSubscriptionStatusSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res
+      .status(400)
+      .json({ ok: false, error: 'invalid_input', details: parsed.error.flatten() });
+  }
+
+  const { action, reason } = parsed.data;
+  const now = new Date();
+  const adminId = req.user?.id ?? null;
+
+  const spec = await prisma.specialistProfile.findUnique({
+    where: { id: specialistId },
+    select: {
+      id: true,
+      userId: true,
+      subscription: {
+        select: {
+          id: true,
+          status: true,
+          trialEnd: true,
+          currentPeriodStart: true,
+          currentPeriodEnd: true,
+          lastPaymentStatus: true,
+          provider: true,
+          providerSubId: true,
+          lastPaymentId: true,
+        },
+      },
+    },
+  });
+
+  if (!spec) {
+    return res.status(404).json({ ok: false, error: 'specialist_not_found' });
+  }
+
+  let updatedSub: {
+    id: string;
+    status: 'TRIALING' | 'ACTIVE' | 'PAST_DUE' | 'CANCELLED';
+    trialEnd: Date | null;
+    currentPeriodStart: Date;
+    currentPeriodEnd: Date;
+    lastPaymentStatus: string | null;
+    provider: string | null;
+    providerSubId: string | null;
+    lastPaymentId: string | null;
+  } | null = null;
+
+  if (action === 'activate') {
+    const currentPeriodStart = now;
+    const currentPeriodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    if (!spec.subscription) {
+      updatedSub = await prisma.subscription.create({
+        data: {
+          specialistId,
+          status: 'ACTIVE',
+          currentPeriodStart,
+          currentPeriodEnd,
+          trialEnd: null,
+        },
+        select: {
+          id: true,
+          status: true,
+          trialEnd: true,
+          currentPeriodStart: true,
+          currentPeriodEnd: true,
+          lastPaymentStatus: true,
+          provider: true,
+          providerSubId: true,
+          lastPaymentId: true,
+        },
+      });
+    } else {
+      updatedSub = await prisma.subscription.update({
+        where: { specialistId },
+        data: {
+          status: 'ACTIVE',
+          currentPeriodStart,
+          currentPeriodEnd,
+          trialEnd: null,
+        },
+        select: {
+          id: true,
+          status: true,
+          trialEnd: true,
+          currentPeriodStart: true,
+          currentPeriodEnd: true,
+          lastPaymentStatus: true,
+          provider: true,
+          providerSubId: true,
+          lastPaymentId: true,
+        },
+      });
+    }
+  } else if (action === 'past_due') {
+    if (!spec.subscription) {
+      updatedSub = await prisma.subscription.create({
+        data: {
+          specialistId,
+          status: 'PAST_DUE',
+          currentPeriodStart: now,
+          currentPeriodEnd: now,
+          trialEnd: null,
+        },
+        select: {
+          id: true,
+          status: true,
+          trialEnd: true,
+          currentPeriodStart: true,
+          currentPeriodEnd: true,
+          lastPaymentStatus: true,
+          provider: true,
+          providerSubId: true,
+          lastPaymentId: true,
+        },
+      });
+    } else {
+      updatedSub = await prisma.subscription.update({
+        where: { specialistId },
+        data: {
+          status: 'PAST_DUE',
+          currentPeriodEnd: now,
+          trialEnd: null,
+        },
+        select: {
+          id: true,
+          status: true,
+          trialEnd: true,
+          currentPeriodStart: true,
+          currentPeriodEnd: true,
+          lastPaymentStatus: true,
+          provider: true,
+          providerSubId: true,
+          lastPaymentId: true,
+        },
+      });
+    }
+  } else if (action === 'cancel') {
+    if (!spec.subscription) {
+      updatedSub = await prisma.subscription.create({
+        data: {
+          specialistId,
+          status: 'CANCELLED',
+          currentPeriodStart: now,
+          currentPeriodEnd: now,
+          trialEnd: null,
+        },
+        select: {
+          id: true,
+          status: true,
+          trialEnd: true,
+          currentPeriodStart: true,
+          currentPeriodEnd: true,
+          lastPaymentStatus: true,
+          provider: true,
+          providerSubId: true,
+          lastPaymentId: true,
+        },
+      });
+    } else {
+      updatedSub = await prisma.subscription.update({
+        where: { specialistId },
+        data: {
+          status: 'CANCELLED',
+          currentPeriodEnd: now,
+          trialEnd: null,
+        },
+        select: {
+          id: true,
+          status: true,
+          trialEnd: true,
+          currentPeriodStart: true,
+          currentPeriodEnd: true,
+          lastPaymentStatus: true,
+          provider: true,
+          providerSubId: true,
+          lastPaymentId: true,
+        },
+      });
+    }
+  }
+
+  const notificationId = await notifySubscriptionStatusChange({
+    userId: spec.userId,
+    action,
+    reason: reason ?? null,
+    adminId,
+    subscriptionId: updatedSub?.id ?? null,
+    specialistId,
+  }).catch((e) => {
+    dbg(debugNotifications, '[admin] notifySubscriptionStatusChange failed', errMsg(e));
+    return null;
+  });
+
+  return res.json({
+    ok: true,
+    specialistId,
+    subscription: updatedSub
+      ? {
+          id: updatedSub.id,
+          status: updatedSub.status,
+          trialEnd: updatedSub.trialEnd ? updatedSub.trialEnd.toISOString() : null,
+          currentPeriodStart: updatedSub.currentPeriodStart.toISOString(),
+          currentPeriodEnd: updatedSub.currentPeriodEnd.toISOString(),
+          lastPaymentStatus: updatedSub.lastPaymentStatus ?? null,
+          provider: updatedSub.provider ?? null,
+          providerSubId: updatedSub.providerSubId ?? null,
+          lastPaymentId: updatedSub.lastPaymentId ?? null,
+        }
+      : null,
+    notificationId,
   });
 });
 

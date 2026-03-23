@@ -254,11 +254,30 @@ export async function handleMercadoPagoWebhook(paymentId: string) {
   // ✅ Releer estado actual para calcular sobre datos frescos
   const fresh = await prisma.subscription.findUnique({
     where: { id: sub.id },
-    select: { currentPeriodEnd: true },
+    select: {
+      status: true,
+      currentPeriodEnd: true,
+    },
   });
 
+  if (!fresh) return;
+
+  // ⛔ Si admin la canceló manualmente, registramos el pago pero no reactivamos automáticamente
+  if (fresh.status === 'CANCELLED') {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[MP webhook] approved payment ignored because subscription is CANCELLED', {
+        userId,
+        subscriptionId: sub.id,
+        paymentId,
+        currentStatus: fresh.status,
+      });
+    }
+
+    return;
+  }
+
   const now = new Date();
-  const currentEnd = fresh?.currentPeriodEnd ?? null;
+  const currentEnd = fresh.currentPeriodEnd ?? null;
   const base = currentEnd && currentEnd > now ? currentEnd : now;
   const newEnd = addOneCalendarMonth(base);
 

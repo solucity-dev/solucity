@@ -434,6 +434,43 @@ export async function grantDaysToSpecialist(specialistId: string, days: number) 
   );
 }
 
+export type AdminSubscriptionManualAction = 'activate' | 'past_due' | 'cancel';
+
+export type UpdateSubscriptionStatusResponse = {
+  ok: boolean;
+  specialistId?: string;
+  subscription?: {
+    id: string;
+    status: SubscriptionStatus;
+    trialEnd: string | null;
+    currentPeriodStart: string | null;
+    currentPeriodEnd: string | null;
+    lastPaymentStatus?: string | null;
+    provider?: string | null;
+    providerSubId?: string | null;
+    lastPaymentId?: string | null;
+  } | null;
+  notificationId?: string | null;
+  error?: string;
+};
+
+export async function updateSubscriptionStatus(
+  specialistId: string,
+  action: AdminSubscriptionManualAction,
+  reason?: string,
+) {
+  return apiFetch<UpdateSubscriptionStatusResponse>(
+    `/admin/specialists/${encodeURIComponent(specialistId)}/subscription/status`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({
+        action,
+        reason: reason?.trim() ? reason.trim() : null,
+      }),
+    },
+  );
+}
+
 /* ─────────────────────────────────────────────────────────────
  * Admin - delete/anonymize user
  * ───────────────────────────────────────────────────────────── */

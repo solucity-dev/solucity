@@ -238,7 +238,7 @@ router.post('/register/verify', async (req, res) => {
 
     if (msg === 'otp_blocked') return res.status(429).json({ ok: false, error: 'otp_blocked' });
 
-    const conflicts = new Set(['email_in_use', 'phone_in_use', 'unique_violation']);
+    const conflicts = new Set(['email_in_use', 'unique_violation']);
     if (conflicts.has(msg)) return res.status(409).json({ ok: false, error: msg });
 
     const badRequests = new Set(['weak_password']);

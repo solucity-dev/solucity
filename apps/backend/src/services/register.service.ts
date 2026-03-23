@@ -360,12 +360,11 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
 
   // unicidad clara
   const existing = await prisma.user.findFirst({
-    where: { OR: [{ email }, ...(phone ? [{ phone }] : [])] },
-    select: { email: true, phone: true },
+    where: { email },
+    select: { email: true },
   });
 
   if (existing?.email?.toLowerCase() === email) throw httpError('email_in_use', 409);
-  if (phone && existing?.phone === phone) throw httpError('phone_in_use', 409);
 
   const passwordHash = await bcrypt.hash(args.password, 10);
 
@@ -436,7 +435,6 @@ export async function verifyEmailRegistration(args: VerifyArgs) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
       const fields = (e.meta?.target as string[]) ?? [];
       if (fields.includes('email')) throw httpError('email_in_use', 409);
-      if (fields.includes('phone')) throw httpError('phone_in_use', 409);
       throw httpError('unique_violation', 409);
     }
     throw e;

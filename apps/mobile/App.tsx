@@ -7,7 +7,7 @@ import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Modal, Pressable, Text, View } from 'react-native';
+import { AppState, Modal, Platform, Pressable, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from './src/auth/AuthProvider';
@@ -17,15 +17,19 @@ import { flushPendingNav, navigationRef } from './src/navigation/navigationRef';
 import RootNavigator from './src/navigation/RootNavigator';
 import { NotificationsProvider } from './src/notifications/NotificationsProvider';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowAlert: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+const isWeb = Platform.OS === 'web';
+
+if (!isWeb) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -117,7 +121,7 @@ export default function App() {
     <View style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <NotificationsProvider>
+          {isWeb ? (
             <SafeAreaProvider>
               <StatusBar style="light" />
 
@@ -132,7 +136,24 @@ export default function App() {
                 <RootNavigator />
               </NavigationContainer>
             </SafeAreaProvider>
-          </NotificationsProvider>
+          ) : (
+            <NotificationsProvider>
+              <SafeAreaProvider>
+                <StatusBar style="light" />
+
+                <NavigationContainer
+                  ref={navigationRef}
+                  onReady={() => {
+                    SplashScreen.hideAsync().catch(() => {});
+                    if (__DEV__) console.log('[NAV] ready -> flushPendingNav()');
+                    flushPendingNav();
+                  }}
+                >
+                  <RootNavigator />
+                </NavigationContainer>
+              </SafeAreaProvider>
+            </NotificationsProvider>
+          )}
         </AuthProvider>
       </QueryClientProvider>
 

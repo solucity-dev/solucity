@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -73,6 +73,7 @@ function statusMeta(status?: BackgroundCheck['status'] | null) {
 
 export default function BackgroundCheckScreen() {
   const insets = useSafeAreaInsets();
+  const mountedRef = useRef(true);
 
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -86,20 +87,32 @@ export default function BackgroundCheckScreen() {
   /** 1️⃣ Cargar estado actual */
   const loadStatus = useCallback(async () => {
     try {
-      setLoading(true);
-      const res = await api.get('/specialists/me', { headers: { 'Cache-Control': 'no-cache' } });
+      if (mountedRef.current) setLoading(true);
+
+      const res = await api.get('/specialists/me', {
+        headers: { 'Cache-Control': 'no-cache' },
+      });
+
       const profile = res.data?.profile;
+
+      if (!mountedRef.current) return;
       setBackgroundCheck(profile?.backgroundCheck ?? null);
     } catch (e) {
       if (__DEV__) console.log('[BackgroundCheck] loadStatus error', e);
+      if (!mountedRef.current) return;
       Alert.alert('Error', 'No se pudo cargar el estado');
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     loadStatus();
+
+    return () => {
+      mountedRef.current = false;
+    };
   }, [loadStatus]);
 
   /** 2️⃣ Subir archivo */
@@ -111,11 +124,12 @@ export default function BackgroundCheckScreen() {
         copyToCacheDirectory: true,
       });
 
-      if (pick.canceled) return;
+      if (!('canceled' in pick) || pick.canceled) return;
 
-      setUploading(true);
+      if (mountedRef.current) setUploading(true);
 
-      const file = pick.assets[0];
+      const file = pick.assets?.[0];
+      if (!file) return;
 
       // ✅ ANDROID FIX: DocumentPicker a veces devuelve content:// y FormData/axios falla intermitente
       // Lo copiamos a cache y usamos file://
@@ -177,6 +191,7 @@ export default function BackgroundCheckScreen() {
       // 2.b guardar antecedente
       await api.post('/specialists/background-check', { fileUrl: url });
 
+      if (!mountedRef.current) return;
       Alert.alert('Listo', 'Certificado enviado para revisión');
       await loadStatus();
     } catch (e: any) {
@@ -195,14 +210,14 @@ export default function BackgroundCheckScreen() {
         'Error al subir archivo. Verificá tu conexión e intentá nuevamente.';
       Alert.alert('Error', msg);
     } finally {
-      setUploading(false);
+      if (mountedRef.current) setUploading(false);
     }
   }, [loadStatus]);
 
   if (loading) {
     return (
       <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
-        <SafeAreaView style={styles.center} edges={['top']}>
+        <SafeAreaView style={styles.center} edges={['top', 'bottom']}>
           <ActivityIndicator color="#E9FEFF" />
           <Text style={styles.centerText}>Cargando certificado…</Text>
         </SafeAreaView>
@@ -212,7 +227,7 @@ export default function BackgroundCheckScreen() {
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
-      <SafeAreaView style={{ flex: 1, paddingTop: insets.top + 6 }} edges={['top']}>
+      <SafeAreaView style={{ flex: 1, paddingTop: 6 }} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Ionicons name="shield-checkmark-outline" size={22} color="#E9FEFF" />
@@ -317,7 +332,14 @@ export default function BackgroundCheckScreen() {
             </Text>
 
             <Pressable
-              onPress={() => Linking.openURL(GOOD_CONDUCT_URL)}
+              onPress={async () => {
+                const ok = await Linking.canOpenURL(GOOD_CONDUCT_URL);
+                if (!ok) {
+                  Alert.alert('Error', 'No se pudo abrir el link oficial.');
+                  return;
+                }
+                await Linking.openURL(GOOD_CONDUCT_URL);
+              }}
               style={({ pressed }) => [
                 styles.secondaryBtn,
                 pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },

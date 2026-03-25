@@ -1,4 +1,4 @@
-// apps/mobile/src/screens/SpecialistProfile.tsx
+// apps/mobile/src/screens/SpecialistProfileScreen.tsx
 import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Image,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -75,7 +76,7 @@ export default function SpecialistProfileScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeightRaw = useBottomTabBarHeight();
   const tabBarHeight = Math.max(tabBarHeightRaw, 60);
-  const ctaBottom = tabBarHeight + insets.bottom + 12;
+  const ctaBottom = Platform.OS === 'web' ? 24 : tabBarHeight + insets.bottom + 12;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +86,10 @@ export default function SpecialistProfileScreen() {
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [portfolioPreviewOpen, setPortfolioPreviewOpen] = useState(false);
   const [portfolioPreviewUri, setPortfolioPreviewUri] = useState<string | null>(null);
+  const specialistId = params.id;
+  const routeLat = (params as any)?.lat as number | undefined;
+  const routeLng = (params as any)?.lng as number | undefined;
+  const routeCategorySlug = (params as any)?.categorySlug as string | undefined;
 
   useEffect(() => {
     let alive = true;
@@ -95,8 +100,8 @@ export default function SpecialistProfileScreen() {
         setError(null);
 
         // ✅ si vienen lat/lng desde la lista, los usamos y NO pedimos GPS.
-        const maybeLat = (params as any)?.lat as number | undefined;
-        const maybeLng = (params as any)?.lng as number | undefined;
+        const maybeLat = routeLat;
+        const maybeLng = routeLng;
 
         let lat: number;
         let lng: number;
@@ -104,8 +109,12 @@ export default function SpecialistProfileScreen() {
         if (typeof maybeLat === 'number' && typeof maybeLng === 'number') {
           lat = maybeLat;
           lng = maybeLng;
+        } else if (Platform.OS === 'web') {
+          // ✅ En web evitamos bloquear la pantalla pidiendo GPS si no vino desde la lista
+          lat = 0;
+          lng = 0;
         } else {
-          // fallback: pedir ubicación
+          // fallback nativo: pedir ubicación
           const perm = await Location.requestForegroundPermissionsAsync();
           if (perm.status !== 'granted') throw new Error('No se pudo obtener tu ubicación');
 
@@ -117,10 +126,10 @@ export default function SpecialistProfileScreen() {
         }
 
         // ✅ rubro desde el que venimos (opcional)
-        const categorySlug = (params as any)?.categorySlug as string | undefined;
+        const categorySlug = routeCategorySlug;
 
         // ✅ usar api (axios) para que vaya con Authorization + interceptores
-        const res = await api.get(`/specialists/${params.id}`, {
+        const res = await api.get(`/specialists/${specialistId}`, {
           params: {
             lat,
             lng,
@@ -159,7 +168,7 @@ export default function SpecialistProfileScreen() {
         const status = e?.response?.status;
         if (status === 401) setError('Tu sesión venció. Volvé a iniciar sesión.');
         else if (status) setError(`Error del servidor (HTTP ${status}).`);
-        else setError(e?.message ?? 'No se pudo cargar el perfil.');
+        else setError('No se pudo cargar el perfil.');
       } finally {
         if (!alive) return;
         setLoading(false);
@@ -169,7 +178,7 @@ export default function SpecialistProfileScreen() {
     return () => {
       alive = false;
     };
-  }, [params]);
+  }, [specialistId, routeLat, routeLng, routeCategorySlug]);
 
   useEffect(() => {
     let alive = true;
@@ -178,7 +187,7 @@ export default function SpecialistProfileScreen() {
       try {
         setPortfolioLoading(true);
 
-        const res = await api.get(`/specialists/${params.id}/portfolio`, {
+        const res = await api.get(`/specialists/${specialistId}/portfolio`, {
           headers: { 'Cache-Control': 'no-cache' },
         });
 
@@ -199,7 +208,7 @@ export default function SpecialistProfileScreen() {
     return () => {
       alive = false;
     };
-  }, [params.id]);
+  }, [specialistId]);
 
   // ✅ unificamos: usar resolveUploadUrl como en la lista
   const resolvedAvatarUrl = useMemo(
@@ -278,7 +287,7 @@ export default function SpecialistProfileScreen() {
               style={{ flex: 1 }}
               contentContainerStyle={{
                 paddingHorizontal: 16,
-                paddingBottom: ctaBottom + 90,
+                paddingBottom: Platform.OS === 'web' ? 120 : ctaBottom + 90,
               }}
               showsVerticalScrollIndicator={false}
             >
@@ -525,14 +534,16 @@ export default function SpecialistProfileScreen() {
             </ScrollView>
 
             {/* Botón fijo inferior */}
-            <View style={[styles.fixedCtaContainer, { bottom: ctaBottom }]}>
+            <View
+              style={[styles.fixedCtaContainer, { bottom: Platform.OS === 'web' ? 20 : ctaBottom }]}
+            >
               <Pressable
                 style={({ pressed }) => [
                   styles.mainCta,
                   pressed && { opacity: 0.95, transform: [{ scale: 0.99 }] },
                 ]}
                 onPress={() => {
-                  const categorySlug = (params as any)?.categorySlug as string | undefined;
+                  const categorySlug = routeCategorySlug;
 
                   nav.navigate('CreateOrder', {
                     specialistId: spec.id,
@@ -777,6 +788,8 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   previewModalCard: {
+    width: '100%',
+    maxWidth: Platform.OS === 'web' ? 900 : undefined,
     backgroundColor: '#E9FEFF',
     borderRadius: 18,
     padding: 14,

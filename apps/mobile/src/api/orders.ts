@@ -32,7 +32,7 @@ export async function finishOrder(orderId: string, args: { attachments?: any[]; 
 }
 
 export async function confirmOrder(orderId: string) {
-  const r = await api.post<{ ok: boolean }>(`/orders/${orderId}/confirm`);
+  const r = await api.post<{ ok: boolean }>(`/orders/${orderId}/confirm`, {});
   return r.data;
 }
 

@@ -2,6 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 
 import ClientTabs from './ClientTabs';
 import { setNavRole } from './navigationRef';
@@ -20,6 +21,7 @@ import RegisterClient from '../screens/RegisterClient';
 import RegisterSpecialist from '../screens/RegisterSpecialist';
 import ResetPassword from '../screens/ResetPassword';
 import SpecialistWizard from '../screens/SpecialistWizard';
+import Splash from '../screens/Splash';
 import SubscriptionScreen from '../screens/SubscriptionScreen';
 import Welcome from '../screens/Welcome';
 
@@ -36,9 +38,14 @@ export default function RootNavigator() {
 
   useEffect(() => {
     let cancelled = false;
+
     (async () => {
-      const seen = await AsyncStorage.getItem(ONBOARDING_KEY);
-      if (!cancelled) setOnboardingSeen(seen === '1');
+      try {
+        const seen = await AsyncStorage.getItem(ONBOARDING_KEY);
+        if (!cancelled) setOnboardingSeen(seen === '1');
+      } catch {
+        if (!cancelled) setOnboardingSeen(false);
+      }
     })();
 
     return () => {
@@ -48,12 +55,12 @@ export default function RootNavigator() {
 
   // ✅ Mientras hidrata auth + onboarding, mostramos splash
   if (loading || onboardingSeen === null) {
-    return null;
+    return Platform.OS === 'web' ? <Splash /> : null;
   }
 
   // ✅ Anti-flash: si hay token pero aún no cargó user (/auth/me)
   if (token && !user) {
-    return null;
+    return Platform.OS === 'web' ? <Splash /> : null;
   }
 
   // ✅ Con token → stack privado (según role real)
@@ -94,10 +101,9 @@ export default function RootNavigator() {
             onFinish={async () => {
               try {
                 await AsyncStorage.setItem(ONBOARDING_KEY, '1');
-              } finally {
-                setOnboardingSeen(true);
-                navigation.replace('Welcome');
-              }
+              } catch {}
+              setOnboardingSeen(true);
+              navigation.replace('Welcome');
             }}
           />
         )}

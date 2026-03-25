@@ -15,6 +15,7 @@ import {
   InteractionManager,
   Keyboard,
   Modal,
+  Platform,
   Pressable,
   ScrollView as RNScrollView,
   StyleSheet,
@@ -27,6 +28,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../auth/AuthProvider';
+import AppLogo from '../components/AppLogo';
 import { LOCALITIES_CORDOBA } from '../data/localitiesCordoba';
 import { api } from '../lib/api';
 import { markLocationSynced } from '../lib/locationOnce';
@@ -1079,10 +1081,9 @@ export default function SpecialistHome() {
     const missingCenter = !profile?.centerLat || !profile?.centerLng;
     if (!missingCenter) return;
 
-    // máximo 2 intentos en total
-    if (locationAttemptRef.current >= 2) return;
+    const maxAttempts = Platform.OS === 'web' ? 1 : 2;
 
-    // evita repetir por renders
+    if (locationAttemptRef.current >= maxAttempts) return;
     if (locationRequestedRef.current && locationAttemptRef.current >= 1) return;
 
     locationRequestedRef.current = true;
@@ -1091,7 +1092,7 @@ export default function SpecialistHome() {
     InteractionManager.runAfterInteractions(async () => {
       const ok = await updateLocationFromDevice({ silent: true });
 
-      if (!ok && locationAttemptRef.current < 2) {
+      if (Platform.OS !== 'web' && !ok && locationAttemptRef.current < maxAttempts) {
         locationRetryTimeoutRef.current = setTimeout(() => {
           if (!profile?.centerLat || !profile?.centerLng) {
             updateLocationFromDevice({ silent: true });
@@ -1157,6 +1158,8 @@ export default function SpecialistHome() {
 
   // permisos para cámara / galería
   async function requestCamera() {
+    if (Platform.OS === 'web') return true;
+
     const cam = await ImagePicker.requestCameraPermissionsAsync();
     if (cam.status !== 'granted') {
       Alert.alert('Permisos', 'Necesitamos permiso de cámara para sacar tu foto.');
@@ -1165,6 +1168,8 @@ export default function SpecialistHome() {
     return true;
   }
   async function requestMedia() {
+    if (Platform.OS === 'web') return true;
+
     const med = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (med.status !== 'granted') {
       Alert.alert('Permisos', 'Necesitamos permiso para acceder a tus fotos.');
@@ -1206,11 +1211,13 @@ export default function SpecialistHome() {
     if (!localUri) return;
     try {
       setSavingKey('avatar', true);
-      const manipulated = await ImageManipulator.manipulateAsync(
-        localUri,
-        [{ resize: { width: 1200 } }],
-        { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG },
-      );
+      const manipulated =
+        Platform.OS === 'web'
+          ? { uri: localUri }
+          : await ImageManipulator.manipulateAsync(localUri, [{ resize: { width: 1200 } }], {
+              compress: 0.9,
+              format: ImageManipulator.SaveFormat.JPEG,
+            });
 
       const form = new FormData();
       form.append('file', {
@@ -1278,11 +1285,14 @@ export default function SpecialistHome() {
 
       setSavingKey('portfolio', true);
 
-      const manipulated = await ImageManipulator.manipulateAsync(
-        portfolioLocalUri,
-        [{ resize: { width: 1600 } }],
-        { compress: 0.88, format: ImageManipulator.SaveFormat.JPEG },
-      );
+      const manipulated =
+        Platform.OS === 'web'
+          ? { uri: portfolioLocalUri }
+          : await ImageManipulator.manipulateAsync(
+              portfolioLocalUri,
+              [{ resize: { width: 1600 } }],
+              { compress: 0.88, format: ImageManipulator.SaveFormat.JPEG },
+            );
 
       const form = new FormData();
       form.append('file', {
@@ -1935,11 +1945,7 @@ export default function SpecialistHome() {
         <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
           <View style={styles.headerSpacer} />
           <View style={styles.brandCentered}>
-            <Image
-              source={require('../assets/logo.png')}
-              style={styles.logo}
-              resizeMode="contain"
-            />
+            <AppLogo style={styles.logo} resizeMode="contain" />
             <Text style={styles.brandText}>Solucity</Text>
           </View>
           <Pressable style={styles.bellBtn} onPress={() => navigation.navigate('Notifications')}>
@@ -1955,13 +1961,13 @@ export default function SpecialistHome() {
         <KeyboardAwareScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
-          enableOnAndroid
-          extraScrollHeight={90}
-          extraHeight={140}
+          enableOnAndroid={Platform.OS === 'android'}
+          extraScrollHeight={Platform.OS === 'web' ? 0 : 90}
+          extraHeight={Platform.OS === 'web' ? 0 : 140}
           enableResetScrollToCoords={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-          enableAutomaticScroll
+          enableAutomaticScroll={Platform.OS !== 'web'}
           onScrollBeginDrag={Keyboard.dismiss}
         >
           {/* Vista previa (como te ve el cliente en la lista) */}
@@ -2551,6 +2557,12 @@ export default function SpecialistHome() {
                 <Text style={[styles.btnT, { color: '#E9FEFF' }]}>Usar mi ubicación actual</Text>
               )}
             </Pressable>
+            {(!profile?.centerLat || !profile?.centerLng) && (
+              <Text style={[styles.muted, { marginTop: 8 }]}>
+                Necesitamos tu ubicación para mostrarte correctamente en búsquedas cercanas y
+                calcular distancia con los clientes.
+              </Text>
+            )}
           </Section>
 
           {/* Modalidad de servicio (desplegable) */}

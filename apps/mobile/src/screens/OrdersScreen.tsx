@@ -2,7 +2,7 @@
 import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -12,7 +12,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api } from '../lib/api';
 
@@ -38,9 +38,9 @@ type OrderListItem = {
 };
 
 export default function OrdersScreen() {
-  const insets = useSafeAreaInsets();
   const { params } = useRoute<RouteT>();
   const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
+  const mountedRef = useRef(true);
 
   const role: Role = (params?.role as Role) || 'customer';
   const [status, setStatus] = useState<string | undefined>(undefined);
@@ -51,10 +51,12 @@ export default function OrdersScreen() {
   const [error, setError] = useState<string | null>(null);
   const [list, setList] = useState<OrderListItem[]>([]);
 
-  const fetchList = async () => {
+  const fetchList = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
+      if (mountedRef.current) {
+        setLoading(true);
+        setError(null);
+      }
 
       const qs: Record<string, string> = { role };
       if (status) qs.status = status;
@@ -65,37 +67,45 @@ export default function OrdersScreen() {
         headers: { 'Cache-Control': 'no-cache' },
       });
 
-      // Tolerar distintas formas: { list }, { items }, { orders } o array directo
       const payload = r.data;
       const incoming: OrderListItem[] = Array.isArray(payload)
         ? payload
         : (payload?.list ?? payload?.items ?? payload?.orders ?? []);
 
-      console.log('[OrdersScreen] fetched:', {
-        count: Array.isArray(incoming) ? incoming.length : '??',
-        sample: incoming?.[0],
-      });
+      if (__DEV__) {
+        console.log('[OrdersScreen] fetched:', {
+          count: Array.isArray(incoming) ? incoming.length : '??',
+          sample: incoming?.[0],
+        });
+      }
 
+      if (!mountedRef.current) return;
       setList(incoming || []);
     } catch (e: any) {
+      if (!mountedRef.current) return;
+
       const msg = e?.response?.data?.error || e?.message || 'Error al cargar pedidos';
       setError(String(msg));
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
-  };
+  }, [deadline, role, status]);
 
   useEffect(() => {
+    mountedRef.current = true;
     fetchList();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role, status, deadline]);
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [fetchList]);
 
   const onRefresh = async () => {
     try {
-      setRefreshing(true);
+      if (mountedRef.current) setRefreshing(true);
       await fetchList();
     } finally {
-      setRefreshing(false);
+      if (mountedRef.current) setRefreshing(false);
     }
   };
 
@@ -132,10 +142,15 @@ export default function OrdersScreen() {
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
         {/* Header */}
-        <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
-          <Pressable onPress={() => nav.goBack()} style={{ padding: 6, marginLeft: -6 }}>
+        <View style={[styles.header, { paddingTop: 6 }]}>
+          <Pressable
+            onPress={() => {
+              if (nav.canGoBack()) nav.goBack();
+            }}
+            style={{ padding: 6, marginLeft: -6 }}
+          >
             <Ionicons name="chevron-back" size={26} color="#E9FEFF" />
           </Pressable>
           <Text style={styles.brand}>{headerTitle}</Text>

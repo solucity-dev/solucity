@@ -11,13 +11,13 @@ import type { AxiosRequestHeaders, InternalAxiosRequestConfig } from 'axios';
  * - extra (app.config / app.json)
  * - fallback PROD (Render) ✅
  */
-const fromExtra = (Constants.expoConfig?.extra as { API_URL?: string })?.API_URL;
-const fromEnv = process.env.EXPO_PUBLIC_API_URL;
+const fromExtra = (Constants.expoConfig?.extra as { API_URL?: string })?.API_URL?.trim();
+const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim();
 
 // ✅ TU URL REAL DE RENDER (HTTPS)
 export const PROD_FALLBACK = 'https://solucity-backend.onrender.com';
 
-export const API_URL = (fromEnv || fromExtra || PROD_FALLBACK).replace(/\/+$/, '');
+export const API_URL = (fromEnv || fromExtra || PROD_FALLBACK).trim().replace(/\/+$/, '');
 
 /**
  * 2) Axios instance

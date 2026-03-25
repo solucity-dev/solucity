@@ -3,12 +3,12 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useRef, useState } from 'react';
 import {
-  Dimensions,
   FlatList,
   Pressable,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
   type FlatListProps,
   type ViewToken,
 } from 'react-native';
@@ -54,27 +54,27 @@ const SLIDES: Slide[] = [
   },
 ];
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const ITEM_LENGTH = SCREEN_WIDTH;
-
 export default function Onboarding({ onFinish }: OnboardingProps) {
   const [index, setIndex] = useState(0);
   const listRef = useRef<FlatList<Slide>>(null);
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const itemLength = width;
 
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
-    if (viewableItems[0]?.index != null) setIndex(viewableItems[0].index);
+    const firstVisible = viewableItems.find((v) => v.index != null);
+    if (firstVisible?.index != null) setIndex(firstVisible.index);
   });
 
   const viewConfigRef = useRef({ viewAreaCoveragePercentThreshold: 60 });
 
   const getItemLayout = useCallback<NonNullable<FlatListProps<Slide>['getItemLayout']>>(
     (_: ArrayLike<Slide> | null | undefined, i: number) => ({
-      length: ITEM_LENGTH,
-      offset: ITEM_LENGTH * i,
+      length: itemLength,
+      offset: itemLength * i,
       index: i,
     }),
-    [],
+    [itemLength],
   );
 
   const goNext = useCallback(() => {
@@ -115,12 +115,11 @@ export default function Onboarding({ onFinish }: OnboardingProps) {
           maxToRenderPerBatch={1}
           windowSize={3}
           updateCellsBatchingPeriod={40}
-          removeClippedSubviews
           decelerationRate="fast"
           renderItem={({ item }) => (
-            <View style={styles.slide}>
+            <View style={[styles.slide, { width }]}>
               <View style={styles.slideContent}>
-                <IconHero icon={item.icon} />
+                <IconHero icon={item.icon} width={width} />
 
                 <View style={styles.textBox}>
                   <Text style={styles.title}>
@@ -167,12 +166,12 @@ export default function Onboarding({ onFinish }: OnboardingProps) {
   );
 }
 
-function IconHero({ icon }: { icon: Slide['icon'] }) {
+function IconHero({ icon, width }: { icon: Slide['icon']; width: number }) {
   const size = 44;
 
   return (
     <View style={styles.heroWrap}>
-      <View style={styles.heroCard}>
+      <View style={[styles.heroCard, { width: Math.min(width * 0.78, 320) }]}>
         <View style={styles.heroRing}>
           <View style={styles.heroInner}>
             {icon.lib === 'ion' ? (
@@ -211,7 +210,7 @@ const styles = StyleSheet.create({
   skipTop: { paddingHorizontal: 10, paddingVertical: 6 },
   skipTopText: { color: 'rgba(255,255,255,0.92)', fontWeight: '800' },
 
-  slide: { width: SCREEN_WIDTH, flex: 1 },
+  slide: { flex: 1 },
   slideContent: {
     flex: 1,
     paddingHorizontal: 24,
@@ -223,12 +222,11 @@ const styles = StyleSheet.create({
 
   heroWrap: { width: '100%', alignItems: 'center' },
   heroCard: {
-    width: Math.min(SCREEN_WIDTH * 0.78, 320),
     borderRadius: 28,
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.22)',
-    paddingVertical: 34, // 🔥 más aire vertical
+    paddingVertical: 34,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',

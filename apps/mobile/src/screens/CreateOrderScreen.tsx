@@ -12,6 +12,7 @@ import {
   Image,
   Keyboard,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,6 +22,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import AppLogo from '../components/AppLogo';
 import { LOCALITIES_CORDOBA } from '../data/localitiesCordoba';
 import { api } from '../lib/api';
 
@@ -95,7 +97,7 @@ function normalizeAddressText(input: string): string {
 export default function CreateOrderScreen() {
   const insets = useSafeAreaInsets();
   const rawTabH = useBottomTabBarHeight();
-  const tabH = Math.max(rawTabH, 60);
+  const tabH = Platform.OS === 'web' ? 0 : Math.max(rawTabH, 60);
 
   const { params } = useRoute<RouteT>();
   const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
@@ -336,6 +338,11 @@ export default function CreateOrderScreen() {
   };
 
   const pickImages = () => {
+    if (Platform.OS === 'web') {
+      handleAddPhotoFromLibrary();
+      return;
+    }
+
     Alert.alert('Agregar fotos', 'Elegí cómo querés adjuntar la imagen', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Tomar foto', onPress: handleAddPhotoFromCamera },
@@ -597,7 +604,7 @@ export default function CreateOrderScreen() {
             <Ionicons name="chevron-back" size={26} color="#E9FEFF" />
           </Pressable>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Image source={require('../assets/logo.png')} style={{ width: 22, height: 22 }} />
+            <AppLogo style={{ width: 22, height: 22 }} resizeMode="contain" />
             <Text style={styles.brand}>Solucity</Text>
           </View>
           <View style={{ width: 26 }} />
@@ -870,31 +877,54 @@ export default function CreateOrderScreen() {
           </View>
 
           {mode === 'schedule' && (
-            <View style={styles.scheduleRow}>
-              <Pressable onPress={() => setShowDate(true)} style={styles.dateField}>
-                <MDI name="calendar-month-outline" size={18} color="#06494F" />
-                <Text
-                  style={scheduledAt ? styles.dateFieldTextValue : styles.dateFieldTextPlaceholder}
+            <>
+              <View style={styles.scheduleRow}>
+                <Pressable
+                  onPress={() => {
+                    if (Platform.OS === 'web') return;
+                    setShowDate(true);
+                  }}
+                  style={[styles.dateField, Platform.OS === 'web' && { opacity: 0.7 }]}
                 >
-                  {scheduledAt ? formatDate(scheduledAt) : 'Seleccionar fecha'}
-                </Text>
-              </Pressable>
+                  <MDI name="calendar-month-outline" size={18} color="#06494F" />
+                  <Text
+                    style={
+                      scheduledAt ? styles.dateFieldTextValue : styles.dateFieldTextPlaceholder
+                    }
+                  >
+                    {scheduledAt ? formatDate(scheduledAt) : 'Seleccionar fecha'}
+                  </Text>
+                </Pressable>
 
-              <Pressable
-                onPress={() => {
-                  if (!scheduledAt) setScheduledAt(new Date());
-                  setShowTime(true);
-                }}
-                style={[styles.dateField, { flex: 0.9 }]}
-              >
-                <MDI name="clock-outline" size={18} color="#06494F" />
-                <Text
-                  style={scheduledAt ? styles.dateFieldTextValue : styles.dateFieldTextPlaceholder}
+                <Pressable
+                  onPress={() => {
+                    if (!scheduledAt) setScheduledAt(new Date());
+                    if (Platform.OS === 'web') return;
+                    setShowTime(true);
+                  }}
+                  style={[
+                    styles.dateField,
+                    { flex: 0.9 },
+                    Platform.OS === 'web' && { opacity: 0.7 },
+                  ]}
                 >
-                  {scheduledAt ? formatTime(scheduledAt) : 'Seleccionar hora'}
+                  <MDI name="clock-outline" size={18} color="#06494F" />
+                  <Text
+                    style={
+                      scheduledAt ? styles.dateFieldTextValue : styles.dateFieldTextPlaceholder
+                    }
+                  >
+                    {scheduledAt ? formatTime(scheduledAt) : 'Seleccionar hora'}
+                  </Text>
+                </Pressable>
+              </View>
+
+              {Platform.OS === 'web' && (
+                <Text style={styles.smallHint}>
+                  En la versión web, por ahora el horario programado se coordina luego por chat.
                 </Text>
-              </Pressable>
-            </View>
+              )}
+            </>
           )}
 
           {/* Urgente */}
@@ -916,7 +946,7 @@ export default function CreateOrderScreen() {
         </ScrollView>
 
         {/* Pickers */}
-        {showDate && (
+        {Platform.OS !== 'web' && showDate && (
           <DateTimePicker
             value={scheduledAt ?? new Date()}
             mode="date"
@@ -930,7 +960,7 @@ export default function CreateOrderScreen() {
             }}
           />
         )}
-        {showTime && (
+        {Platform.OS !== 'web' && showTime && (
           <DateTimePicker
             value={scheduledAt ?? new Date()}
             mode="time"
@@ -951,13 +981,13 @@ export default function CreateOrderScreen() {
           onLayout={(e) => {
             const h = e.nativeEvent.layout.height;
             // altura real del CTA + espacio por tabbar + safe area
-            setCtaHeight(h + tabH + (insets.bottom || 0) + 12);
+            setCtaHeight(Platform.OS === 'web' ? h + 24 : h + tabH + (insets.bottom || 0) + 12);
           }}
           style={[
             styles.ctaBar,
             {
-              bottom: tabH + (insets.bottom || 0) + 8,
-              paddingBottom: Math.max(10, insets.bottom || 0),
+              bottom: Platform.OS === 'web' ? 16 : tabH + (insets.bottom || 0) + 8,
+              paddingBottom: Platform.OS === 'web' ? 0 : Math.max(10, insets.bottom || 0),
             },
           ]}
         >

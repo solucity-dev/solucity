@@ -2,7 +2,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { ActivityIndicator, Image, StyleSheet } from 'react-native';
 
-import Logo from '../assets/logo.png';
+import Logo from '../../assets/splash-logo.png';
 
 type Props = { duration?: number };
 

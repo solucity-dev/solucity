@@ -161,6 +161,9 @@ export default function RegisterSpecialist() {
   const [dniBack, setDniBack] = useState<string | null>(null);
   const [selfie, setSelfie] = useState<string | null>(null);
   const [loadingUpload, setLoadingUpload] = useState(false);
+  const [pendingKycField, setPendingKycField] = useState<'dniFront' | 'dniBack' | 'selfie' | null>(
+    null,
+  );
 
   // ✅ checks paso 2
   const step2Checks = useMemo(
@@ -181,44 +184,90 @@ export default function RegisterSpecialist() {
     if (step2Complete) setStep2Hint(null);
   }, [step2Complete]);
 
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+
+    const restorePendingPickerResult = async () => {
+      try {
+        const pending = await ImagePicker.getPendingResultAsync();
+
+        if (!pending) return;
+
+        if ('code' in pending) {
+          console.log('[ImagePicker] pending result error:', pending);
+          return;
+        }
+
+        if (pending.canceled) return;
+
+        const uri = pending.assets?.[0]?.uri;
+        if (!uri) return;
+
+        console.log('[ImagePicker] pending result restored:', uri, 'field:', pendingKycField);
+
+        if (pendingKycField === 'dniFront') setDniFront(uri);
+        else if (pendingKycField === 'dniBack') setDniBack(uri);
+        else if (pendingKycField === 'selfie') setSelfie(uri);
+
+        setPendingKycField(null);
+      } catch (e) {
+        console.log('[ImagePicker] getPendingResultAsync error', e);
+      }
+    };
+
+    restorePendingPickerResult();
+  }, [pendingKycField]);
+
   const pickFrom = async (
     from: 'camera' | 'gallery',
     setter: (uri: string) => void,
+    field: 'dniFront' | 'dniBack' | 'selfie',
     opts?: { cameraType?: ImagePicker.CameraType },
   ) => {
     try {
-      if (from === 'camera') {
-        const perm = await ImagePicker.requestCameraPermissionsAsync();
-        if (!perm.granted) {
-          return Alert.alert('Permiso requerido', 'Necesitamos acceso a la cámara.');
-        }
-      } else {
-        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!perm.granted) {
-          return Alert.alert('Permiso requerido', 'Necesitamos acceso a tus fotos.');
+      if (Platform.OS !== 'web') {
+        if (from === 'camera') {
+          const perm = await ImagePicker.requestCameraPermissionsAsync();
+          if (!perm.granted) {
+            return Alert.alert('Permiso requerido', 'Necesitamos acceso a la cámara.');
+          }
+        } else {
+          const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (!perm.granted) {
+            return Alert.alert('Permiso requerido', 'Necesitamos acceso a tus fotos.');
+          }
         }
       }
+
+      setPendingKycField(field);
 
       const fn =
         from === 'camera' ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync;
 
       const res = await fn({
-        quality: 1,
+        quality: 0.6,
         allowsMultipleSelection: false,
-        // ✅ evita warning deprecado
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         cameraType: opts?.cameraType,
+        exif: false,
       });
 
-      if (!res.canceled && res.assets?.[0]?.uri) setter(res.assets[0].uri);
+      if (!res.canceled && res.assets?.[0]?.uri) {
+        setter(res.assets[0].uri);
+      }
+
+      setPendingKycField(null);
     } catch (e) {
       console.log('[pickFrom]', e);
+      setPendingKycField(null);
       Alert.alert('Error', 'No se pudo abrir la cámara o la galería.');
     }
   };
 
   // Compresión previa (ayuda en Android) - SOLO imágenes
   const compress = async (uri: string) => {
+    if (Platform.OS === 'web') return uri;
+
     try {
       const r = await ImageManipulator.manipulateAsync(uri, [{ resize: { width: 1400 } }], {
         compress: 0.85,
@@ -382,6 +431,8 @@ export default function RegisterSpecialist() {
    * - esto evita depender del timing del NotificationsProvider
    */
   const ensurePushTokenRegistered = async () => {
+    if (Platform.OS === 'web') return;
+
     try {
       const pushToken = await registerForPush();
       if (!pushToken) return;
@@ -446,14 +497,14 @@ export default function RegisterSpecialist() {
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
       <KeyboardAwareScrollView
-        enableOnAndroid
-        extraScrollHeight={18}
+        enableOnAndroid={Platform.OS === 'android'}
+        extraScrollHeight={Platform.OS === 'web' ? 0 : 18}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           padding: 16,
           paddingTop: insets.top + 8,
-          paddingBottom: insets.bottom + 140,
+          paddingBottom: Platform.OS === 'web' ? 32 : insets.bottom + 140,
         }}
       >
         <Text style={s.h1}>Registro especialista</Text>
@@ -504,7 +555,7 @@ export default function RegisterSpecialist() {
               placeholderTextColor="#cfe"
               returnKeyType="send"
               onSubmitEditing={sendCode}
-              textContentType="username"
+              textContentType="emailAddress"
               autoComplete="email"
               editable={!loadingStart && !loadingVerify}
             />
@@ -608,14 +659,25 @@ export default function RegisterSpecialist() {
 
         {step === 2 && (
           <View style={s.card}>
+            {Platform.OS === 'web' && (
+              <View style={s.infoBox}>
+                <Text style={s.infoText}>
+                  Desde el navegador podés subir fotos sacándolas con la cámara del teléfono o
+                  eligiéndolas desde tu galería.
+                </Text>
+              </View>
+            )}
+
             <PickBoxKyc
               label="DNI frente"
               mode="dni"
               uri={dniFront}
               onPickCamera={() =>
-                pickFrom('camera', setDniFront, { cameraType: ImagePicker.CameraType.back })
+                pickFrom('camera', setDniFront, 'dniFront', {
+                  cameraType: ImagePicker.CameraType.back,
+                })
               }
-              onPickGallery={() => pickFrom('gallery', setDniFront)}
+              onPickGallery={() => pickFrom('gallery', setDniFront, 'dniFront')}
               onClear={() => setDniFront(null)}
             />
 
@@ -624,9 +686,11 @@ export default function RegisterSpecialist() {
               mode="dni"
               uri={dniBack}
               onPickCamera={() =>
-                pickFrom('camera', setDniBack, { cameraType: ImagePicker.CameraType.back })
+                pickFrom('camera', setDniBack, 'dniBack', {
+                  cameraType: ImagePicker.CameraType.back,
+                })
               }
-              onPickGallery={() => pickFrom('gallery', setDniBack)}
+              onPickGallery={() => pickFrom('gallery', setDniBack, 'dniBack')}
               onClear={() => setDniBack(null)}
             />
 
@@ -635,9 +699,11 @@ export default function RegisterSpecialist() {
               mode="selfie"
               uri={selfie}
               onPickCamera={() =>
-                pickFrom('camera', setSelfie, { cameraType: ImagePicker.CameraType.front })
+                pickFrom('camera', setSelfie, 'selfie', {
+                  cameraType: ImagePicker.CameraType.front,
+                })
               }
-              onPickGallery={() => pickFrom('gallery', setSelfie)}
+              onPickGallery={() => pickFrom('gallery', setSelfie, 'selfie')}
               onClear={() => setSelfie(null)}
             />
 

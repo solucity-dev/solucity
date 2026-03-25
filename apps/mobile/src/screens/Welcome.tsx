@@ -114,6 +114,7 @@ const styles = StyleSheet.create({
 
   footer: {
     paddingHorizontal: 24,
+    paddingTop: 8,
     gap: 12,
   },
   primaryBtn: {

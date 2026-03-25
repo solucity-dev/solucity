@@ -101,6 +101,8 @@ export default function ChatThreadScreen() {
   // ✅ Interceptamos el botón físico de "back" en Android
   useFocusEffect(
     useCallback(() => {
+      if (Platform.OS !== 'android') return;
+
       const sub = BackHandler.addEventListener('hardwareBackPress', () => goBackToChatList());
       return () => sub.remove();
     }, [goBackToChatList]),
@@ -113,7 +115,9 @@ export default function ChatThreadScreen() {
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={
+          Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined
+        }
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 8 : 0}
       >
         {/* Header */}
@@ -277,6 +281,8 @@ export default function ChatThreadScreen() {
             value={text}
             onChangeText={setText}
             editable={!sending}
+            returnKeyType="send"
+            onSubmitEditing={handleSend}
           />
           <Pressable
             onPress={handleSend}

@@ -30,6 +30,7 @@ type NotificationsContextValue = {
 };
 
 const NotificationsContext = createContext<NotificationsContextValue | undefined>(undefined);
+const IS_WEB = Platform.OS === 'web';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -110,9 +111,11 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     if (!token) {
       setUnread(0);
-      try {
-        await Notifications.setBadgeCountAsync(0);
-      } catch {}
+      if (!IS_WEB) {
+        try {
+          await Notifications.setBadgeCountAsync(0);
+        } catch {}
+      }
       return;
     }
     if (inFlightRef.current) return;
@@ -130,9 +133,11 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       const count = items.filter((n: any) => !n.readAt).length;
       setUnread(count);
 
-      try {
-        await Notifications.setBadgeCountAsync(count);
-      } catch {}
+      if (!IS_WEB) {
+        try {
+          await Notifications.setBadgeCountAsync(count);
+        } catch {}
+      }
     } catch (e: any) {
       const status = e?.response?.status;
       const code = e?.code;
@@ -144,9 +149,11 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
       if (status === 401) {
         setUnread(0);
-        try {
-          await Notifications.setBadgeCountAsync(0);
-        } catch {}
+        if (!IS_WEB) {
+          try {
+            await Notifications.setBadgeCountAsync(0);
+          } catch {}
+        }
         return;
       }
 
@@ -258,7 +265,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    if (!ready || !token) {
+    if (!ready || !token || IS_WEB) {
       setExpoPushToken(null);
       return;
     }
@@ -330,7 +337,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
    * ✅ Tap en notificación (banner del sistema / tray)
    */
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || IS_WEB) return;
 
     const role = user?.role ?? null;
 

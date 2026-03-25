@@ -11,6 +11,8 @@ type PendingNav =
   | { type: 'orderDetail'; orderId: string }
   | { type: 'chatThread'; threadId: string; orderId?: string | null }
   | { type: 'backgroundCheck' }
+  | { type: 'kycStatus' }
+  | { type: 'subscription' }
   | null;
 
 let pendingNav: PendingNav = null;
@@ -36,6 +38,16 @@ export function queueBackgroundCheck() {
   if (__DEV__) console.log('[NAV] queued backgroundCheck');
 }
 
+export function queueKycStatus() {
+  pendingNav = { type: 'kycStatus' };
+  if (__DEV__) console.log('[NAV] queued kycStatus');
+}
+
+export function queueSubscription() {
+  pendingNav = { type: 'subscription' };
+  if (__DEV__) console.log('[NAV] queued subscription');
+}
+
 export function flushPendingNav() {
   if (!pendingNav) return;
   if (!navigationRef.isReady()) return;
@@ -49,17 +61,31 @@ export function flushPendingNav() {
     navigateToChatThread(p.threadId, p.orderId ?? null);
   } else if (p.type === 'backgroundCheck') {
     navigateToBackgroundCheck();
+  } else if (p.type === 'kycStatus') {
+    navigateToKycStatus();
+  } else if (p.type === 'subscription') {
+    navigateToSubscription();
   }
 }
 
 export function navigateToSubscription() {
-  if (!navigationRef.isReady()) return;
-  navigationRef.navigate('Subscription' as never);
+  try {
+    if (!navigationRef.isReady()) {
+      queueSubscription();
+      return;
+    }
+    navigationRef.navigate('Subscription' as never);
+  } catch (e) {
+    if (__DEV__) console.log('[navigateToSubscription] error', e);
+  }
 }
 
 export function navigateToKycStatus() {
   try {
-    if (!navigationRef.isReady()) return;
+    if (!navigationRef.isReady()) {
+      queueKycStatus();
+      return;
+    }
     navigationRef.navigate('KycStatus' as never);
   } catch (e) {
     if (__DEV__) console.log('[navigateToKycStatus] error', e);

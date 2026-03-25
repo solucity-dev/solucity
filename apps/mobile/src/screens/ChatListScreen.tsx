@@ -28,7 +28,7 @@ function absoluteUrl(u?: string | null): string | undefined {
 export default function ChatListScreen() {
   const insets = useSafeAreaInsets();
   const nav = useNavigation<Nav>();
-  const { data, isLoading, refetch } = useChatThreads();
+  const { data, isLoading, isRefetching, refetch } = useChatThreads();
 
   const threads = useMemo(() => data ?? [], [data]);
 
@@ -230,7 +230,7 @@ export default function ChatListScreen() {
           );
         }}
         onRefresh={refetch}
-        refreshing={false}
+        refreshing={isRefetching}
       />
     </LinearGradient>
   );

@@ -14,7 +14,7 @@ export function useChat({ orderId, threadId }: UseChatArgs) {
   // 1) Resolver / asegurar thread
   const threadQuery = useQuery<ChatThread>({
     queryKey: ['chat', 'thread', orderId ?? threadId],
-    enabled: hasOrder || hasThread,
+    enabled: !!orderId || !!threadId,
     queryFn: async () => {
       // Si me pasan solo threadId (desde ChatList), no necesito crear nada
       if (hasThread && !hasOrder) {
@@ -46,8 +46,8 @@ export function useChat({ orderId, threadId }: UseChatArgs) {
       return last ? last.createdAt : undefined;
     },
     // ⏱️ Polling suave para que aparezcan los mensajes del otro sin tocar nada
-    refetchInterval: hasOrder ? 2500 : false,
-    refetchIntervalInBackground: hasOrder,
+    refetchInterval: effectiveThreadId ? 2500 : false,
+    refetchIntervalInBackground: !!effectiveThreadId,
   });
 
   const qc = useQueryClient();
@@ -69,7 +69,7 @@ export function useChat({ orderId, threadId }: UseChatArgs) {
   });
 
   const flatMessages: ChatMessage[] =
-    messagesQuery.data?.pages.reduce<ChatMessage[]>((acc, page) => acc.concat(page), []) ?? [];
+    messagesQuery.data?.pages.flatMap((page) => (Array.isArray(page) ? page : [])) ?? [];
 
   return {
     thread: threadQuery.data ?? null,

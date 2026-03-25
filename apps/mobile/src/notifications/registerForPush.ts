@@ -3,8 +3,14 @@ import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
+const IS_WEB = Platform.OS === 'web';
+
 export async function registerForPush(): Promise<string | null> {
   try {
+    if (IS_WEB) {
+      if (__DEV__) console.log('[push] web detected -> skip native push registration');
+      return null;
+    }
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
         name: 'default',

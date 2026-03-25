@@ -2,9 +2,10 @@
 import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import AppLogo from '../components/AppLogo';
 import { ROOT_CATEGORY_MAP, SUBCATEGORIES } from '../data/categories';
 
 import type { CategorySlug, HomeStackParamList, RootCategoryId } from '../types';
@@ -22,7 +23,7 @@ export default function CategoryScreen() {
   const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
 
   // ✅ Este screen debe recibir SIEMPRE un RootCategoryId
-  const rootId = params.id as RootCategoryId;
+  const rootId = String(params?.id ?? '') as RootCategoryId;
 
   const cat = ROOT_CATEGORY_MAP[rootId];
   const rubros = (SUBCATEGORIES[rootId] || []) as SubcatItem[];
@@ -31,16 +32,24 @@ export default function CategoryScreen() {
   if (!cat) {
     return (
       <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
-        <SafeAreaView style={styles.safe} edges={['top']}>
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
           <View style={styles.header}>
+            <Pressable
+              onPress={() => {
+                if (nav.canGoBack()) nav.goBack();
+                else nav.navigate('ClientHome');
+              }}
+              style={styles.backBtn}
+            >
+              <Ionicons name="chevron-back" size={24} color="#E9FEFF" />
+            </Pressable>
+
             <View style={styles.brandRow}>
-              <Image
-                source={require('../assets/logo.png')}
-                style={styles.logo}
-                resizeMode="contain"
-              />
+              <AppLogo style={styles.logo} resizeMode="contain" />
               <Text style={styles.brandText}>Solucity</Text>
             </View>
+
+            <View style={styles.backBtnPlaceholder} />
           </View>
 
           <View style={{ paddingHorizontal: 20, paddingTop: 18 }}>
@@ -52,7 +61,9 @@ export default function CategoryScreen() {
             </Text>
 
             <Pressable
-              onPress={() => nav.goBack()}
+              onPress={() => {
+                if (nav.canGoBack()) nav.goBack();
+              }}
               style={[styles.card, { marginTop: 18, width: '100%' }]}
             >
               <Text style={styles.cardText}>Volver</Text>
@@ -65,17 +76,25 @@ export default function CategoryScreen() {
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
-      <SafeAreaView style={styles.safe} edges={['top']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         {/* Header */}
         <View style={styles.header}>
+          <Pressable
+            onPress={() => {
+              if (nav.canGoBack()) nav.goBack();
+              else nav.navigate('ClientHome');
+            }}
+            style={styles.backBtn}
+          >
+            <Ionicons name="chevron-back" size={24} color="#E9FEFF" />
+          </Pressable>
+
           <View style={styles.brandRow}>
-            <Image
-              source={require('../assets/logo.png')}
-              style={styles.logo}
-              resizeMode="contain"
-            />
+            <AppLogo style={styles.logo} resizeMode="contain" />
             <Text style={styles.brandText}>Solucity</Text>
           </View>
+
+          <View style={styles.backBtnPlaceholder} />
         </View>
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -129,8 +148,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 4,
     paddingBottom: 6,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backBtn: {
+    width: 32,
+    height: 32,
     justifyContent: 'center',
+    alignItems: 'flex-start',
+  },
+
+  backBtnPlaceholder: {
+    width: 32,
+    height: 32,
   },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   logo: { width: 26, height: 26 },

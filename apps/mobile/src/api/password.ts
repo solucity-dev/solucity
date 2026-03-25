@@ -3,16 +3,25 @@ import { api } from '../lib/api';
 
 // POST /auth/password/start
 export async function passwordStart(email: string) {
-  const { data } = await api.post('/auth/password/start', { email });
-  return data; // { ok:true, otpId:'ok', expiresAt }
+  const cleanEmail = email.trim().toLowerCase();
+
+  const { data } = await api.post('/auth/password/start', {
+    email: cleanEmail,
+  });
+
+  return data;
 }
 
 // POST /auth/password/verify
 export async function passwordVerify(email: string, code: string, newPassword: string) {
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanCode = code.trim();
+
   const { data } = await api.post('/auth/password/verify', {
-    email,
-    code,
+    email: cleanEmail,
+    code: cleanCode,
     newPassword,
   });
-  return data; // { ok:true, user, token }
+
+  return data;
 }

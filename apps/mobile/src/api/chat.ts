@@ -36,7 +36,7 @@ export async function getMessages(threadId: string, cursor?: string): Promise<Ch
     const res = await api.get<MessagesResp>(`/chat/threads/${threadId}/messages`, {
       params: cursor ? { cursor } : undefined,
     });
-    return res.data.messages;
+    return Array.isArray(res.data?.messages) ? res.data.messages : [];
   } catch (e: any) {
     const status = e?.response?.status;
 

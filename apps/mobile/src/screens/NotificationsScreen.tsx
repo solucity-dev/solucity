@@ -4,7 +4,7 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Notifications from 'expo-notifications';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -14,7 +14,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '../auth/AuthProvider';
 import { api } from '../lib/api';
@@ -55,10 +55,10 @@ type NotificationItem = {
 };
 
 export default function NotificationsScreen() {
-  const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const navigation = useNavigation<any>();
   const { token, ready } = useAuth();
+  const mountedRef = useRef(true);
 
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,8 +69,10 @@ export default function NotificationsScreen() {
   const loadNotifications = useCallback(async () => {
     if (!ready || !token) {
       if (__DEV__) console.log('[Notifications] skip load: auth not ready');
-      setLoading(false);
-      setRefreshing(false);
+      if (mountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
       return;
     }
 
@@ -79,21 +81,30 @@ export default function NotificationsScreen() {
         params: { limit: 50 },
         headers: { 'Cache-Control': 'no-cache' },
       });
+
       const list: NotificationItem[] = Array.isArray(data?.items) ? data.items : [];
+
+      if (!mountedRef.current) return;
       setItems(list);
 
-      // ✅ sync badge con unread (evita badge viejo si provider falló o quedó desfasado)
-      const count = list.filter((n) => !n.readAt).length;
       try {
+        const count = list.filter((n) => !n.readAt).length;
         await Notifications.setBadgeCountAsync(count);
       } catch {}
     } catch (e: any) {
       const status = e?.response?.status;
-      console.log('[Notifications] error', status, e?.message);
+
+      if (__DEV__) {
+        console.log('[Notifications] error', status, e?.message);
+      }
+
+      if (!mountedRef.current) return;
       if (status === 401) setItems([]);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (mountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [ready, token]);
 
@@ -116,10 +127,11 @@ export default function NotificationsScreen() {
   const markAllAsRead = useCallback(async () => {
     if (!ready || !token) return;
 
-    // 🔥 Optimista: marcamos todas como leídas en UI
-    setItems((prev) =>
-      prev.map((n) => (n.readAt ? n : { ...n, readAt: new Date().toISOString() })),
-    );
+    if (mountedRef.current) {
+      setItems((prev) =>
+        prev.map((n) => (n.readAt ? n : { ...n, readAt: new Date().toISOString() })),
+      );
+    }
 
     try {
       await api.post('/notifications/read-all', null, {
@@ -131,14 +143,18 @@ export default function NotificationsScreen() {
       }
     }
 
-    // 🔥 Sync badge
     try {
       await Notifications.setBadgeCountAsync(0);
     } catch {}
   }, [ready, token]);
 
   useEffect(() => {
+    mountedRef.current = true;
     loadNotifications();
+
+    return () => {
+      mountedRef.current = false;
+    };
   }, [loadNotifications]);
 
   useFocusEffect(
@@ -252,7 +268,7 @@ export default function NotificationsScreen() {
           specialistName = specialistName ?? o.specialist?.name ?? null;
         }
       } catch (e) {
-        console.log('[Notifications] error fetching order for chat', e);
+        if (__DEV__) console.log('[Notifications] error fetching order for chat', e);
       }
     }
 
@@ -340,7 +356,10 @@ export default function NotificationsScreen() {
   if (loading && !refreshing) {
     return (
       <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
-        <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <SafeAreaView
+          style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+          edges={['top', 'bottom']}
+        >
           <ActivityIndicator size="large" color="#E9FEFF" />
         </SafeAreaView>
       </LinearGradient>
@@ -349,14 +368,16 @@ export default function NotificationsScreen() {
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
-      <SafeAreaView style={styles.safe} edges={['top']}>
-        <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
-          <Ionicons
-            name="chevron-back"
-            size={26}
-            color="#E9FEFF"
-            onPress={() => navigation.goBack()}
-          />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <View style={[styles.header, { paddingTop: 4 }]}>
+          <Pressable
+            onPress={() => {
+              if (navigation.canGoBack()) navigation.goBack();
+            }}
+            style={{ padding: 4, marginLeft: -4 }}
+          >
+            <Ionicons name="chevron-back" size={26} color="#E9FEFF" />
+          </Pressable>
 
           <Text style={styles.headerTitle}>
             Notificaciones{unreadCount > 0 ? ` (${unreadCount})` : ''}

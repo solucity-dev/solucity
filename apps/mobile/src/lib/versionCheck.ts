@@ -15,20 +15,25 @@ export type VersionCheckResult = {
   storeUrl: string | null;
 };
 
-function getCurrentAndroidVersionCode(): number {
-  const raw =
-    Constants.expoConfig?.android?.versionCode ??
-    (Constants as any)?.manifest2?.extra?.expoClient?.android?.versionCode ??
-    (Constants as any)?.manifest?.android?.versionCode ??
-    0;
+function getCurrentVersionCode(): number {
+  if (Platform.OS === 'android') {
+    const raw =
+      Constants.expoConfig?.android?.versionCode ??
+      (Constants as any)?.manifest2?.extra?.expoClient?.android?.versionCode ??
+      (Constants as any)?.manifest?.android?.versionCode ??
+      0;
 
-  return Number(raw || 0);
+    return Number(raw || 0);
+  }
+
+  // ✅ web fallback: no hay versionCode nativo, usamos 0
+  return 0;
 }
 
 export async function checkAppVersion(): Promise<VersionCheckResult | null> {
   if (Platform.OS !== 'android') return null;
 
-  const currentVersionCode = getCurrentAndroidVersionCode();
+  const currentVersionCode = getCurrentVersionCode();
 
   const { data } = await api.get('/version', {
     headers: { 'Cache-Control': 'no-cache' },
@@ -65,8 +70,18 @@ export async function checkAppVersion(): Promise<VersionCheckResult | null> {
 
 export async function openStoreUrl(url?: string | null) {
   if (!url) return;
-  const supported = await Linking.canOpenURL(url);
-  if (supported) {
+
+  try {
+    if (Platform.OS === 'web') {
+      await Linking.openURL(url);
+      return;
+    }
+
+    const supported = await Linking.canOpenURL(url);
+    if (!supported) return;
+
     await Linking.openURL(url);
+  } catch (e) {
+    if (__DEV__) console.log('[versionCheck] openStoreUrl error', e);
   }
 }

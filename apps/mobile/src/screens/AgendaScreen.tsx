@@ -132,8 +132,11 @@ export default function AgendaScreen() {
 
   // ✅ si vuelvo de OrderDetail con refresh
   useEffect(() => {
-    if (needsRefresh) refetch();
-  }, [needsRefresh, refetch]);
+    if (!needsRefresh) return;
+
+    refetch();
+    navigation.setParams({ refresh: undefined });
+  }, [needsRefresh, navigation, refetch]);
 
   const getCounterpartName = (item: any) => {
     if (role === 'specialist') {
@@ -226,20 +229,22 @@ export default function AgendaScreen() {
           />
 
           {/* Hint flecha derecha */}
-          <View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              right: 6,
-              top: 0,
-              bottom: 0,
-              justifyContent: 'center',
-              zIndex: 3,
-              opacity: 0.85,
-            }}
-          >
-            <Ionicons name="chevron-forward" size={18} color="#E9FEFF" />
-          </View>
+          {showTabsHint && (
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                right: 6,
+                top: 0,
+                bottom: 0,
+                justifyContent: 'center',
+                zIndex: 3,
+                opacity: 0.85,
+              }}
+            >
+              <Ionicons name="chevron-forward" size={18} color="#E9FEFF" />
+            </View>
+          )}
 
           <FlatList
             data={TABS}
@@ -293,13 +298,13 @@ export default function AgendaScreen() {
 
       {/* Content */}
       <View style={{ flex: 1, paddingHorizontal: 12, paddingBottom: 12 }}>
-        {(isLoading || isFetching) && (
+        {isLoading && (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
             <ActivityIndicator />
           </View>
         )}
 
-        {!isLoading && !isFetching && filteredList.length === 0 && (
+        {!isLoading && filteredList.length === 0 && (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
             <Text style={{ color: 'white', opacity: 0.9, fontWeight: '600' }}>
               No hay órdenes en esta sección
@@ -319,7 +324,7 @@ export default function AgendaScreen() {
           </View>
         )}
 
-        {!isLoading && !isFetching && filteredList.length > 0 && (
+        {!isLoading && filteredList.length > 0 && (
           <FlatList
             data={filteredList}
             keyExtractor={(item) => item.id}

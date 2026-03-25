@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import AppLogo from '../components/AppLogo';
 import { API_URL, api } from '../lib/api';
 import { resolveUploadUrl } from '../lib/resolveUploadUrl';
 
@@ -237,9 +238,6 @@ export default function SpecialistsListScreen() {
         setError(null);
 
         if (!qaResolved) {
-          // no hagas nada todavía, pero NO dejes loading colgado
-          setLoading(false);
-          setRefreshing(false);
           return;
         }
 
@@ -316,34 +314,26 @@ export default function SpecialistsListScreen() {
     [buildCacheKey, dbCategorySlug, getCoordsSmart, effectiveOnlyEnabled, priceMax, qaResolved],
   );
 
-  // ✅ Refetch cuando la app vuelve al frente (background -> active)
+  // ✅ Refetch al volver a foco y cuando la app vuelve al frente
   useFocusEffect(
     useCallback(() => {
+      let alive = true;
+
       const sub = AppState.addEventListener('change', (state) => {
         if (state === 'active') {
-          // availability puede cambiar -> no queremos cache viejo
           resultsCache.clear();
           lastKeyRef.current = null;
           fetchData(true);
         }
       });
 
-      return () => sub.remove();
-    }, [fetchData]),
-  );
-
-  // ✅ Refetch cuando volvés a esta pantalla (por ejemplo desde el perfil)
-  useFocusEffect(
-    useCallback(() => {
-      let alive = true;
-
       (async () => {
         try {
-          if (!qaResolved) return; // ✅ primero resolvé QA
+          if (!qaResolved) return;
+
           await getCoordsSmart(false);
           if (!alive) return;
 
-          // availability y flags pueden haber cambiado
           resultsCache.clear();
           lastKeyRef.current = null;
 
@@ -358,12 +348,13 @@ export default function SpecialistsListScreen() {
 
       return () => {
         alive = false;
+        sub.remove();
       };
     }, [fetchData, getCoordsSmart, qaResolved]),
   );
 
   const list = useMemo(() => {
-    // ✅ blindaje extra: aunque el backend falle, nunca mostramos no disponibles
+    // ✅ Se muestran disponibles y no disponibles; el estado se comunica visualmente en el pill
     const arr = items.slice(); // NO filtramos por horario
 
     switch (sortBy) {
@@ -592,14 +583,24 @@ export default function SpecialistsListScreen() {
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
       <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.header}>
+          <Pressable
+            onPress={() => {
+              if (nav.canGoBack()) nav.goBack();
+              else nav.navigate('ClientHome');
+            }}
+            style={styles.backBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Volver"
+          >
+            <Ionicons name="chevron-back" size={24} color="#E9FEFF" />
+          </Pressable>
+
           <View style={styles.brandRow}>
-            <Image
-              source={require('../assets/logo.png')}
-              style={styles.logo}
-              resizeMode="contain"
-            />
+            <AppLogo style={styles.logo} resizeMode="contain" />
             <Text style={styles.brandText}>Solucity</Text>
           </View>
+
+          <View style={styles.backBtnPlaceholder} />
         </View>
 
         <View style={{ paddingHorizontal: 20, marginBottom: 6 }}>
@@ -666,8 +667,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 4,
     paddingBottom: 6,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backBtn: {
+    width: 32,
+    height: 32,
     justifyContent: 'center',
+    alignItems: 'flex-start',
+  },
+  backBtnPlaceholder: {
+    width: 32,
+    height: 32,
   },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   logo: { width: 26, height: 26 },

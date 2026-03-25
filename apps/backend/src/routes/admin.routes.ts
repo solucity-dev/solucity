@@ -398,168 +398,165 @@ adminRouter.get('/customers/:id', async (req, res) => {
  * GET /admin/metrics
  */
 adminRouter.get('/metrics', async (_req, res) => {
-  const activeRealUserWhere = {
-    status: 'ACTIVE' as const,
-    NOT: {
-      email: {
-        endsWith: '@deleted.local',
-        mode: 'insensitive' as const,
-      },
-    },
-  };
-
-  const [
-    usersTotal,
-    adminsTotal,
-    customersTotal,
-    specialistsTotal,
-
-    ordersTotal,
-    ordersPending,
-    ordersActive,
-    ordersFinished,
-    ordersCancelled,
-
-    subsByStatus,
-    kycPending,
-    certificationsPending,
-    backgroundPending,
-  ] = await Promise.all([
-    prisma.user.count({ where: activeRealUserWhere }),
-    prisma.user.count({ where: { role: 'ADMIN', ...activeRealUserWhere } }),
-    prisma.user.count({ where: { role: 'CUSTOMER', ...activeRealUserWhere } }),
-    prisma.user.count({ where: { role: 'SPECIALIST', ...activeRealUserWhere } }),
-
-    prisma.serviceOrder.count({
-      where: {
-        createdAt: {
-          gte: ADMIN_ORDERS_VISIBLE_FROM,
+  try {
+    const activeRealUserWhere = {
+      status: 'ACTIVE' as const,
+      NOT: {
+        email: {
+          endsWith: '@deleted.local',
+          mode: 'insensitive' as const,
         },
       },
-    }),
-    prisma.serviceOrder.count({
-      where: {
-        createdAt: {
-          gte: ADMIN_ORDERS_VISIBLE_FROM,
-        },
-        status: 'PENDING',
-      },
-    }),
-    prisma.serviceOrder.count({
-      where: {
-        createdAt: {
-          gte: ADMIN_ORDERS_VISIBLE_FROM,
-        },
-        status: {
-          in: ['ASSIGNED', 'IN_PROGRESS', 'PAUSED', 'FINISHED_BY_SPECIALIST', 'IN_CLIENT_REVIEW'],
-        },
-      },
-    }),
-    prisma.serviceOrder.count({
-      where: {
-        createdAt: {
-          gte: ADMIN_ORDERS_VISIBLE_FROM,
-        },
-        status: { in: ['CONFIRMED_BY_CLIENT', 'CLOSED'] },
-      },
-    }),
-    prisma.serviceOrder.count({
-      where: {
-        createdAt: {
-          gte: ADMIN_ORDERS_VISIBLE_FROM,
-        },
-        status: {
-          in: [
-            'CANCELLED_BY_CUSTOMER',
-            'CANCELLED_BY_SPECIALIST',
-            'CANCELLED_AUTO',
-            'REJECTED_BY_CLIENT',
-          ],
-        },
-      },
-    }),
+    };
 
-    prisma.subscription.findMany({
-      select: {
-        status: true,
-        trialEnd: true,
-        currentPeriodEnd: true,
-      },
-    }),
-    prisma.kycSubmission.count({ where: { status: 'PENDING' } }),
+    const results = await Promise.allSettled([
+      prisma.user.count({ where: activeRealUserWhere }),
+      prisma.user.count({ where: { role: 'ADMIN', ...activeRealUserWhere } }),
+      prisma.user.count({ where: { role: 'CUSTOMER', ...activeRealUserWhere } }),
+      prisma.user.count({ where: { role: 'SPECIALIST', ...activeRealUserWhere } }),
 
-    // 🆕 MATRÍCULAS
-    prisma.specialistCertification.count({ where: { status: 'PENDING' } }),
+      prisma.serviceOrder.count({
+        where: { createdAt: { gte: ADMIN_ORDERS_VISIBLE_FROM } },
+      }),
+      prisma.serviceOrder.count({
+        where: {
+          createdAt: { gte: ADMIN_ORDERS_VISIBLE_FROM },
+          status: 'PENDING',
+        },
+      }),
+      prisma.serviceOrder.count({
+        where: {
+          createdAt: { gte: ADMIN_ORDERS_VISIBLE_FROM },
+          status: {
+            in: ['ASSIGNED', 'IN_PROGRESS', 'PAUSED', 'FINISHED_BY_SPECIALIST', 'IN_CLIENT_REVIEW'],
+          },
+        },
+      }),
+      prisma.serviceOrder.count({
+        where: {
+          createdAt: { gte: ADMIN_ORDERS_VISIBLE_FROM },
+          status: { in: ['CONFIRMED_BY_CLIENT', 'CLOSED'] },
+        },
+      }),
+      prisma.serviceOrder.count({
+        where: {
+          createdAt: { gte: ADMIN_ORDERS_VISIBLE_FROM },
+          status: {
+            in: [
+              'CANCELLED_BY_CUSTOMER',
+              'CANCELLED_BY_SPECIALIST',
+              'CANCELLED_AUTO',
+              'REJECTED_BY_CLIENT',
+            ],
+          },
+        },
+      }),
 
-    // 🆕 ANTECEDENTES
-    prisma.specialistBackgroundCheck.count({ where: { status: 'PENDING' } }),
-  ]);
+      prisma.subscription.findMany({
+        select: {
+          status: true,
+          trialEnd: true,
+          currentPeriodEnd: true,
+        },
+      }),
+      prisma.kycSubmission.count({ where: { status: 'PENDING' } }),
+      prisma.specialistCertification.count({ where: { status: 'PENDING' } }),
+      prisma.specialistBackgroundCheck.count({ where: { status: 'PENDING' } }),
+    ]);
 
-  const now = new Date();
+    const getValue = <T>(index: number, fallback: T): T =>
+      results[index]?.status === 'fulfilled'
+        ? (results[index] as PromiseFulfilledResult<T>).value
+        : fallback;
 
-  const subs = {
-    TRIALING: 0,
-    ACTIVE: 0,
-    PAST_DUE: 0,
-    CANCELLED: 0,
-  };
+    const usersTotal = getValue(0, 0);
+    const adminsTotal = getValue(1, 0);
+    const customersTotal = getValue(2, 0);
+    const specialistsTotal = getValue(3, 0);
 
-  for (const sub of subsByStatus) {
-    if (sub.status === 'TRIALING') {
-      if (sub.trialEnd && sub.trialEnd > now) {
-        subs.TRIALING += 1;
-      } else {
-        subs.PAST_DUE += 1;
+    const ordersTotal = getValue(4, 0);
+    const ordersPending = getValue(5, 0);
+    const ordersActive = getValue(6, 0);
+    const ordersFinished = getValue(7, 0);
+    const ordersCancelled = getValue(8, 0);
+
+    const subsByStatus = getValue<
+      {
+        status: 'TRIALING' | 'ACTIVE' | 'PAST_DUE' | 'CANCELLED';
+        trialEnd: Date | null;
+        currentPeriodEnd: Date | null;
+      }[]
+    >(9, []);
+
+    const kycPending = getValue(10, 0);
+    const certificationsPending = getValue(11, 0);
+    const backgroundPending = getValue(12, 0);
+
+    const now = new Date();
+    const subs = { TRIALING: 0, ACTIVE: 0, PAST_DUE: 0, CANCELLED: 0 };
+
+    for (const sub of subsByStatus) {
+      if (sub.status === 'TRIALING') {
+        if (sub.trialEnd && sub.trialEnd > now) subs.TRIALING += 1;
+        else subs.PAST_DUE += 1;
+        continue;
       }
-      continue;
-    }
 
-    if (sub.status === 'ACTIVE') {
-      if (sub.currentPeriodEnd && sub.currentPeriodEnd > now) {
-        subs.ACTIVE += 1;
-      } else {
-        subs.PAST_DUE += 1;
+      if (sub.status === 'ACTIVE') {
+        if (sub.currentPeriodEnd && sub.currentPeriodEnd > now) subs.ACTIVE += 1;
+        else subs.PAST_DUE += 1;
+        continue;
       }
-      continue;
+
+      if (sub.status === 'PAST_DUE') subs.PAST_DUE += 1;
+      if (sub.status === 'CANCELLED') subs.CANCELLED += 1;
     }
 
-    if (sub.status === 'PAST_DUE') {
-      subs.PAST_DUE += 1;
-      continue;
+    const degraded = results.some((r) => r.status === 'rejected');
+    if (degraded) {
+      console.error(
+        '[admin/metrics] degraded response',
+        results
+          .map((r, i) => ({
+            i,
+            status: r.status,
+            reason: r.status === 'rejected' ? r.reason : null,
+          }))
+          .filter((x) => x.status === 'rejected'),
+      );
     }
 
-    if (sub.status === 'CANCELLED') {
-      subs.CANCELLED += 1;
-    }
+    return res.json({
+      ok: true,
+      degraded,
+      users: {
+        total: usersTotal,
+        admins: adminsTotal,
+        customers: customersTotal,
+        specialists: specialistsTotal,
+      },
+      orders: {
+        total: ordersTotal,
+        pending: ordersPending,
+        active: ordersActive,
+        finished: ordersFinished,
+        cancelled: ordersCancelled,
+      },
+      specialists: {
+        total: specialistsTotal,
+        subscriptions: subs,
+        kycPending,
+        certificationsPending,
+        backgroundPending,
+      },
+    });
+  } catch (error) {
+    console.error('[admin/metrics] fatal error', error);
+    return res.status(500).json({
+      ok: false,
+      error: 'metrics_unavailable',
+    });
   }
-
-  res.json({
-    users: {
-      total: usersTotal,
-      admins: adminsTotal,
-      customers: customersTotal,
-      specialists: specialistsTotal,
-    },
-    orders: {
-      total: ordersTotal,
-      pending: ordersPending,
-      active: ordersActive,
-      finished: ordersFinished,
-      cancelled: ordersCancelled,
-    },
-    specialists: {
-      total: specialistsTotal,
-      subscriptions: {
-        TRIALING: subs.TRIALING ?? 0,
-        ACTIVE: subs.ACTIVE ?? 0,
-        PAST_DUE: subs.PAST_DUE ?? 0,
-        CANCELLED: subs.CANCELLED ?? 0,
-      },
-      kycPending,
-      certificationsPending,
-      backgroundPending,
-    },
-  });
 });
 
 /**

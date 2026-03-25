@@ -181,7 +181,7 @@ export default function ProfileScreen() {
       setKycStatus(null);
       setBackgroundCheck(null);
       setSubscription(null);
-
+      setSubscriptionLoading(false);
       // ✅ liberamos UI apenas tenemos el perfil base
       setLoading(false);
 
@@ -243,6 +243,7 @@ export default function ProfileScreen() {
 
       if (!mountedRef.current) return;
 
+      setSubscriptionLoading(false);
       setError(e?.message ?? 'No se pudo cargar el perfil');
       setLoading(false);
     }
@@ -270,7 +271,7 @@ export default function ProfileScreen() {
       setError(e?.response?.data?.error ?? e?.message ?? 'No se pudo actualizar el perfil');
       Alert.alert('Error', 'No se pudo actualizar el perfil');
     } finally {
-      setSaving(false);
+      if (mountedRef.current) setSaving(false);
     }
   };
 
@@ -281,8 +282,8 @@ export default function ProfileScreen() {
     if (newPassword !== newPassword2) {
       return Alert.alert('Atención', 'La nueva contraseña no coincide.');
     }
-    if (newPassword.length < 6) {
-      return Alert.alert('Atención', 'La nueva contraseña debe tener al menos 6 caracteres.');
+    if (newPassword.length < 8) {
+      return Alert.alert('Atención', 'La nueva contraseña debe tener al menos 8 caracteres.');
     }
 
     try {
@@ -313,7 +314,7 @@ export default function ProfileScreen() {
         Alert.alert('Error', serverErr ?? e?.message ?? 'No se pudo actualizar la contraseña.');
       }
     } finally {
-      setChangingPassword(false);
+      if (mountedRef.current) setChangingPassword(false);
     }
   };
 
@@ -349,6 +350,7 @@ export default function ProfileScreen() {
         : (res.data?.profile?.avatarUrl as string | undefined);
 
       if (res.data?.ok && newUrl) {
+        if (!mountedRef.current) return;
         setAvatarUrl(newUrl);
         Alert.alert('Listo', 'Foto de perfil actualizada.');
       } else {
@@ -389,7 +391,7 @@ export default function ProfileScreen() {
               quality: 0.8,
             });
 
-            if (result.canceled) return;
+            if (!('canceled' in result) || result.canceled) return;
             const asset = result.assets?.[0];
             if (!asset) return;
             await uploadAvatarFromAsset(asset);
@@ -411,7 +413,7 @@ export default function ProfileScreen() {
               quality: 0.8,
             });
 
-            if (result.canceled) return;
+            if (!('canceled' in result) || result.canceled) return;
             const asset = result.assets?.[0];
             if (!asset) return;
             await uploadAvatarFromAsset(asset);
@@ -428,7 +430,7 @@ export default function ProfileScreen() {
   if (loading) {
     return (
       <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
-        <SafeAreaView style={styles.center}>
+        <SafeAreaView style={styles.center} edges={['top', 'bottom']}>
           <ActivityIndicator color="#E9FEFF" />
           <Text style={{ color: '#E9FEFF', marginTop: 8 }}>Cargando perfil…</Text>
         </SafeAreaView>
@@ -439,7 +441,7 @@ export default function ProfileScreen() {
   if (error) {
     return (
       <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
-        <SafeAreaView style={styles.center}>
+        <SafeAreaView style={styles.center} edges={['top', 'bottom']}>
           <Text style={{ color: '#FFECEC', fontWeight: '800' }}>Error</Text>
           <Text style={{ color: '#FFECEC', marginTop: 6 }}>{error}</Text>
           <Pressable onPress={loadProfile} style={styles.retryBtn}>

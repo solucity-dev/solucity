@@ -1,7 +1,7 @@
 // apps/mobile/src/screens/SubscriptionScreen.tsx
 import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -58,6 +58,7 @@ function statusPill(status: SubscriptionDTO['status']) {
 
 export default function SubscriptionScreen() {
   const insets = useSafeAreaInsets();
+  const mountedRef = useRef(true);
 
   const [loading, setLoading] = useState(true);
   const [payLoading, setPayLoading] = useState(false);
@@ -71,21 +72,31 @@ export default function SubscriptionScreen() {
   }, [sub]);
 
   const fetchMe = useCallback(async () => {
-    setLoading(true);
+    if (mountedRef.current) setLoading(true);
+
     try {
       clearSubscriptionCache();
       const s = await getMySubscription({ force: true });
+
+      if (!mountedRef.current) return;
       setSub((s as SubscriptionDTO) ?? null);
     } catch (err: any) {
+      if (!mountedRef.current) return;
+
       const msg = String(err?.response?.data?.error || err?.message || 'error');
       Alert.alert('Suscripción', `No se pudo cargar: ${msg}`);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     fetchMe();
+
+    return () => {
+      mountedRef.current = false;
+    };
   }, [fetchMe]);
 
   // 🔁 cuando volvés desde Mercado Pago
@@ -139,7 +150,7 @@ export default function SubscriptionScreen() {
 
       Alert.alert('Pago', 'No se pudo iniciar el pago.');
     } finally {
-      setPayLoading(false);
+      if (mountedRef.current) setPayLoading(false);
     }
   }, [canPay, fetchMe]);
 
@@ -168,7 +179,7 @@ export default function SubscriptionScreen() {
   if (loading) {
     return (
       <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
-        <SafeAreaView style={styles.center} edges={['top']}>
+        <SafeAreaView style={styles.center} edges={['top', 'bottom']}>
           <ActivityIndicator color="#E9FEFF" />
           <Text style={{ color: '#E9FEFF', marginTop: 10, fontWeight: '800' }}>
             Cargando suscripción…
@@ -180,7 +191,7 @@ export default function SubscriptionScreen() {
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
-      <SafeAreaView style={{ flex: 1, paddingTop: insets.top + 6 }} edges={['top']}>
+      <SafeAreaView style={{ flex: 1, paddingTop: 6 }} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Suscripción</Text>
           <View style={{ width: 24 }} />

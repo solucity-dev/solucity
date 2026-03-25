@@ -2,7 +2,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect } from 'react';
 import { BackHandler, Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Logo from '../assets/logo.png';
 
@@ -13,8 +13,6 @@ type Props = {
 };
 
 export default function ChooseRole({ onBack, onPickClient, onPickPro }: Props) {
-  const insets = useSafeAreaInsets();
-
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       onBack();
@@ -23,7 +21,7 @@ export default function ChooseRole({ onBack, onPickClient, onPickPro }: Props) {
     return () => sub.remove();
   }, [onBack]);
 
-  const headerHeight = Math.max(84, insets.top + 84);
+  const headerHeight = 84;
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={styles.container}>

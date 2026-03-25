@@ -1,6 +1,7 @@
-// apps/mobile/src/hooks/useSyncCustomerLOcationOnMount.ts
+// apps/mobile/src/hooks/useSyncCustomerLocationOnMount.ts
 import * as Location from 'expo-location';
 import { useEffect } from 'react';
+import { Platform } from 'react-native';
 
 import { api, getAuthToken, getCachedUserId } from '../lib/api';
 
@@ -11,6 +12,11 @@ export function useSyncCustomerLocationOnMount() {
     let cancelled = false;
 
     const run = async () => {
+      if (Platform.OS === 'web') {
+        if (__DEV__) console.log('[useSyncCustomerLocationOnMount] skip: web');
+        return;
+      }
+
       const token = getAuthToken();
       if (!token) {
         if (__DEV__) console.log('[useSyncCustomerLocationOnMount] skip: no token yet');

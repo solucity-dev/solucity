@@ -2,7 +2,7 @@
 import { useNavigation } from '@react-navigation/native';
 import axios from 'axios';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -53,6 +53,7 @@ export default function RegisterClient() {
   const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
+  const mountedRef = useRef(true);
 
   const [step, setStep] = useState<Step>(1);
   const [fullName, setFullName] = useState('');
@@ -77,6 +78,13 @@ export default function RegisterClient() {
   const passOk = password.length >= 8;
   const passMatch = passOk && password === password2;
 
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   // Ping inicial (solo DEV)
   useEffect(() => {
     if (!__DEV__) return;
@@ -96,14 +104,20 @@ export default function RegisterClient() {
   }, []);
 
   // Paso 1: enviar OTP
-  const sendEmailOtp = async () => {
+  const sendEmailOtp = useCallback(async () => {
     if (!nameOk || !emailOk || cooldown > 0 || loading) return;
-    setLoading(true);
+
+    if (mountedRef.current) setLoading(true);
+
     try {
       if (__DEV__) console.log('[register/start] POST ->', { email: email.trim() });
 
       const res = await api.post('/auth/register/start', { email: email.trim() });
-      console.log('[register/start] RES <-', res.status, res.data);
+
+      if (__DEV__) console.log('[register/start] RES <-', res.status, res.data);
+
+      if (!mountedRef.current) return;
+
       if (res.data?.ok) {
         setCooldown(45);
         setStep(2);
@@ -112,38 +126,51 @@ export default function RegisterClient() {
         Alert.alert('No se pudo enviar el código', String(msg));
       }
     } catch (err) {
+      if (!mountedRef.current) return;
+
       if (axios.isAxiosError<ApiError>(err)) {
-        console.log('[register/start] AXIOS ERR', {
-          status: err.response?.status,
-          data: err.response?.data,
-          code: err.code,
-          message: err.message,
-        });
+        if (__DEV__) {
+          console.log('[register/start] AXIOS ERR', {
+            status: err.response?.status,
+            data: err.response?.data,
+            code: err.code,
+            message: err.message,
+          });
+        }
+
         const code = err.response?.data?.error;
-        if (code === 'email_in_use')
+        if (code === 'email_in_use') {
           Alert.alert('E-mail en uso', 'Ya existe una cuenta registrada con ese e-mail.');
-        else if (code === 'too_many_requests')
+        } else if (code === 'too_many_requests') {
           Alert.alert('Demasiados intentos', 'Esperá un momento antes de volver a intentar.');
-        else Alert.alert('Error', code ?? err.message ?? 'No se pudo enviar el código.');
+        } else {
+          Alert.alert('Error', code ?? err.message ?? 'No se pudo enviar el código.');
+        }
       } else {
-        console.log('[register/start] UNK ERR', err);
+        if (__DEV__) console.log('[register/start] UNK ERR', err);
         Alert.alert('Error', 'No se pudo enviar el código. Verificá tu conexión.');
       }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
-  };
+  }, [cooldown, email, emailOk, loading, nameOk]);
 
   // Paso 2: pasar a contraseñas
   const proceedAfterOtp = () => {
-    if (!otpOk) return Alert.alert('Código inválido', 'Revisá que sean 6 dígitos.');
+    const cleanOtp = otp.trim();
+    if (cleanOtp.length !== 6) {
+      return Alert.alert('Código inválido', 'Revisá que sean 6 dígitos.');
+    }
+    setOtp(cleanOtp);
     setStep(3);
   };
 
   // Paso 3: verificar OTP + crear usuario
-  const finish = async () => {
+  const finish = useCallback(async () => {
     if (!passMatch || !otpOk) return;
-    setLoading(true);
+
+    if (mountedRef.current) setLoading(true);
+
     try {
       const body = {
         email: email.trim(),
@@ -152,24 +179,34 @@ export default function RegisterClient() {
         password,
         phone: phone.trim() ? phone.trim() : null,
       };
+
       if (__DEV__) console.log('[register/verify] POST ->', { ...body, password: '***' });
 
       const res = await api.post<VerifyOk>('/auth/register/verify', body);
-      console.log('[register/verify] RES <-', res.status, res.data);
+
+      if (__DEV__) console.log('[register/verify] RES <-', res.status, res.data);
+
+      if (!mountedRef.current) return;
 
       if (res.data?.ok && res.data.token) {
         await login(res.data.token);
         return;
       }
+
       Alert.alert('No se pudo crear la cuenta', 'Intentá nuevamente.');
     } catch (err) {
+      if (!mountedRef.current) return;
+
       if (axios.isAxiosError<ApiError>(err)) {
-        console.log('[register/verify] AXIOS ERR', {
-          status: err.response?.status,
-          data: err.response?.data,
-          code: err.code,
-          message: err.message,
-        });
+        if (__DEV__) {
+          console.log('[register/verify] AXIOS ERR', {
+            status: err.response?.status,
+            data: err.response?.data,
+            code: err.code,
+            message: err.message,
+          });
+        }
+
         const code = err.response?.data?.error;
         const details = err.response?.data?.details;
         const msg =
@@ -186,15 +223,16 @@ export default function RegisterClient() {
                     : code === 'invalid_input'
                       ? (msgFromZod(details) ?? 'Revisá los datos ingresados.')
                       : (code ?? err.message ?? 'Ocurrió un error. Intentá de nuevo.');
+
         Alert.alert('Error', msg);
       } else {
-        console.log('[register/verify] UNK ERR', err);
+        if (__DEV__) console.log('[register/verify] UNK ERR', err);
         Alert.alert('Error', 'No se pudo verificar/crear la cuenta.');
       }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
-  };
+  }, [email, fullName, login, otp, otpOk, passMatch, password, phone]);
 
   // cooldown timer (1 solo interval)
   useEffect(() => {
@@ -219,7 +257,9 @@ export default function RegisterClient() {
   }, [cooldown]);
 
   const bottomPad = Math.max(16, insets.bottom + 6);
-  const goBack = () => nav.goBack();
+  const goBack = () => {
+    if (nav.canGoBack()) nav.goBack();
+  };
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={styles.container}>
@@ -267,7 +307,7 @@ export default function RegisterClient() {
                   label="E-mail"
                   placeholder="tu@correo.com"
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={(t) => setEmail(t.trim().toLowerCase())}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoComplete="email"

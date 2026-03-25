@@ -59,7 +59,7 @@ export default function ResetPassword({ route, navigation }: any) {
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <Text style={styles.title}>Ingresar código</Text>
         <Text style={styles.sub}>Te enviamos un código a: {email}</Text>
 
@@ -67,13 +67,16 @@ export default function ResetPassword({ route, navigation }: any) {
         <TextInput
           style={styles.input}
           value={code}
-          onChangeText={setCode}
+          onChangeText={(text) => setCode(text.replace(/\s+/g, '').replace(/[^\d]/g, ''))}
           keyboardType="number-pad"
           placeholder="Ej: 123456"
           placeholderTextColor="rgba(255,255,255,0.6)"
           textContentType="oneTimeCode"
           returnKeyType="next"
           editable={!loading}
+          maxLength={6}
+          autoCapitalize="none"
+          autoCorrect={false}
         />
 
         <Text style={styles.label}>Nueva contraseña</Text>
@@ -114,7 +117,12 @@ export default function ResetPassword({ route, navigation }: any) {
           <Text style={styles.btnT}>{loading ? 'Confirmando...' : 'Confirmar'}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: 14 }}>
+        <TouchableOpacity
+          onPress={() => {
+            if (navigation?.canGoBack?.()) navigation.goBack();
+          }}
+          style={{ marginTop: 14 }}
+        >
           <Text style={styles.link}>Volver</Text>
         </TouchableOpacity>
       </SafeAreaView>

@@ -88,12 +88,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await AsyncStorage.removeItem(TOKEN_KEY);
+    await AsyncStorage.multiRemove([TOKEN_KEY, MODE_KEY]);
     clearSubscriptionCache();
     clearAuthToken();
     setCachedUserId(null);
     setTokenState(null);
     setUser(null);
+    setModeState('client');
     setNavRole(null);
   }, []);
 
@@ -163,6 +164,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (e) {
         if (axios.isAxiosError(e) && isUnauthorizedStatus(e.response?.status)) {
           await logout();
+        } else if (__DEV__) {
+          console.log('[AuthProvider] bootstrap fetchMe error', {
+            message: axios.isAxiosError(e) ? e.message : String(e),
+            status: axios.isAxiosError(e) ? e.response?.status : undefined,
+            code: axios.isAxiosError(e) ? e.code : undefined,
+          });
         }
       } finally {
         setLoading(false);

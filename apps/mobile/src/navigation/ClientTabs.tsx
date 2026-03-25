@@ -3,6 +3,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ChatStack from './ChatStack';
@@ -56,23 +57,33 @@ export default function ClientTabs() {
   const insets = useSafeAreaInsets();
   const bottomGap = Math.max(12, insets.bottom + 12);
 
-  const baseTabBarStyle = {
-    position: 'absolute' as const,
-    left: 14,
-    right: 14,
-    bottom: bottomGap,
-    height: 70,
-    paddingBottom: Math.max(10, insets.bottom * 0.5),
-    paddingTop: 6,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255,255,255,0.96)',
-    borderTopWidth: 0,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 14,
-    elevation: 16,
-  };
+  const baseTabBarStyle =
+    Platform.OS === 'web'
+      ? {
+          height: 64,
+          paddingBottom: 8,
+          paddingTop: 6,
+          backgroundColor: 'rgba(255,255,255,0.98)',
+          borderTopWidth: 1,
+          borderTopColor: 'rgba(0,0,0,0.08)',
+        }
+      : {
+          position: 'absolute' as const,
+          left: 14,
+          right: 14,
+          bottom: bottomGap,
+          height: 70,
+          paddingBottom: Math.max(10, insets.bottom * 0.5),
+          paddingTop: 6,
+          borderRadius: 28,
+          backgroundColor: 'rgba(255,255,255,0.96)',
+          borderTopWidth: 0,
+          shadowColor: '#000',
+          shadowOpacity: 0.15,
+          shadowOffset: { width: 0, height: 6 },
+          shadowRadius: 14,
+          elevation: 16,
+        };
 
   return (
     <Tab.Navigator

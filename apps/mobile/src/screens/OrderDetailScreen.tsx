@@ -362,6 +362,8 @@ export default function OrderDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (Platform.OS === 'web') return;
+
       const sub = BackHandler.addEventListener('hardwareBackPress', () => handleBackToAgenda());
       return () => sub.remove();
     }, [handleBackToAgenda]),
@@ -394,42 +396,46 @@ export default function OrderDetailScreen() {
         }
 
         if (locPermRef.current === 'granted') {
-          const now = Date.now();
-          const cached = locCacheRef.current;
-
-          // ✅ usar cache 60s
-          if (cached && now - cached.ts < 60_000) {
-            url = `/orders/${id}?lat=${encodeURIComponent(cached.lat)}&lng=${encodeURIComponent(
-              cached.lng,
-            )}`;
-            devLog('[OrderDetail][loc] using cached coords');
+          if (Platform.OS === 'web') {
+            devLog('[OrderDetail][loc] web -> skip GPS, calling without lat/lng');
           } else {
-            // ✅ intentar last known (más rápido que GPS)
-            const last = await Location.getLastKnownPositionAsync({});
-            if (last?.coords?.latitude && last?.coords?.longitude) {
-              locCacheRef.current = {
-                ts: now,
-                lat: last.coords.latitude,
-                lng: last.coords.longitude,
-              };
-              url = `/orders/${id}?lat=${encodeURIComponent(last.coords.latitude)}&lng=${encodeURIComponent(
-                last.coords.longitude,
+            const now = Date.now();
+            const cached = locCacheRef.current;
+
+            // ✅ usar cache 60s
+            if (cached && now - cached.ts < 60_000) {
+              url = `/orders/${id}?lat=${encodeURIComponent(cached.lat)}&lng=${encodeURIComponent(
+                cached.lng,
               )}`;
-              devLog('[OrderDetail][loc] using lastKnown coords');
+              devLog('[OrderDetail][loc] using cached coords');
             } else {
-              // ✅ fallback GPS real
-              const pos = await Location.getCurrentPositionAsync({
-                accuracy: Location.Accuracy.Balanced,
-              });
-              locCacheRef.current = {
-                ts: now,
-                lat: pos.coords.latitude,
-                lng: pos.coords.longitude,
-              };
-              url = `/orders/${id}?lat=${encodeURIComponent(pos.coords.latitude)}&lng=${encodeURIComponent(
-                pos.coords.longitude,
-              )}`;
-              devLog('[OrderDetail][loc] using fresh GPS coords');
+              // ✅ intentar last known (más rápido que GPS)
+              const last = await Location.getLastKnownPositionAsync({});
+              if (last?.coords?.latitude && last?.coords?.longitude) {
+                locCacheRef.current = {
+                  ts: now,
+                  lat: last.coords.latitude,
+                  lng: last.coords.longitude,
+                };
+                url = `/orders/${id}?lat=${encodeURIComponent(last.coords.latitude)}&lng=${encodeURIComponent(
+                  last.coords.longitude,
+                )}`;
+                devLog('[OrderDetail][loc] using lastKnown coords');
+              } else {
+                // ✅ fallback GPS real
+                const pos = await Location.getCurrentPositionAsync({
+                  accuracy: Location.Accuracy.Balanced,
+                });
+                locCacheRef.current = {
+                  ts: now,
+                  lat: pos.coords.latitude,
+                  lng: pos.coords.longitude,
+                };
+                url = `/orders/${id}?lat=${encodeURIComponent(pos.coords.latitude)}&lng=${encodeURIComponent(
+                  pos.coords.longitude,
+                )}`;
+                devLog('[OrderDetail][loc] using fresh GPS coords');
+              }
             }
           }
         } else {
@@ -1045,7 +1051,7 @@ export default function OrderDetailScreen() {
         <ScrollView
           contentContainerStyle={{
             padding: 14,
-            paddingBottom: tabBarHeight + insets.bottom + 24,
+            paddingBottom: Platform.OS === 'web' ? 24 : tabBarHeight + insets.bottom + 24,
           }}
           showsVerticalScrollIndicator={false}
         >
@@ -1620,6 +1626,7 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     width: '100%',
+    maxWidth: Platform.OS === 'web' ? 520 : undefined,
     backgroundColor: 'rgba(0, 35, 40, 0.98)',
     borderRadius: 16,
     padding: 16,
@@ -1694,12 +1701,13 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    paddingTop: 10,
+    paddingTop: Platform.OS === 'web' ? 16 : 10,
     paddingHorizontal: 10,
     alignItems: 'flex-end',
+    zIndex: 2,
   },
   previewImage: {
     width: '100%',
-    height: '100%',
+    height: Platform.OS === 'web' ? '80%' : '100%',
   },
 });

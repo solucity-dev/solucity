@@ -16,7 +16,7 @@
     "lint": "pnpm --filter @solucity/mobile lint",
     "format": "pnpm --filter @solucity/mobile format",
     "format:check": "pnpm --filter @solucity/mobile format:check",
-    "prepare": "husky",
+    "prepare": "husky || true",
     "lint-staged": "lint-staged"
   },
   "devDependencies": {

@@ -6,7 +6,7 @@ import * as Font from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Modal, Platform, Pressable, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -15,6 +15,7 @@ import { queryClient } from './src/lib/reactQuery';
 import { checkAppVersion, openStoreUrl, type VersionCheckResult } from './src/lib/versionCheck';
 import { flushPendingNav, navigationRef } from './src/navigation/navigationRef';
 import RootNavigator from './src/navigation/RootNavigator';
+import { NotificationsProvider } from './src/notifications/NotificationsProvider';
 
 const isWeb = Platform.OS === 'web';
 
@@ -117,15 +118,11 @@ export default function App() {
 
   const showForceUpdate = !!versionInfo?.updateAvailable && !!versionInfo?.force;
 
-  const NotificationsWrapper = isWeb
-    ? Fragment
-    : require('./src/notifications/NotificationsProvider').NotificationsProvider;
-
   return (
     <View style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <NotificationsWrapper>
+          <NotificationsProvider>
             <SafeAreaProvider>
               <StatusBar style="light" />
 
@@ -140,7 +137,7 @@ export default function App() {
                 <RootNavigator />
               </NavigationContainer>
             </SafeAreaProvider>
-          </NotificationsWrapper>
+          </NotificationsProvider>
         </AuthProvider>
       </QueryClientProvider>
 

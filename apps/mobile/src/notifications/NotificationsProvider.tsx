@@ -32,15 +32,17 @@ type NotificationsContextValue = {
 const NotificationsContext = createContext<NotificationsContextValue | undefined>(undefined);
 const IS_WEB = Platform.OS === 'web';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+if (!IS_WEB) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 /**
  * ✅ Extrae orderId/threadId/notificationDbId/type de cualquier payload común
  * OJO: resp.notification.request.identifier NO es el id de tu DB.

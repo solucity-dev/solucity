@@ -289,6 +289,9 @@ importers:
       '@types/mime':
         specifier: ^3.0.4
         version: 3.0.4
+      axios:
+        specifier: ^1.13.4
+        version: 1.13.4
       dayjs:
         specifier: ^1.11.19
         version: 1.11.19

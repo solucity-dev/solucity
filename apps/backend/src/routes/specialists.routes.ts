@@ -460,6 +460,12 @@ router.get('/search', async (req, res) => {
     // en la preselección geográfica. Hoy el alcance especial es 200 km.
     const preselectRadiusKm = category === 'auxilio-vehicular' ? 400 : radiusKm;
 
+    console.log('[GET /specialists/search][effective-radius]', {
+      category,
+      requestRadiusKm: radiusKm,
+      preselectRadiusKm,
+    });
+
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
       return res.status(400).json({ ok: false, error: 'lat/lng requeridos' });
     }
@@ -504,6 +510,12 @@ router.get('/search', async (req, res) => {
         ...(visitPriceFilter ? { visitPrice: visitPriceFilter } : {}),
       },
       take: 120,
+    });
+
+    console.log('[GET /specialists/search][pre-count]', {
+      category,
+      preselectRadiusKm,
+      preCount: pre.length,
     });
 
     // 2) distancia + filtro por radio propio

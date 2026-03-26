@@ -59,6 +59,7 @@ type SortBy = 'distance' | 'rating' | 'price';
 
 // ===== Config =====
 const RADIUS_KM_DEFAULT = 30;
+const AUXILIO_VEHICULAR_RADIUS_KM = 400;
 
 // ===== QA coords fija (Río Cuarto centro) =====
 const QA_EMAILS = new Set(['qa.customer@solucity.app', 'qa.specialist@solucity.app']);
@@ -270,11 +271,14 @@ export default function SpecialistsListScreen() {
         }
 
         // 3) backend (USANDO api.ts ✅)
+        const requestRadiusKm =
+          dbCategorySlug === 'auxilio-vehicular' ? AUXILIO_VEHICULAR_RADIUS_KM : RADIUS_KM_DEFAULT;
+
         const paramsQ: Record<string, any> = {
           category: dbCategorySlug,
           lat,
           lng,
-          radiusKm: RADIUS_KM_DEFAULT,
+          radiusKm: requestRadiusKm,
         };
 
         if (effectiveOnlyEnabled) paramsQ.enabled = true;

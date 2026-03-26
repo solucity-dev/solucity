@@ -426,7 +426,7 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     {
       id: 'alquiler-de-hidrolavadoras',
       title: 'Alquiler de hidrolavadoras',
-      icon: { set: 'mdi', name: 'water-pressure' },
+      icon: { set: 'mdi', name: 'spray-bottle' },
     },
     {
       id: 'alquiler-de-hormigoneras',

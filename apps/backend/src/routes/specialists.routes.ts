@@ -331,7 +331,7 @@ async function getMaxAllowedRadiusKmForUser(userId: string): Promise<number> {
   });
 
   const slugs = spec?.specialties.map((s) => s.category.slug) ?? [];
-  return slugs.includes('auxilio-vehicular') ? 200 : 30;
+  return slugs.includes('auxilio-vehicular') ? 400 : 30;
 }
 
 /** ===== helper: disponibilidad real (KYC + BG + horario + toggle + user ok) ===== */
@@ -456,6 +456,10 @@ router.get('/search', async (req, res) => {
     const lng = Number(req.query.lng ?? NaN);
     const radiusKm = Number(req.query.radiusKm ?? 8);
 
+    // Para auxilio vehicular no usamos el radio estándar del cliente
+    // en la preselección geográfica. Hoy el alcance especial es 200 km.
+    const preselectRadiusKm = category === 'auxilio-vehicular' ? 400 : radiusKm;
+
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
       return res.status(400).json({ ok: false, error: 'lat/lng requeridos' });
     }
@@ -479,7 +483,7 @@ router.get('/search', async (req, res) => {
     const sort = (req.query.sort as string) ?? 'distance';
     const debug = req.query.debug === 'true';
 
-    const deg = radiusKm / 111;
+    const deg = preselectRadiusKm / 111;
     const latMin = lat - deg;
     const latMax = lat + deg;
     const lngMin = lng - deg;

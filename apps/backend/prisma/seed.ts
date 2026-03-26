@@ -176,7 +176,7 @@ const groups: GroupSeed[] = [
   {
     name: 'Alquiler',
     slug: 'alquiler',
-    isActive: false,
+    isActive: true,
     rubros: [
       'Alquiler de herramientas',
       'Alquiler de maquinaria liviana',

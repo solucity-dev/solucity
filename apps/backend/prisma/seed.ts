@@ -91,6 +91,7 @@ const groups: GroupSeed[] = [
       'Psicopedagoga',
       'Kinesiología',
       'Cuidador de pacientes',
+      'podologia',
     ],
   },
   {
@@ -236,6 +237,7 @@ const REQUIRES_CERTIFICATION = new Set<string>([
   'psicopedagoga',
   'kinesiologia',
   'cuidador-de-pacientes',
+  'podologia',
 
   // Profesionales
   'abogado',

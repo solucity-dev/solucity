@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import AppLogo from '../components/AppLogo';
@@ -12,15 +12,19 @@ import { useNotifications } from '../notifications/NotificationsProvider';
 import type { HomeStackParamList } from '../types';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-// ➕ IMPORTAMOS EL HOOK
+const IS_WEB = Platform.OS === 'web';
 
 export default function ClientHome() {
   const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const insets = useSafeAreaInsets();
-  const { unread } = useNotifications();
+  const { unread, webBannerVisible, webBannerCount, dismissWebBanner } = useNotifications();
 
-  // ➕ ACTIVAMOS LA SINCRONIZACIÓN DE UBICACIÓN
   useSyncCustomerLocationOnMount();
+
+  const handleOpenNotifications = () => {
+    dismissWebBanner();
+    nav.navigate('Notifications' as never);
+  };
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
@@ -44,6 +48,25 @@ export default function ClientHome() {
             )}
           </Pressable>
         </View>
+
+        {IS_WEB && webBannerVisible && (
+          <View style={styles.bannerOuter}>
+            <Pressable style={styles.banner} onPress={handleOpenNotifications}>
+              <View style={styles.bannerLeft}>
+                <Ionicons name="notifications" size={18} color="#015A69" />
+                <Text style={styles.bannerText}>
+                  {webBannerCount > 1
+                    ? `Tenés ${webBannerCount} nuevas notificaciones`
+                    : 'Tenés una nueva notificación'}
+                </Text>
+              </View>
+
+              <Pressable onPress={dismissWebBanner} hitSlop={10} style={styles.bannerCloseBtn}>
+                <Ionicons name="close" size={18} color="#015A69" />
+              </Pressable>
+            </Pressable>
+          </View>
+        )}
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <Text style={styles.title}>¡Bienvenido!</Text>
@@ -104,6 +127,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   badgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+
+  bannerOuter: {
+    paddingHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  banner: {
+    backgroundColor: '#E9FEFF',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  bannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 1,
+    paddingRight: 8,
+  },
+  bannerText: {
+    color: '#015A69',
+    fontSize: 14,
+    fontWeight: '700',
+    flexShrink: 1,
+  },
+  bannerCloseBtn: {
+    marginLeft: 8,
+    padding: 2,
+  },
 
   content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 120 },
   title: { color: '#fff', fontSize: 28, fontWeight: '800', marginTop: 6 },

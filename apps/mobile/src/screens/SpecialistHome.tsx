@@ -396,6 +396,7 @@ function isWithinAvailability(av?: { days?: number[]; start?: string; end?: stri
 }
 
 const DAY_LABELS = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+const IS_WEB = Platform.OS === 'web';
 
 function Section({
   title,
@@ -423,7 +424,12 @@ export default function SpecialistHome() {
   const insets = useSafeAreaInsets();
 
   const navigation = useNavigation<NativeStackNavigationProp<SpecialistHomeStackParamList>>();
-  const { unread } = useNotifications();
+  const { unread, webBannerVisible, webBannerCount, dismissWebBanner } = useNotifications();
+
+  const handleOpenNotifications = useCallback(() => {
+    dismissWebBanner();
+    navigation.navigate('Notifications');
+  }, [dismissWebBanner, navigation]);
 
   // auth (usamos any para no pelear con tipos viejos)
   const auth = useAuth() as any;
@@ -1948,7 +1954,7 @@ export default function SpecialistHome() {
             <AppLogo style={styles.logo} resizeMode="contain" />
             <Text style={styles.brandText}>Solucity</Text>
           </View>
-          <Pressable style={styles.bellBtn} onPress={() => navigation.navigate('Notifications')}>
+          <Pressable style={styles.bellBtn} onPress={handleOpenNotifications}>
             <Ionicons name="notifications-outline" size={26} color="#E9FEFF" />
             {unread > 0 && (
               <View style={styles.notifBadge}>
@@ -1958,6 +1964,24 @@ export default function SpecialistHome() {
           </Pressable>
         </View>
 
+        {IS_WEB && webBannerVisible && (
+          <View style={styles.bannerOuter}>
+            <Pressable style={styles.banner} onPress={handleOpenNotifications}>
+              <View style={styles.bannerLeft}>
+                <Ionicons name="notifications" size={18} color="#015A69" />
+                <Text style={styles.bannerText}>
+                  {webBannerCount > 1
+                    ? `Tenés ${webBannerCount} nuevas notificaciones`
+                    : 'Tenés una nueva notificación'}
+                </Text>
+              </View>
+
+              <Pressable onPress={dismissWebBanner} hitSlop={10} style={styles.bannerCloseBtn}>
+                <Ionicons name="close" size={18} color="#015A69" />
+              </Pressable>
+            </Pressable>
+          </View>
+        )}
         <KeyboardAwareScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
@@ -3349,6 +3373,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   notifBadgeText: { color: '#fff', fontSize: 9, fontWeight: '800' },
+
+  bannerOuter: {
+    paddingHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  banner: {
+    backgroundColor: '#E9FEFF',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  bannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 1,
+    paddingRight: 8,
+  },
+  bannerText: {
+    color: '#015A69',
+    fontSize: 14,
+    fontWeight: '700',
+    flexShrink: 1,
+  },
+  bannerCloseBtn: {
+    marginLeft: 8,
+    padding: 2,
+  },
 
   content: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 190 },
 

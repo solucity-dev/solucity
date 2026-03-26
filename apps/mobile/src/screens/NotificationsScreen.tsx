@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -54,6 +55,8 @@ type NotificationItem = {
   createdAt: string;
 };
 
+const IS_WEB = Platform.OS === 'web';
+
 export default function NotificationsScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const navigation = useNavigation<any>();
@@ -87,10 +90,12 @@ export default function NotificationsScreen() {
       if (!mountedRef.current) return;
       setItems(list);
 
-      try {
-        const count = list.filter((n) => !n.readAt).length;
-        await Notifications.setBadgeCountAsync(count);
-      } catch {}
+      if (!IS_WEB) {
+        try {
+          const count = list.filter((n) => !n.readAt).length;
+          await Notifications.setBadgeCountAsync(count);
+        } catch {}
+      }
     } catch (e: any) {
       const status = e?.response?.status;
 
@@ -143,9 +148,11 @@ export default function NotificationsScreen() {
       }
     }
 
-    try {
-      await Notifications.setBadgeCountAsync(0);
-    } catch {}
+    if (!IS_WEB) {
+      try {
+        await Notifications.setBadgeCountAsync(0);
+      } catch {}
+    }
   }, [ready, token]);
 
   useEffect(() => {
@@ -184,12 +191,27 @@ export default function NotificationsScreen() {
     const title = item?.title ?? '';
     const body = item?.body ?? '';
 
-    // ✅ Antecedentes → Perfil > BackgroundCheck
-    if (type === 'BACKGROUND_CHECK_STATUS' || type === 'BACKGROUND_CHECK_REVIEW_REQUEST') {
+    // ✅ Antecedentes / certificaciones → Perfil > BackgroundCheck
+    if (
+      type === 'BACKGROUND_CHECK_STATUS' ||
+      type === 'BACKGROUND_CHECK_REVIEW_REQUEST' ||
+      type === 'CERTIFICATION_APPROVED' ||
+      type === 'CERTIFICATION_REJECTED'
+    ) {
       if (parent?.navigate) {
         parent.navigate('Perfil', { screen: 'BackgroundCheck' });
       } else {
         navigation.navigate('Perfil', { screen: 'BackgroundCheck' });
+      }
+      return;
+    }
+
+    // ✅ KYC → KycStatus
+    if (type === 'KYC_STATUS' || type.startsWith('KYC_')) {
+      if (parent?.navigate) {
+        parent.navigate('KycStatus');
+      } else {
+        navigation.navigate('KycStatus');
       }
       return;
     }
@@ -200,7 +222,6 @@ export default function NotificationsScreen() {
       else navigation.navigate('Subscription');
       return;
     }
-
     // Extraemos posibles IDs
     const orderId: string | null = data.orderId ?? data.order_id ?? data.order?.id ?? null;
 

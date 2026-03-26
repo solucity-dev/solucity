@@ -27,10 +27,50 @@ type NotificationsContextValue = {
   refreshing: boolean;
   refresh: () => Promise<void>;
   expoPushToken: string | null;
+
+  // Web-only UI state
+  webBannerVisible: boolean;
+  webBannerCount: number;
+  dismissWebBanner: () => void;
 };
 
 const NotificationsContext = createContext<NotificationsContextValue | undefined>(undefined);
 const IS_WEB = Platform.OS === 'web';
+
+function playWebNotificationSound() {
+  if (!IS_WEB || typeof window === 'undefined') return;
+
+  try {
+    const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext || null;
+
+    if (!AudioCtx) return;
+
+    const ctx = new AudioCtx();
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(880, ctx.currentTime);
+
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
+
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+
+    oscillator.start();
+    oscillator.stop(ctx.currentTime + 0.22);
+
+    oscillator.onended = () => {
+      try {
+        ctx.close().catch(() => {});
+      } catch {}
+    };
+  } catch (e) {
+    if (__DEV__) console.log('[NotificationsProvider] web sound failed', e);
+  }
+}
 
 if (!IS_WEB) {
   Notifications.setNotificationHandler({
@@ -43,6 +83,7 @@ if (!IS_WEB) {
     }),
   });
 }
+
 /**
  * ✅ Extrae orderId/threadId/notificationDbId/type de cualquier payload común
  * OJO: resp.notification.request.identifier NO es el id de tu DB.
@@ -96,11 +137,21 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const [refreshing, setRefreshing] = useState(false);
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
 
+  // Web-only banner state
+  const [webBannerVisible, setWebBannerVisible] = useState(false);
+  const [webBannerCount, setWebBannerCount] = useState(0);
+
   // ✅ evita requests en paralelo
   const inFlightRef = useRef(false);
 
+  // ✅ web: snapshot de no leídas previas para detectar nuevas reales
+  const previousUnreadIdsRef = useRef<Set<string>>(new Set());
+  const hasBootstrappedNotificationsRef = useRef(false);
+  const webBannerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // ✅ evita navegar 2 veces por la misma notificación (cold start + listener)
   const lastHandledNotificationIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     lastHandledNotificationIdRef.current = null;
   }, [token]);
@@ -110,9 +161,29 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     lastHandledNotificationIdRef.current = null;
   }, [token]);
 
+  const dismissWebBanner = useCallback(() => {
+    setWebBannerVisible(false);
+    setWebBannerCount(0);
+
+    if (webBannerTimeoutRef.current) {
+      clearTimeout(webBannerTimeoutRef.current);
+      webBannerTimeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    previousUnreadIdsRef.current = new Set();
+    hasBootstrappedNotificationsRef.current = false;
+    dismissWebBanner();
+  }, [token, dismissWebBanner]);
+
   const refresh = useCallback(async () => {
     if (!token) {
       setUnread(0);
+      previousUnreadIdsRef.current = new Set();
+      hasBootstrappedNotificationsRef.current = false;
+      dismissWebBanner();
+
       if (!IS_WEB) {
         try {
           await Notifications.setBadgeCountAsync(0);
@@ -120,6 +191,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       }
       return;
     }
+
     if (inFlightRef.current) return;
 
     inFlightRef.current = true;
@@ -132,8 +204,43 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       });
 
       const items = Array.isArray(data?.items) ? data.items : [];
-      const count = items.filter((n: any) => !n.readAt).length;
+      const unreadItems = items.filter((n: any) => !n.readAt);
+      const count = unreadItems.length;
+      const currentUnreadIds = new Set<string>(
+        unreadItems.map((n: any) => String(n.id)).filter(Boolean),
+      );
+
       setUnread(count);
+
+      if (IS_WEB) {
+        const previousUnreadIds = previousUnreadIdsRef.current;
+        const newUnreadIds: string[] = [];
+
+        for (const id of currentUnreadIds) {
+          if (!previousUnreadIds.has(id)) {
+            newUnreadIds.push(id);
+          }
+        }
+
+        if (hasBootstrappedNotificationsRef.current && newUnreadIds.length > 0) {
+          setWebBannerCount((prev) => prev + newUnreadIds.length);
+          setWebBannerVisible(true);
+          playWebNotificationSound();
+
+          if (webBannerTimeoutRef.current) {
+            clearTimeout(webBannerTimeoutRef.current);
+          }
+
+          webBannerTimeoutRef.current = setTimeout(() => {
+            setWebBannerVisible(false);
+            setWebBannerCount(0);
+            webBannerTimeoutRef.current = null;
+          }, 5000);
+        }
+
+        previousUnreadIdsRef.current = currentUnreadIds;
+        hasBootstrappedNotificationsRef.current = true;
+      }
 
       if (!IS_WEB) {
         try {
@@ -151,6 +258,10 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
       if (status === 401) {
         setUnread(0);
+        previousUnreadIdsRef.current = new Set();
+        hasBootstrappedNotificationsRef.current = false;
+        dismissWebBanner();
+
         if (!IS_WEB) {
           try {
             await Notifications.setBadgeCountAsync(0);
@@ -173,7 +284,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       inFlightRef.current = false;
       setRefreshing(false);
     }
-  }, [token]);
+  }, [token, dismissWebBanner]);
 
   /**
    * ✅ Marca como leída en backend (si podemos)
@@ -314,6 +425,15 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     };
   }, [ready, token, user?.id]);
 
+  useEffect(() => {
+    return () => {
+      if (webBannerTimeoutRef.current) {
+        clearTimeout(webBannerTimeoutRef.current);
+        webBannerTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   // ✅ Polling de unread
   useEffect(() => {
     let active = true;
@@ -383,10 +503,12 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         type: type ? String(type) : null,
       });
 
-      // ✅ BACKGROUND CHECK → Perfil > BackgroundCheck
+      // ✅ BACKGROUND CHECK / CERTIFICATION → Perfil > BackgroundCheck
       if (
         String(type) === 'BACKGROUND_CHECK_STATUS' ||
-        String(type) === 'BACKGROUND_CHECK_REVIEW_REQUEST'
+        String(type) === 'BACKGROUND_CHECK_REVIEW_REQUEST' ||
+        String(type) === 'CERTIFICATION_APPROVED' ||
+        String(type) === 'CERTIFICATION_REJECTED'
       ) {
         navigateToBackgroundCheck();
         return;
@@ -394,8 +516,6 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
       // ✅ KYC → pantalla KycStatus
       if (String(type).startsWith('KYC_') || String(type) === 'KYC_STATUS') {
-        // Si tu backend manda type KYC_REJECTED / KYC_PENDING / etc, entra acá.
-        // También soporta KYC_STATUS si lo usás así.
         navigateToKycStatus();
         return;
       }
@@ -437,7 +557,17 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   }, [ready, user?.role, token, markTappedNotificationAsRead]);
 
   return (
-    <NotificationsContext.Provider value={{ unread, refreshing, refresh, expoPushToken }}>
+    <NotificationsContext.Provider
+      value={{
+        unread,
+        refreshing,
+        refresh,
+        expoPushToken,
+        webBannerVisible,
+        webBannerCount,
+        dismissWebBanner,
+      }}
+    >
       {children}
     </NotificationsContext.Provider>
   );

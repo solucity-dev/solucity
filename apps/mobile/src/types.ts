@@ -12,7 +12,8 @@ export type RootCategoryId =
   | 'profesionales'
   | 'estetica'
   | 'transporte'
-  | 'arreglos-reparaciones';
+  | 'arreglos-reparaciones'
+  | 'alquiler';
 
 /**
  * Slugs de rubros (categorías hijas).
@@ -68,6 +69,7 @@ export type CategorySlug =
   | 'psicopedagoga'
   | 'kinesiologia'
   | 'cuidador-de-pacientes'
+  | 'podologia'
   // ── Holístico y bienestar ─────────────────────────────────
   | 'reiki'
   | 'yoga'
@@ -113,7 +115,18 @@ export type CategorySlug =
   // ── Arreglos y reparaciones ───────────────────────────────
   | 'reparacion-de-calzado'
   | 'arreglos-de-indumentaria'
-  | 'costura-modista';
+  | 'costura-modista'
+  // ── Alquiler ──────────────────────────────────────────────
+  | 'alquiler-de-herramientas'
+  | 'alquiler-de-maquinaria-liviana'
+  | 'alquiler-de-maquinaria-pesada'
+  | 'alquiler-de-generadores'
+  | 'alquiler-de-andamios'
+  | 'alquiler-de-hidrolavadoras'
+  | 'alquiler-de-hormigoneras'
+  | 'alquiler-de-elevadores'
+  | 'alquiler-de-equipos-de-sonido-e-iluminacion'
+  | 'alquiler-de-carpas-y-mobiliario';
 
 /** Tabs principales del cliente */
 export type ClientTabsParamList = {

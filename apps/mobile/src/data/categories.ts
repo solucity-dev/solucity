@@ -60,6 +60,11 @@ export const ROOT_CATEGORIES: { id: RootCategoryId; title: string; icon: IconSpe
     title: 'Arreglos y reparaciones',
     icon: { set: 'mdi', name: 'wrench-cog' },
   },
+  {
+    id: 'alquiler',
+    title: 'Alquiler',
+    icon: { set: 'mdi', name: 'tools' },
+  },
 ];
 
 // Mapa (cómodo para lookup por id)
@@ -219,6 +224,11 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
       id: 'cuidador-de-pacientes',
       title: 'Cuidador de pacientes',
       icon: { set: 'mdi', name: 'account-heart-outline' },
+    },
+    {
+      id: 'podologia',
+      title: 'Podología',
+      icon: { set: 'mdi', name: 'foot-print' },
     },
   ],
 
@@ -385,6 +395,58 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
       id: 'costura-modista',
       title: 'Costura / Modista',
       icon: { set: 'ion', name: 'shirt-outline' },
+    },
+  ],
+  alquiler: [
+    {
+      id: 'alquiler-de-herramientas',
+      title: 'Alquiler de herramientas',
+      icon: { set: 'mdi', name: 'tools' },
+    },
+    {
+      id: 'alquiler-de-maquinaria-liviana',
+      title: 'Alquiler de maquinaria liviana',
+      icon: { set: 'mdi', name: 'engine-outline' },
+    },
+    {
+      id: 'alquiler-de-maquinaria-pesada',
+      title: 'Alquiler de maquinaria pesada',
+      icon: { set: 'mdi', name: 'excavator' },
+    },
+    {
+      id: 'alquiler-de-generadores',
+      title: 'Alquiler de generadores',
+      icon: { set: 'mdi', name: 'generator-portable' },
+    },
+    {
+      id: 'alquiler-de-andamios',
+      title: 'Alquiler de andamios',
+      icon: { set: 'mdi', name: 'ladder' },
+    },
+    {
+      id: 'alquiler-de-hidrolavadoras',
+      title: 'Alquiler de hidrolavadoras',
+      icon: { set: 'mdi', name: 'water-pressure' },
+    },
+    {
+      id: 'alquiler-de-hormigoneras',
+      title: 'Alquiler de hormigoneras',
+      icon: { set: 'mdi', name: 'truck-cargo-container' },
+    },
+    {
+      id: 'alquiler-de-elevadores',
+      title: 'Alquiler de elevadores',
+      icon: { set: 'mdi', name: 'elevator' },
+    },
+    {
+      id: 'alquiler-de-equipos-de-sonido-e-iluminacion',
+      title: 'Alquiler de equipos de sonido e iluminación',
+      icon: { set: 'mdi', name: 'speaker-wireless' },
+    },
+    {
+      id: 'alquiler-de-carpas-y-mobiliario',
+      title: 'Alquiler de carpas y mobiliario',
+      icon: { set: 'mdi', name: 'table-furniture' },
     },
   ],
 };

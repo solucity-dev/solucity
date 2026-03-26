@@ -1,9 +1,9 @@
 // apps/mobile/src/screens/Welcome.tsx
 import { LinearGradient } from 'expo-linear-gradient';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import Logo from '../assets/logo.png';
+import AppLogo from '../components/AppLogo';
 
 type Props = {
   onCreateAccount: () => void;
@@ -22,14 +22,7 @@ export default function Welcome({ onCreateAccount, onLogin, onOpenTerms, onOpenP
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         {/* Centro: logo + textos */}
         <View style={styles.content}>
-          <Image
-            source={Logo}
-            resizeMode="contain"
-            style={styles.logo}
-            accessible
-            accessibilityLabel="Logo de Solucity"
-            accessibilityIgnoresInvertColors
-          />
+          <AppLogo resizeMode="contain" style={styles.logo} />
 
           <Text style={styles.brand}>Solucity</Text>
 

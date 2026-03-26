@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -791,14 +792,30 @@ export default function ProfileScreen() {
           <View style={styles.card}>
             <Pressable
               style={styles.logoutBtn}
-              onPress={() => {
+              onPress={async () => {
+                if (Platform.OS === 'web') {
+                  const ok = window.confirm('¿Seguro que querés cerrar sesión?');
+                  if (!ok) return;
+
+                  try {
+                    await (signOut?.() ?? Promise.resolve());
+                  } catch (e) {
+                    console.log('logout error', e);
+                  }
+                  return;
+                }
+
                 Alert.alert('Cerrar sesión', '¿Seguro que querés cerrar sesión?', [
                   { text: 'Cancelar', style: 'cancel' },
                   {
                     text: 'Cerrar sesión',
                     style: 'destructive',
                     onPress: async () => {
-                      await (signOut?.() ?? Promise.resolve());
+                      try {
+                        await (signOut?.() ?? Promise.resolve());
+                      } catch (e) {
+                        console.log('logout error', e);
+                      }
                     },
                   },
                 ]);

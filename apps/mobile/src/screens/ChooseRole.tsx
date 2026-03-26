@@ -1,10 +1,10 @@
 // apps/mobile/src/screens/ChooseRole.tsx
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect } from 'react';
-import { BackHandler, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import Logo from '../assets/logo.png';
+import AppLogo from '../components/AppLogo';
 
 type Props = {
   onBack: () => void;
@@ -40,7 +40,7 @@ export default function ChooseRole({ onBack, onPickClient, onPickPro }: Props) {
 
           {/* Logo centrado */}
           <View style={styles.headerCenter}>
-            <Image source={Logo} resizeMode="contain" style={styles.logo} />
+            <AppLogo resizeMode="contain" style={styles.logo} />
           </View>
         </View>
 

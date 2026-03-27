@@ -25,6 +25,7 @@ export type NotificationType =
   | 'SUBSCRIPTION_TRIAL_ENDED'
   | 'SUBSCRIPTION_ACTIVE'
   | 'SUBSCRIPTION_PAST_DUE'
+  | 'SUBSCRIPTION_STATUS_CHANGED'
 
   // ✅ ORDERS (tipos reales usados en producción)
   | 'ORDER_CREATED'

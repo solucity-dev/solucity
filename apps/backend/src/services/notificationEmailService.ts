@@ -47,6 +47,13 @@ const EMAIL_NOTIFICATION_TYPES: NotificationType[] = [
   'SUBSCRIPTION_TRIAL_ENDED',
   'SUBSCRIPTION_ACTIVE',
   'SUBSCRIPTION_PAST_DUE',
+
+  'ACCOUNT_STATUS_CHANGED',
+  'ADMIN_NEW_USER_REGISTERED',
+  'ADMIN_SPECIALIST_SUBSCRIBED',
+  'ADMIN_ORDER_CREATED',
+  'SUBSCRIPTION_DAYS_GRANTED',
+  'SUBSCRIPTION_STATUS_CHANGED',
 ];
 
 function isNotificationType(value: string): value is NotificationType {
@@ -61,63 +68,8 @@ function getBaseWebUrl(): string {
   return (process.env.PUBLIC_WEB_URL || 'https://web.solucity.app').replace(/\/+$/, '');
 }
 
-function getString(value: unknown): string | null {
-  if (typeof value === 'string' && value.trim()) return value.trim();
-  return null;
-}
-
-function asRecord(value: Prisma.JsonValue | null | undefined): Record<string, unknown> {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  return {};
-}
-
-function buildNotificationActionUrl(notification: NotificationRecord): string {
-  const base = getBaseWebUrl();
-  const data = asRecord(notification.data);
-
-  const nestedOrder = asRecord(data.order as Prisma.JsonValue | undefined);
-
-  const orderId = getString(data.orderId) || getString(data.order_id) || getString(nestedOrder.id);
-
-  const threadId =
-    getString(data.threadId) ||
-    getString(data.thread_id) ||
-    getString(data.chatThreadId) ||
-    getString(data.chat_thread_id);
-
-  if (
-    notification.type === 'BACKGROUND_CHECK_STATUS' ||
-    notification.type === 'BACKGROUND_CHECK_REVIEW_REQUEST' ||
-    notification.type === 'CERTIFICATION_APPROVED' ||
-    notification.type === 'CERTIFICATION_REJECTED'
-  ) {
-    return `${base}/background-check`;
-  }
-
-  if (notification.type === 'KYC_STATUS') {
-    return `${base}/kyc-status`;
-  }
-
-  if (
-    notification.type === 'SUBSCRIPTION_TRIAL_ENDING' ||
-    notification.type === 'SUBSCRIPTION_TRIAL_ENDED' ||
-    notification.type === 'SUBSCRIPTION_ACTIVE' ||
-    notification.type === 'SUBSCRIPTION_PAST_DUE'
-  ) {
-    return `${base}/subscription`;
-  }
-
-  if (notification.type === 'NEW_CHAT_MESSAGE' && threadId) {
-    return `${base}/chat/${threadId}`;
-  }
-
-  if (orderId) {
-    return `${base}/orders/${orderId}`;
-  }
-
-  return `${base}/notifications`;
+function buildNotificationActionUrl(_notification: NotificationRecord): string {
+  return getBaseWebUrl();
 }
 
 function buildEmailHtml(params: {

@@ -6,6 +6,7 @@ import { signToken } from '../lib/jwt';
 import { prisma } from '../lib/prisma';
 import { auth } from '../middlewares/auth';
 import { requireAdmin } from '../middlewares/requiereAdmin';
+import { createNotification } from '../services/notificationService';
 import { notifyBackgroundCheckStatus } from '../services/notifyBackgroundCheck';
 import { notifyCertificationStatus } from '../services/notifyCertification';
 import { notifyKycStatus } from '../services/notifyKyc';
@@ -92,19 +93,16 @@ async function notifyAccountStatusChange(params: {
       ? `Tu cuenta fue bloqueada.${params.reason ? ` Motivo: ${params.reason}` : ''}`
       : 'Tu cuenta fue activada nuevamente.';
 
-  const notif = await prisma.notification.create({
+  const notif = await createNotification({
+    userId: params.userId,
+    type: 'ACCOUNT_STATUS_CHANGED',
+    title,
+    body,
     data: {
-      userId: params.userId,
-      type: 'ACCOUNT_STATUS_CHANGED',
-      title,
-      body,
-      data: {
-        status: params.status,
-        reason: params.reason ?? null,
-        adminId: params.adminId ?? null,
-      } as any,
+      status: params.status,
+      reason: params.reason ?? null,
+      adminId: params.adminId ?? null,
     },
-    select: { id: true, title: true, body: true },
   });
 
   try {
@@ -148,21 +146,18 @@ async function notifySubscriptionStatusChange(params: {
     body = 'Tu suscripción fue cancelada. Podés volver a activarla desde la app.';
   }
 
-  const notif = await prisma.notification.create({
+  const notif = await createNotification({
+    userId: params.userId,
+    type: 'SUBSCRIPTION_STATUS_CHANGED' as any,
+    title,
+    body,
     data: {
-      userId: params.userId,
-      type: 'SUBSCRIPTION_STATUS_CHANGED',
-      title,
-      body,
-      data: {
-        action: params.action,
-        reason: params.reason ?? null,
-        adminId: params.adminId ?? null,
-        subscriptionId: params.subscriptionId ?? null,
-        specialistId: params.specialistId ?? null,
-      } as any,
+      action: params.action,
+      reason: params.reason ?? null,
+      adminId: params.adminId ?? null,
+      subscriptionId: params.subscriptionId ?? null,
+      specialistId: params.specialistId ?? null,
     },
-    select: { id: true, title: true, body: true },
   });
 
   try {
@@ -1587,15 +1582,12 @@ adminRouter.post('/background-checks/:id/request-update', async (req, res) => {
   const body =
     'Necesitamos que actualices tu certificado de antecedentes. Subí uno nuevo desde la app.';
 
-  const notif = await prisma.notification.create({
-    data: {
-      userId,
-      type: 'BACKGROUND_CHECK_REVIEW_REQUEST',
-      title,
-      body,
-      data: { backgroundCheckId: id } as any,
-    },
-    select: { id: true, title: true, body: true },
+  const notif = await createNotification({
+    userId,
+    type: 'BACKGROUND_CHECK_REVIEW_REQUEST',
+    title,
+    body,
+    data: { backgroundCheckId: id },
   });
 
   try {
@@ -1974,25 +1966,19 @@ adminRouter.patch('/specialists/:specialistId/grant-days', async (req, res) => {
       ? `Se te acreditó 1 día extra en tu suscripción.`
       : `Se te acreditaron ${days} días extra en tu suscripción.`;
 
-  const notif = await prisma.notification.create({
+  const notif = await createNotification({
+    userId: spec.userId,
+    type: 'SUBSCRIPTION_DAYS_GRANTED',
+    title,
+    body,
     data: {
-      userId: spec.userId,
-      type: 'SUBSCRIPTION_DAYS_GRANTED',
-      title,
-      body,
-      data: {
-        specialistId,
-        subscriptionId: updatedSub?.id ?? null,
-        daysGranted: days,
-        newTrialEnd: updatedSub?.trialEnd ? updatedSub.trialEnd.toISOString() : null,
-        newPeriodEnd: updatedSub?.currentPeriodEnd
-          ? updatedSub.currentPeriodEnd.toISOString()
-          : null,
-      } as any,
+      specialistId,
+      subscriptionId: updatedSub?.id ?? null,
+      daysGranted: days,
+      newTrialEnd: updatedSub?.trialEnd?.toISOString() ?? null,
+      newPeriodEnd: updatedSub?.currentPeriodEnd?.toISOString() ?? null,
     },
-    select: { id: true, title: true, body: true },
   });
-
   try {
     await pushToUser({
       userId: spec.userId,

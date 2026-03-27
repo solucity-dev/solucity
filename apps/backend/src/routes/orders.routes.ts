@@ -417,22 +417,18 @@ async function notifyAdminNewOrder(params: {
   const title = 'Nueva orden creada';
   const body = `${params.customerName} creó una orden para ${params.categoryName} con ${params.specialistName}.`;
 
-  const notif = await prisma.notification.create({
+  const notif = await createNotification({
+    userId: adminUser.id,
+    type: 'ADMIN_ORDER_CREATED',
+    title,
+    body,
     data: {
-      userId: adminUser.id,
-      type: 'ADMIN_ORDER_CREATED',
-      title,
-      body,
-      data: {
-        orderId: params.orderId,
-        customerName: params.customerName,
-        specialistName: params.specialistName,
-        categoryName: params.categoryName,
-      } as any,
-    },
-    select: { id: true, title: true, body: true },
+      orderId: params.orderId,
+      customerName: params.customerName,
+      specialistName: params.specialistName,
+      categoryName: params.categoryName,
+    } as any,
   });
-
   await pushToUser({
     userId: adminUser.id,
     title: notif.title ?? title,
@@ -511,15 +507,12 @@ async function autoCancelExpiredPendingOrders() {
     // notificar cliente
     const customerUserId = await getCustomerUserId(o.customerId);
     if (customerUserId) {
-      const notif = await prisma.notification.create({
-        data: {
-          userId: customerUserId,
-          type: 'ORDER_CANCELLED_AUTO',
-          title: 'Solicitud vencida',
-          body: 'La solicitud se canceló automáticamente porque venció el tiempo de aceptación.',
-          data: { orderId: o.id } as any,
-        },
-        select: { id: true, title: true, body: true },
+      const notif = await createNotification({
+        userId: customerUserId,
+        type: 'ORDER_CANCELLED_AUTO',
+        title: 'Solicitud vencida',
+        body: 'La solicitud se canceló automáticamente porque venció el tiempo de aceptación.',
+        data: { orderId: o.id } as any,
       });
 
       try {
@@ -542,15 +535,12 @@ async function autoCancelExpiredPendingOrders() {
     if (o.specialistId) {
       const specialistUserId = await getSpecialistUserId(o.specialistId);
       if (specialistUserId) {
-        const notif2 = await prisma.notification.create({
-          data: {
-            userId: specialistUserId,
-            type: 'ORDER_CANCELLED_AUTO',
-            title: 'Solicitud vencida',
-            body: 'Una solicitud pendiente fue cancelada automáticamente por falta de aceptación.',
-            data: { orderId: o.id } as any,
-          },
-          select: { id: true, title: true, body: true },
+        const notif2 = await createNotification({
+          userId: specialistUserId,
+          type: 'ORDER_CANCELLED_AUTO',
+          title: 'Solicitud vencida',
+          body: 'Una solicitud pendiente fue cancelada automáticamente por falta de aceptación.',
+          data: { orderId: o.id } as any,
         });
 
         try {
@@ -1405,15 +1395,12 @@ orders.post('/:id/reschedule', auth, async (req, res) => {
     const recipientId = actorUid === customerUserId ? specialistUserId : customerUserId;
 
     if (recipientId) {
-      const notif = await prisma.notification.create({
-        data: {
-          userId: recipientId,
-          type: 'ORDER_RESCHEDULED',
-          title: 'Reprogramación',
-          body: `Se reprogramó el trabajo para ${new Date(scheduledAt).toLocaleString()}.`,
-          data: { orderId, scheduledAt, reason: reason ?? null } as any,
-        },
-        select: { id: true, title: true, body: true },
+      const notif = await createNotification({
+        userId: recipientId,
+        type: 'ORDER_RESCHEDULED',
+        title: 'Reprogramación',
+        body: `Se reprogramó el trabajo para ${new Date(scheduledAt).toLocaleString()}.`,
+        data: { orderId, scheduledAt, reason: reason ?? null } as any,
       });
 
       await pushToUser({
@@ -1463,15 +1450,12 @@ orders.post('/:id/finish', auth, async (req, res) => {
   try {
     const customerUserId = await getCustomerUserId(order.customerId);
     if (customerUserId) {
-      const notif = await prisma.notification.create({
-        data: {
-          userId: customerUserId,
-          type: 'ORDER_FINISHED_BY_SPECIALIST',
-          title: 'Trabajo finalizado',
-          body: 'El especialista marcó el trabajo como finalizado. Entrá para confirmar y calificar.',
-          data: { orderId } as any,
-        },
-        select: { id: true, title: true, body: true },
+      const notif = await createNotification({
+        userId: customerUserId,
+        type: 'ORDER_FINISHED_BY_SPECIALIST',
+        title: 'Trabajo finalizado',
+        body: 'El especialista marcó el trabajo como finalizado. Entrá para confirmar y calificar.',
+        data: { orderId } as any,
       });
 
       await pushToUser({
@@ -1524,15 +1508,12 @@ orders.post('/:id/confirm', auth, async (req, res) => {
         const customerName =
           `${cust?.user?.name ?? 'El cliente'} ${cust?.user?.surname ?? ''}`.trim();
 
-        const notif = await prisma.notification.create({
-          data: {
-            userId: specialistUserId,
-            type: 'ORDER_CONFIRMED_BY_CLIENT',
-            title: 'Trabajo confirmado',
-            body: `${customerName} confirmó que el trabajo finalizó.`,
-            data: { orderId, customerName } as any,
-          },
-          select: { id: true, title: true, body: true },
+        const notif = await createNotification({
+          userId: specialistUserId,
+          type: 'ORDER_CONFIRMED_BY_CLIENT',
+          title: 'Trabajo confirmado',
+          body: `${customerName} confirmó que el trabajo finalizó.`,
+          data: { orderId, customerName } as any,
         });
 
         await pushToUser({
@@ -1598,15 +1579,12 @@ orders.post('/:id/reject', auth, async (req, res) => {
         const customerName =
           `${cust?.user?.name ?? 'El cliente'} ${cust?.user?.surname ?? ''}`.trim();
 
-        const notif = await prisma.notification.create({
-          data: {
-            userId: specialistUserId,
-            type: 'ORDER_REJECTED_BY_CLIENT',
-            title: 'Trabajo rechazado',
-            body: `${customerName} rechazó el trabajo. ${reason ? `Motivo: ${reason}` : ''}`.trim(),
-            data: { orderId, reason: reason ?? null, customerName } as any,
-          },
-          select: { id: true, title: true, body: true },
+        const notif = await createNotification({
+          userId: specialistUserId,
+          type: 'ORDER_REJECTED_BY_CLIENT',
+          title: 'Trabajo rechazado',
+          body: `${customerName} rechazó el trabajo. ${reason ? `Motivo: ${reason}` : ''}`.trim(),
+          data: { orderId, reason: reason ?? null, customerName } as any,
         });
 
         await pushToUser({
@@ -1690,15 +1668,12 @@ orders.post('/:id/rate', auth, async (req, res) => {
     if (order.specialist?.id) {
       const specialistUserId = await getSpecialistUserId(order.specialist.id);
       if (specialistUserId) {
-        const notif = await prisma.notification.create({
-          data: {
-            userId: specialistUserId,
-            type: 'ORDER_RATED',
-            title: 'Nueva calificación recibida',
-            body: `Te calificaron con ${score} estrellas.`,
-            data: { orderId, score, comment: comment ?? null } as any,
-          },
-          select: { id: true, title: true, body: true },
+        const notif = await createNotification({
+          userId: specialistUserId,
+          type: 'ORDER_RATED',
+          title: 'Nueva calificación recibida',
+          body: `Te calificaron con ${score} estrellas.`,
+          data: { orderId, score, comment: comment ?? null } as any,
         });
 
         await pushToUser({
@@ -2068,15 +2043,12 @@ orders.get('/:id', auth, async (req, res) => {
         try {
           const customerUserId = await getCustomerUserId(order.customerId);
           if (customerUserId) {
-            const notif = await prisma.notification.create({
-              data: {
-                userId: customerUserId,
-                type: 'ORDER_CANCELLED_AUTO',
-                title: 'Solicitud vencida',
-                body: 'La solicitud se canceló automáticamente porque venció el tiempo de aceptación.',
-                data: { orderId: order.id } as any,
-              },
-              select: { id: true, title: true, body: true },
+            const notif = await createNotification({
+              userId: customerUserId,
+              type: 'ORDER_CANCELLED_AUTO',
+              title: 'Solicitud vencida',
+              body: 'La solicitud se canceló automáticamente porque venció el tiempo de aceptación.',
+              data: { orderId: order.id } as any,
             });
 
             await pushToUser({
@@ -2099,15 +2071,12 @@ orders.get('/:id', auth, async (req, res) => {
           try {
             const specialistUserId = await getSpecialistUserId(order.specialistId);
             if (specialistUserId) {
-              const notif2 = await prisma.notification.create({
-                data: {
-                  userId: specialistUserId,
-                  type: 'ORDER_CANCELLED_AUTO',
-                  title: 'Solicitud vencida',
-                  body: 'Una solicitud pendiente fue cancelada automáticamente por falta de aceptación.',
-                  data: { orderId: order.id } as any,
-                },
-                select: { id: true, title: true, body: true },
+              const notif2 = await createNotification({
+                userId: specialistUserId,
+                type: 'ORDER_CANCELLED_AUTO',
+                title: 'Solicitud vencida',
+                body: 'Una solicitud pendiente fue cancelada automáticamente por falta de aceptación.',
+                data: { orderId: order.id } as any,
               });
 
               await pushToUser({

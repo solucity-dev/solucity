@@ -177,7 +177,18 @@ ${params.actionUrl}`;
 }
 
 export async function maybeSendNotificationEmail(notification: NotificationRecord) {
-  if (!shouldSendEmailForNotification(notification.type)) return;
+  console.log('[notification-email] maybeSendNotificationEmail called', {
+    notificationId: notification.id,
+    userId: notification.userId,
+    type: notification.type,
+  });
+  if (!shouldSendEmailForNotification(notification.type)) {
+    console.log('[notification-email] skipped by type', {
+      notificationId: notification.id,
+      type: notification.type,
+    });
+    return;
+  }
 
   const user = await prisma.user.findUnique({
     where: { id: notification.userId },
@@ -189,12 +200,39 @@ export async function maybeSendNotificationEmail(notification: NotificationRecor
     },
   });
 
-  if (!user?.email) return;
-  if (user.status !== 'ACTIVE') return;
+  console.log('[notification-email] user loaded', {
+    notificationId: notification.id,
+    email: user?.email ?? null,
+    status: user?.status ?? null,
+  });
+
+  if (!user?.email) {
+    console.log('[notification-email] skipped: user without email', {
+      notificationId: notification.id,
+      userId: notification.userId,
+    });
+    return;
+  }
+
+  if (user.status !== 'ACTIVE') {
+    console.log('[notification-email] skipped: user not active', {
+      notificationId: notification.id,
+      userId: notification.userId,
+      status: user.status,
+    });
+    return;
+  }
 
   const actionUrl = buildNotificationActionUrl(notification);
 
-  await sendEmail({
+  console.log('[notification-email] sending email', {
+    notificationId: notification.id,
+    to: user.email,
+    type: notification.type,
+    actionUrl,
+  });
+
+  const emailResult = await sendEmail({
     to: user.email,
     subject: notification.title,
     html: buildEmailHtml({
@@ -209,5 +247,10 @@ export async function maybeSendNotificationEmail(notification: NotificationRecor
       body: notification.body,
       actionUrl,
     }),
+  });
+
+  console.log('[notification-email] sendEmail result', {
+    notificationId: notification.id,
+    result: emailResult,
   });
 }

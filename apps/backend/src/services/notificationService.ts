@@ -77,7 +77,19 @@ export async function createNotification(params: {
     },
   });
 
+  console.log('[notification] created', {
+    id: notification.id,
+    userId: notification.userId,
+    type: notification.type,
+    title: notification.title,
+  });
+
   try {
+    console.log('[notification-email] attempting', {
+      notificationId: notification.id,
+      userId: notification.userId,
+      type: notification.type,
+    });
     await maybeSendNotificationEmail(notification);
   } catch (e) {
     console.error('[notification-email] failed', {

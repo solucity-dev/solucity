@@ -22,11 +22,20 @@ export function isValidEmail(email: string): boolean {
 }
 
 export async function sendEmail(params: SendEmailParams) {
+  console.log('[mailService] sendEmail called', {
+    to: params.to,
+    subject: params.subject,
+    enabled: isEmailSendingEnabled(),
+    fromEmail,
+  });
+
   if (!isEmailSendingEnabled()) {
+    console.log('[mailService] skipped: email disabled');
     return { ok: false, skipped: true, reason: 'email_disabled' as const };
   }
 
   if (!resend) {
+    console.log('[mailService] missing RESEND_API_KEY');
     throw new Error('Falta RESEND_API_KEY en variables de entorno');
   }
 
@@ -35,6 +44,7 @@ export async function sendEmail(params: SendEmailParams) {
     .toLowerCase();
 
   if (!isValidEmail(to)) {
+    console.log('[mailService] skipped: invalid email', { to });
     return { ok: false, skipped: true, reason: 'invalid_email' as const };
   }
 
@@ -45,6 +55,8 @@ export async function sendEmail(params: SendEmailParams) {
     html: params.html,
     text: params.text,
   });
+
+  console.log('[mailService] email sent result', result);
 
   return { ok: true, result };
 }

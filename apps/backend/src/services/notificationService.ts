@@ -26,11 +26,23 @@ export type NotificationType =
   | 'SUBSCRIPTION_ACTIVE'
   | 'SUBSCRIPTION_PAST_DUE'
 
+  // ✅ ORDERS (tipos reales usados en producción)
+  | 'ORDER_CREATED'
+  | 'ORDER_ACCEPTED'
+  | 'ORDER_RESCHEDULED'
+  | 'ORDER_FINISHED_BY_SPECIALIST'
+  | 'ORDER_CONFIRMED_BY_CLIENT'
+  | 'ORDER_REJECTED_BY_CLIENT'
+  | 'ORDER_RATED'
+  | 'ORDER_CANCELLED_BY_CUSTOMER'
+  | 'ORDER_CANCELLED_BY_SPECIALIST'
+  | 'ORDER_CANCELLED_AUTO'
+  | 'ADMIN_ORDER_CREATED'
+
   // ✅ ADMIN
   | 'ACCOUNT_STATUS_CHANGED'
   | 'ADMIN_NEW_USER_REGISTERED'
   | 'ADMIN_SPECIALIST_SUBSCRIBED';
-
 // Base común de data (se guarda como JSON)
 export interface BaseNotificationData extends Prisma.JsonObject {
   orderId?: string;

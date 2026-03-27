@@ -16,6 +16,7 @@ import {
 } from '../schemas/orders';
 import { deleteChatForOrder } from '../services/chatCleanup';
 import { geocodeAddress } from '../services/geocode';
+import { createNotification } from '../services/notificationService';
 import { sendExpoPush } from '../services/pushExpo';
 import { dbg, debugOrderDetail, debugOrders } from '../utils/debug';
 import { haversineKm } from '../utils/distance';
@@ -1093,19 +1094,16 @@ orders.post('/', auth, async (req, res) => {
       adminCategoryName = rubroName || 'un rubro';
 
       if (specialistUserId) {
-        const notif = await prisma.notification.create({
+        const notif = await createNotification({
+          userId: specialistUserId,
+          type: 'ORDER_CREATED',
+          title: 'Nueva solicitud de trabajo',
+          body: `${customerName} solicitó ${rubroName}.`,
           data: {
-            userId: specialistUserId,
-            type: 'ORDER_CREATED',
-            title: 'Nueva solicitud de trabajo',
-            body: `${customerName} solicitó ${rubroName}.`,
-            data: {
-              orderId: order.id,
-              customerName,
-              categoryName: rubroName,
-            } as any,
-          },
-          select: { id: true, title: true, body: true },
+            orderId: order.id,
+            customerName,
+            categoryName: rubroName,
+          } as any,
         });
 
         try {
@@ -1325,15 +1323,12 @@ orders.post('/:id/accept', auth, async (req, res) => {
   try {
     const customerUserId = await getCustomerUserId(order.customerId);
     if (customerUserId) {
-      const notif = await prisma.notification.create({
-        data: {
-          userId: customerUserId,
-          type: 'ORDER_ACCEPTED',
-          title: 'Solicitud aceptada',
-          body: 'Un especialista aceptó tu pedido. Ya pueden coordinar por chat.',
-          data: { orderId } as any,
-        },
-        select: { id: true, title: true, body: true },
+      const notif = await createNotification({
+        userId: customerUserId,
+        type: 'ORDER_ACCEPTED',
+        title: 'Solicitud aceptada',
+        body: 'Un especialista aceptó tu pedido. Ya pueden coordinar por chat.',
+        data: { orderId } as any,
       });
 
       // ✅ PUSH REAL al cliente
@@ -1769,15 +1764,12 @@ orders.post('/:id/cancel', auth, async (req, res) => {
     if (order.specialist?.id) {
       const specialistUserId = await getSpecialistUserId(order.specialist.id);
       if (specialistUserId) {
-        const notif = await prisma.notification.create({
-          data: {
-            userId: specialistUserId,
-            type: 'ORDER_CANCELLED_BY_CUSTOMER',
-            title: 'Solicitud cancelada',
-            body: 'El cliente canceló esta solicitud.',
-            data: { orderId } as any,
-          },
-          select: { id: true, title: true, body: true },
+        const notif = await createNotification({
+          userId: specialistUserId,
+          type: 'ORDER_CANCELLED_BY_CUSTOMER',
+          title: 'Solicitud cancelada',
+          body: 'El cliente canceló esta solicitud.',
+          data: { orderId } as any,
         });
 
         await pushToUser({
@@ -1866,15 +1858,12 @@ orders.post('/:id/cancel-by-specialist', auth, async (req, res) => {
     if (order.customer?.id) {
       const customerUserId = await getCustomerUserId(order.customer.id);
       if (customerUserId) {
-        const notif = await prisma.notification.create({
-          data: {
-            userId: customerUserId,
-            type: 'ORDER_CANCELLED_BY_SPECIALIST',
-            title: 'Solicitud cancelada',
-            body: 'El especialista canceló tu solicitud.',
-            data: { orderId, reason: reason ?? null } as any,
-          },
-          select: { id: true, title: true, body: true },
+        const notif = await createNotification({
+          userId: customerUserId,
+          type: 'ORDER_CANCELLED_BY_SPECIALIST',
+          title: 'Solicitud cancelada',
+          body: 'El especialista canceló tu solicitud.',
+          data: { orderId, reason: reason ?? null } as any,
         });
 
         await pushToUser({

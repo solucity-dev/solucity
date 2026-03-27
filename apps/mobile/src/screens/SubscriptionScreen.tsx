@@ -1,5 +1,6 @@
 // apps/mobile/src/screens/SubscriptionScreen.tsx
 import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -19,6 +20,9 @@ import {
   createSubscriptionPaymentLink,
   getMySubscription,
 } from '../lib/subscriptionApi';
+
+import type { SpecialistHomeStackParamList } from '../types';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 type SubscriptionDTO = {
   id: string;
@@ -58,12 +62,21 @@ function statusPill(status: SubscriptionDTO['status']) {
 
 export default function SubscriptionScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<SpecialistHomeStackParamList>>();
   const mountedRef = useRef(true);
 
   const [loading, setLoading] = useState(true);
   const [payLoading, setPayLoading] = useState(false);
   const [sub, setSub] = useState<SubscriptionDTO | null>(null);
 
+  const handleGoBack = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+
+    navigation.navigate('SpecialistHome');
+  }, [navigation]);
   // ✅ “Activar ahora” habilitado salvo que ya esté ACTIVE.
   // Si estás en TRIALING y el backend no permite pagar, devolverá trial_active (lo manejamos).
   const canPay = useMemo(() => {
@@ -193,8 +206,13 @@ export default function SubscriptionScreen() {
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1, paddingTop: 6 }} edges={['top', 'bottom']}>
         <View style={styles.header}>
+          <Pressable onPress={handleGoBack} hitSlop={10} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={24} color="#E9FEFF" />
+          </Pressable>
+
           <Text style={styles.headerTitle}>Suscripción</Text>
-          <View style={{ width: 24 }} />
+
+          <View style={styles.backBtnPlaceholder} />
         </View>
 
         <ScrollView
@@ -396,6 +414,23 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 16,
     paddingBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(233,254,255,0.18)',
+  },
+  backBtnPlaceholder: {
+    width: 36,
+    height: 36,
   },
   headerTitle: {
     color: '#E9FEFF',

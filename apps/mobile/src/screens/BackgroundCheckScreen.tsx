@@ -1,5 +1,6 @@
 // apps/mobile/src/screens/BackgroundCheckScreen.tsx
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,6 +18,9 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { api } from '../lib/api';
+
+import type { SpecialistHomeStackParamList } from '../types';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 type BackgroundCheck = {
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -73,12 +77,21 @@ function statusMeta(status?: BackgroundCheck['status'] | null) {
 
 export default function BackgroundCheckScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<SpecialistHomeStackParamList>>();
   const mountedRef = useRef(true);
 
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [backgroundCheck, setBackgroundCheck] = useState<BackgroundCheck | null>(null);
 
+  const handleGoBack = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+
+    navigation.navigate('SpecialistHome');
+  }, [navigation]);
   const meta = useMemo(
     () => statusMeta(backgroundCheck?.status ?? null),
     [backgroundCheck?.status],
@@ -229,6 +242,10 @@ export default function BackgroundCheckScreen() {
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1, paddingTop: 6 }} edges={['top', 'bottom']}>
         <View style={styles.header}>
+          <Pressable onPress={handleGoBack} hitSlop={10} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={22} color="#E9FEFF" />
+          </Pressable>
+
           <View style={styles.headerLeft}>
             <Ionicons name="shield-checkmark-outline" size={22} color="#E9FEFF" />
             <Text style={styles.headerTitle}>Certificado de buena conducta</Text>
@@ -388,6 +405,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 10,
+  },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(233,254,255,0.18)',
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   headerTitle: { color: '#E9FEFF', fontSize: 18, fontWeight: '900' },

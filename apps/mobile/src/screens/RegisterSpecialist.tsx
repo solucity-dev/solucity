@@ -65,10 +65,11 @@ export default function RegisterSpecialist() {
 
   const [loadingStart, setLoadingStart] = useState(false);
   const [loadingVerify, setLoadingVerify] = useState(false);
+  const [emailHelp, setEmailHelp] = useState<string | null>(null);
+  const [otpHelp, setOtpHelp] = useState<string | null>(null);
 
   // token temporal que nos da /auth/register/verify
   const [pendingToken, setPendingToken] = useState<string | null>(null);
-
   // ✅ checks paso 1
   const step1Checks = useMemo(() => {
     const checks = [
@@ -87,37 +88,53 @@ export default function RegisterSpecialist() {
     try {
       Keyboard.dismiss();
       setLoadingStart(true);
+      setEmailHelp(null);
+      setOtpHelp(null);
 
       const trimmed = email.trim().toLowerCase();
-      if (!trimmed.includes('@')) return Alert.alert('Email inválido', 'Ingresá un correo válido.');
+      if (!trimmed.includes('@')) {
+        setEmailHelp('Revisá el correo: parece incompleto o inválido.');
+        return Alert.alert('Email inválido', 'Ingresá un correo válido.');
+      }
 
       await api.post('/auth/register/start', { email: trimmed });
       setOtpSent(true);
+      setEmailHelp(`Enviamos un código a ${trimmed}. Revisá también spam o promociones.`);
       Alert.alert('Código enviado', 'Revisá tu correo y pegá el código.');
     } catch (e: any) {
       const err = e?.response?.data?.error;
       if (e?.response?.status === 409 || err === 'email_in_use') {
+        setEmailHelp('Ese correo ya está registrado. Probá iniciar sesión o recuperar tu clave.');
         return Alert.alert(
           'Correo ya registrado',
           'Ese correo ya está en uso. Probá iniciar sesión.',
         );
       }
       if (e?.response?.status === 429 || err === 'too_many_requests') {
+        setEmailHelp(
+          'Hiciste muchos intentos. Esperá unos minutos antes de volver a pedir el código.',
+        );
         return Alert.alert('Demasiados intentos', 'Esperá unos minutos y reintentá.');
       }
+      setEmailHelp(
+        'No pudimos enviar el código. Revisá si el correo está bien escrito e intentá nuevamente.',
+      );
       Alert.alert('Error', 'No se pudo enviar el código.');
     } finally {
       setLoadingStart(false);
     }
   };
-
   const verifyAndContinue = async () => {
     if (loadingVerify || pendingToken) return;
     try {
       Keyboard.dismiss();
       setLoadingVerify(true);
+      setOtpHelp(null);
 
-      if (!otp || otp.length < 6) return Alert.alert('Código inválido', 'Ingresá los 6 dígitos.');
+      if (!otp || otp.length < 6) {
+        setOtpHelp('El código debe tener 6 dígitos.');
+        return Alert.alert('Código inválido', 'Ingresá los 6 dígitos.');
+      }
       if (!name.trim()) return Alert.alert('Falta tu nombre', 'Ingresá tu nombre.');
       if (!password || password.length < 8)
         return Alert.alert('Contraseña inválida', 'Mínimo 8 caracteres.');
@@ -140,17 +157,29 @@ export default function RegisterSpecialist() {
       setStep(2);
     } catch (e: any) {
       const err = e?.response?.data?.error;
-      if (err === 'otp_already_used') Alert.alert('Código usado', 'Generá uno nuevo y reintentá.');
-      else if (err === 'otp_expired') Alert.alert('Código vencido', 'Pedí un nuevo código.');
-      else if (err === 'otp_invalid' || err === 'otp_not_found')
+      if (err === 'otp_already_used') {
+        setOtpHelp('Ese código ya fue usado. Pedí uno nuevo.');
+        Alert.alert('Código usado', 'Generá uno nuevo y reintentá.');
+      } else if (err === 'otp_expired') {
+        setOtpHelp('El código venció. Pedí uno nuevo para continuar.');
+        Alert.alert('Código vencido', 'Pedí un nuevo código.');
+      } else if (err === 'otp_invalid' || err === 'otp_not_found') {
+        setOtpHelp('El código no coincide. Revisá los 6 dígitos o volvé a pedir uno.');
         Alert.alert('Código incorrecto', 'Verificá los 6 dígitos.');
-      else if (e?.response?.status === 409)
+      } else if (e?.response?.status === 409) {
+        setEmailHelp('Ese correo ya está registrado. Probá iniciar sesión.');
         Alert.alert('Correo ya registrado', 'Ese correo ya está en uso. Probá iniciar sesión.');
-      else if (err === 'weak_password')
+      } else if (err === 'weak_password') {
         Alert.alert('Contraseña débil', 'Usá una contraseña de al menos 8 caracteres.');
-      else if (e?.response?.status === 429 || err === 'otp_blocked')
+      } else if (e?.response?.status === 429 || err === 'otp_blocked') {
+        setOtpHelp('Hiciste muchos intentos. Esperá unos minutos y pedí un nuevo código.');
         Alert.alert('Demasiados intentos', 'Esperá unos minutos y pedí un nuevo código.');
-      else Alert.alert('Error', 'No se pudo verificar el código.');
+      } else {
+        setOtpHelp(
+          'No se pudo verificar el código. Revisá el correo ingresado y volvé a intentar.',
+        );
+        Alert.alert('Error', 'No se pudo verificar el código.');
+      }
     } finally {
       setLoadingVerify(false);
     }
@@ -491,6 +520,17 @@ export default function RegisterSpecialist() {
     }
   };
 
+  const goToPreviousStep = () => {
+    if (step === 2) {
+      setStep(1);
+      return;
+    }
+
+    if (step === 3) {
+      setStep(2);
+    }
+  };
+
   const checksForStep = step === 1 ? step1Checks : step === 2 ? step2Checks : step3Checks;
 
   // ===== UI ================================================================
@@ -550,7 +590,10 @@ export default function RegisterSpecialist() {
               autoCapitalize="none"
               keyboardType="email-address"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(text) => {
+                setEmail(text);
+                if (emailHelp) setEmailHelp(null);
+              }}
               placeholder="especialista@correo.com"
               placeholderTextColor="#cfe"
               returnKeyType="send"
@@ -559,6 +602,8 @@ export default function RegisterSpecialist() {
               autoComplete="email"
               editable={!loadingStart && !loadingVerify}
             />
+
+            {emailHelp ? <Text style={s.inlineHelp}>{emailHelp}</Text> : null}
 
             {!otpSent ? (
               <Pressable
@@ -576,7 +621,10 @@ export default function RegisterSpecialist() {
                   keyboardType="number-pad"
                   maxLength={6}
                   value={otp}
-                  onChangeText={(t) => setOtp(t.replace(/\D/g, '').slice(0, 6))}
+                  onChangeText={(t) => {
+                    setOtp(t.replace(/\D/g, '').slice(0, 6));
+                    if (otpHelp) setOtpHelp(null);
+                  }}
                   placeholder="••••••"
                   placeholderTextColor="#cfe"
                   returnKeyType="next"
@@ -709,25 +757,31 @@ export default function RegisterSpecialist() {
 
             {step2Hint ? <Text style={s.hint}>{step2Hint}</Text> : null}
 
-            <Pressable
-              onPress={() => {
-                if (!step2Complete) {
-                  setStep2Hint('Subí DNI frente, dorso y selfie para continuar.');
-                  return;
-                }
-                continueToStep3();
-              }}
-              disabled={loadingUpload || !step2Complete}
-              style={[s.btn, (loadingUpload || !step2Complete) && s.disabled]}
-            >
-              <Text style={s.btnT}>
-                {loadingUpload
-                  ? 'Subiendo…'
-                  : !step2Complete
-                    ? 'Completá las fotos'
-                    : 'Continuar ▸ Paso 3'}
-              </Text>
-            </Pressable>
+            <View style={s.actionsRow}>
+              <Pressable onPress={goToPreviousStep} style={[s.btn, s.btnSecondary, s.halfBtn]}>
+                <Text style={s.btnSecondaryT}>◂ Volver</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  if (!step2Complete) {
+                    setStep2Hint('Subí DNI frente, dorso y selfie para continuar.');
+                    return;
+                  }
+                  continueToStep3();
+                }}
+                disabled={loadingUpload || !step2Complete}
+                style={[s.btn, s.halfBtn, (loadingUpload || !step2Complete) && s.disabled]}
+              >
+                <Text style={s.btnT}>
+                  {loadingUpload
+                    ? 'Subiendo…'
+                    : !step2Complete
+                      ? 'Completá las fotos'
+                      : 'Continuar ▸ Paso 3'}
+                </Text>
+              </Pressable>
+            </View>
           </View>
         )}
 
@@ -803,13 +857,19 @@ export default function RegisterSpecialist() {
 
             {step3Hint ? <Text style={s.hint}>{step3Hint}</Text> : null}
 
-            <Pressable
-              onPress={finalize}
-              disabled={finalizing}
-              style={[s.btn, { marginTop: 8 }, finalizing && s.disabled]}
-            >
-              <Text style={s.btnT}>{finalizing ? 'Finalizando…' : 'Finalizar registro'}</Text>
-            </Pressable>
+            <View style={s.actionsRow}>
+              <Pressable onPress={goToPreviousStep} style={[s.btn, s.btnSecondary, s.halfBtn]}>
+                <Text style={s.btnSecondaryT}>◂ Volver</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={finalize}
+                disabled={finalizing}
+                style={[s.btn, s.halfBtn, { marginTop: 8 }, finalizing && s.disabled]}
+              >
+                <Text style={s.btnT}>{finalizing ? 'Finalizando…' : 'Finalizar registro'}</Text>
+              </Pressable>
+            </View>
           </View>
         )}
       </KeyboardAwareScrollView>
@@ -1063,6 +1123,14 @@ const s = StyleSheet.create({
     fontSize: 12,
   },
 
+  inlineHelp: {
+    marginTop: -4,
+    color: 'rgba(233,254,255,0.92)',
+    fontWeight: '700',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+
   helperText: {
     color: 'rgba(233,254,255,0.85)',
     fontWeight: '700',
@@ -1101,8 +1169,24 @@ const s = StyleSheet.create({
     marginTop: 6,
   },
   btnT: { color: '#0B6B76', fontWeight: '800' },
+  btnSecondary: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  btnSecondaryT: {
+    color: '#E9FEFF',
+    fontWeight: '800',
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+  },
+  halfBtn: {
+    flex: 1,
+  },
   disabled: { opacity: 0.5 },
-
   // chips
   chip: {
     paddingHorizontal: 10,

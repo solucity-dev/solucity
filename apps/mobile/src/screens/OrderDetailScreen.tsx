@@ -783,6 +783,12 @@ export default function OrderDetailScreen() {
     destructive?: boolean;
     onConfirm: () => void;
   }) => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const ok = window.confirm(`${title}\n\n${message}`);
+      if (ok) onConfirm();
+      return;
+    }
+
     Alert.alert(title, message, [
       { text: 'No', style: 'cancel' },
       {

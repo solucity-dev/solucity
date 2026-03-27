@@ -1,6 +1,7 @@
 //apps/backend/src/services/notificationService.ts
 import { Prisma } from '@prisma/client';
 
+import { maybeSendNotificationEmail } from './notificationEmailService';
 import { sendExpoPush } from './pushExpo';
 import { prisma } from '../lib/prisma';
 
@@ -75,6 +76,17 @@ export async function createNotification(params: {
       data: data ?? undefined,
     },
   });
+
+  try {
+    await maybeSendNotificationEmail(notification);
+  } catch (e) {
+    console.error('[notification-email] failed', {
+      notificationId: notification.id,
+      type: notification.type,
+      userId: notification.userId,
+      error: e,
+    });
+  }
 
   return notification;
 }

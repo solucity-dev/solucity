@@ -3,7 +3,7 @@
 module.exports = {
   name: 'Solucity',
   slug: 'solucity',
-  version: '1.1.26',
+  version: '1.1.27',
   orientation: 'portrait',
   scheme: 'solucity',
 
@@ -31,7 +31,7 @@ module.exports = {
 
   android: {
     package: 'com.solucity.app',
-    versionCode: 52,
+    versionCode: 53,
     blockedPermissions: ['android.permission.RECORD_AUDIO'],
     googleServicesFile: './google-services.json',
     adaptiveIcon: {
@@ -72,6 +72,14 @@ module.exports = {
       {
         photosPermission: 'Necesitamos acceder a tus fotos para subir tu DNI y selfie.',
         cameraPermission: 'Necesitamos la cámara para tomar fotos del DNI y una selfie.',
+      },
+    ],
+    [
+      'expo-camera',
+      {
+        cameraPermission: 'Necesitamos la cámara para tomar tu selfie de verificación.',
+        microphonePermission: 'Necesitamos acceso al micrófono para usar la cámara.',
+        recordAudioAndroid: false,
       },
     ],
     'expo-notifications',

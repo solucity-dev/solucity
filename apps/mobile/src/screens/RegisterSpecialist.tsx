@@ -1,5 +1,6 @@
 // apps/mobile/src/screens/RegisterSpecialist.tsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -36,6 +37,9 @@ const REGISTER_PENDING_FIELD_KEY = 'register_specialist_pending_field_v1';
 
 export default function RegisterSpecialist() {
   const insets = useSafeAreaInsets();
+
+  const navigation = useNavigation<any>();
+  const route = useRoute<any>();
 
   const { setMode, login } = useAuth();
 
@@ -272,6 +276,25 @@ export default function RegisterSpecialist() {
   );
 
   const step2Complete = !!dniFront && !!dniBack && !!selfie;
+
+  useEffect(() => {
+    const selfieUri = route.params?.selfieUri;
+    const selfieCapturedAt = route.params?.selfieCapturedAt;
+
+    if (!selfieUri) return;
+
+    console.log('[register-specialist] selfie recibida desde SelfieCapture', {
+      selfieUri,
+      selfieCapturedAt,
+    });
+
+    setSelfie(selfieUri);
+
+    navigation.setParams({
+      selfieUri: undefined,
+      selfieCapturedAt: undefined,
+    });
+  }, [route.params?.selfieUri, route.params?.selfieCapturedAt, navigation]);
 
   useEffect(() => {
     saveDraft({
@@ -953,11 +976,7 @@ export default function RegisterSpecialist() {
               label="Selfie"
               mode="selfie"
               uri={selfie}
-              onPickCamera={() =>
-                pickFrom('camera', setSelfie, 'selfie', {
-                  cameraType: ImagePicker.CameraType.front,
-                })
-              }
+              onPickCamera={() => navigation.navigate('SelfieCapture')}
               onPickGallery={() => pickFrom('gallery', setSelfie, 'selfie')}
               onClear={() => setSelfie(null)}
             />

@@ -20,6 +20,7 @@ import Onboarding from '../screens/Onboarding';
 import RegisterClient from '../screens/RegisterClient';
 import RegisterSpecialist from '../screens/RegisterSpecialist';
 import ResetPassword from '../screens/ResetPassword';
+import SelfieCaptureScreen from '../screens/SelfieCaptureScreen';
 import SpecialistWizard from '../screens/SpecialistWizard';
 import Splash from '../screens/Splash';
 import SubscriptionScreen from '../screens/SubscriptionScreen';
@@ -189,6 +190,7 @@ export default function RootNavigator() {
 
       <Stack.Screen name="RegisterClient" component={RegisterClient} />
       <Stack.Screen name="RegisterSpecialist" component={RegisterSpecialist} />
+      <Stack.Screen name="SelfieCapture" component={SelfieCaptureScreen} />
 
       <Stack.Screen
         name="SpecialistWizard"

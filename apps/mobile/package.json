@@ -16,13 +16,13 @@
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
-    "@react-navigation/bottom-tabs": "^7.5.0",
-    "@react-navigation/native": "^7.1.18",
-    "@react-navigation/native-stack": "^7.3.28",
-    "@tanstack/react-query": "^5.90.7",
+    "@react-navigation/bottom-tabs": "^7.15.9",
+    "@react-navigation/native": "^7.2.2",
+    "@react-navigation/native-stack": "^7.14.10",
+    "@tanstack/react-query": "^5.95.2",
     "@types/mime": "^3.0.4",
-    "axios": "^1.13.4",
-    "dayjs": "^1.11.19",
+    "axios": "^1.14.0",
+    "dayjs": "^1.11.20",
     "expo": "54.0.33",
     "expo-camera": "~17.0.10",
     "expo-dev-client": "~6.0.20",
@@ -41,15 +41,15 @@
     "mime": "^4.1.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "react-native": "0.81.5",
+    "react-native": "0.84.1",
     "react-native-keyboard-aware-scroll-view": "^0.9.5",
-    "react-native-safe-area-context": "5.6.1",
-    "react-native-screens": "4.16.0",
+    "react-native-safe-area-context": "5.7.0",
+    "react-native-screens": "4.24.0",
     "react-native-web": "^0.21.2"
   },
   "devDependencies": {
     "@types/react": "19.1.10",
-    "babel-plugin-module-resolver": "^5.0.2",
+    "babel-plugin-module-resolver": "^5.0.3",
     "typescript": "~5.9.2"
   }
 }

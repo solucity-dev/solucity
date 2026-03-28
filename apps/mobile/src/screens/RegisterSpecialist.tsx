@@ -1,4 +1,5 @@
 // apps/mobile/src/screens/RegisterSpecialist.tsx
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -6,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
+  AppState,
   Easing,
   Image,
   Keyboard,
@@ -29,6 +31,9 @@ type Category = { id: string; name: string; slug: string };
 type CategoryGroup = { id: string; name: string; slug: string; categories: Category[] };
 type CategoriesRes = { ok: true; groups: CategoryGroup[] };
 
+const REGISTER_DRAFT_KEY = 'register_specialist_draft_v1';
+const REGISTER_PENDING_FIELD_KEY = 'register_specialist_pending_field_v1';
+
 export default function RegisterSpecialist() {
   const insets = useSafeAreaInsets();
 
@@ -36,8 +41,63 @@ export default function RegisterSpecialist() {
 
   const [step, setStep] = useState<Step>(1);
 
+  const saveDraft = async (patch: Record<string, any> = {}) => {
+    try {
+      const currentRaw = await AsyncStorage.getItem(REGISTER_DRAFT_KEY);
+      const current = currentRaw ? JSON.parse(currentRaw) : {};
+      const next = { ...current, ...patch };
+      await AsyncStorage.setItem(REGISTER_DRAFT_KEY, JSON.stringify(next));
+    } catch (e) {
+      console.log('[register-specialist][draft][save-error]', e);
+    }
+  };
+
+  const clearDraft = async () => {
+    try {
+      await AsyncStorage.multiRemove([REGISTER_DRAFT_KEY, REGISTER_PENDING_FIELD_KEY]);
+    } catch (e) {
+      console.log('[register-specialist][draft][clear-error]', e);
+    }
+  };
+
   // ===== UI: progreso animado =====
   const progressAnim = useRef(new Animated.Value(1 / 3)).current;
+
+  useEffect(() => {
+    console.log('[register-specialist] mount');
+
+    const restoreDraft = async () => {
+      try {
+        const raw = await AsyncStorage.getItem(REGISTER_DRAFT_KEY);
+        if (!raw) {
+          console.log('[register-specialist][draft] no hay draft guardado');
+          return;
+        }
+
+        const draft = JSON.parse(raw);
+        console.log('[register-specialist][draft] restaurando', draft);
+
+        if (draft.email) setEmail(draft.email);
+        if (typeof draft.otpSent === 'boolean') setOtpSent(draft.otpSent);
+        if (draft.otp) setOtp(draft.otp);
+        if (draft.name) setName(draft.name);
+        if (draft.surname) setSurname(draft.surname);
+        if (draft.phone) setPhone(draft.phone);
+        if (draft.password) setPassword(draft.password);
+        if (draft.password2) setPassword2(draft.password2);
+        if (draft.pendingToken) setPendingToken(draft.pendingToken);
+        if (draft.step) setStep(draft.step);
+        if (draft.dniFront) setDniFront(draft.dniFront);
+        if (draft.dniBack) setDniBack(draft.dniBack);
+        if (draft.selfie) setSelfie(draft.selfie);
+        if (draft.kycUrls) setKycUrls(draft.kycUrls);
+      } catch (e) {
+        console.log('[register-specialist][draft][restore-error]', e);
+      }
+    };
+
+    restoreDraft();
+  }, []);
 
   useEffect(() => {
     const target = step / 3;
@@ -48,6 +108,14 @@ export default function RegisterSpecialist() {
       useNativeDriver: false,
     }).start();
   }, [step, progressAnim]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      console.log('[register-specialist][AppState]', state);
+    });
+
+    return () => sub.remove();
+  }, []);
 
   // ===== PASO 1: identidad + OTP ===========================================
   const [email, setEmail] = useState('');
@@ -153,6 +221,7 @@ export default function RegisterSpecialist() {
       const tok = r.data?.token as string | undefined;
       if (!tok) return Alert.alert('Error', 'No se recibió token.');
       setPendingToken(tok);
+      await saveDraft({ pendingToken: tok, step: 2 });
 
       setStep(2);
     } catch (e: any) {
@@ -190,9 +259,7 @@ export default function RegisterSpecialist() {
   const [dniBack, setDniBack] = useState<string | null>(null);
   const [selfie, setSelfie] = useState<string | null>(null);
   const [loadingUpload, setLoadingUpload] = useState(false);
-  const [pendingKycField, setPendingKycField] = useState<'dniFront' | 'dniBack' | 'selfie' | null>(
-    null,
-  );
+  const [, setPendingKycField] = useState<'dniFront' | 'dniBack' | 'selfie' | null>(null);
 
   // ✅ checks paso 2
   const step2Checks = useMemo(
@@ -205,6 +272,38 @@ export default function RegisterSpecialist() {
   );
 
   const step2Complete = !!dniFront && !!dniBack && !!selfie;
+
+  useEffect(() => {
+    saveDraft({
+      step,
+      email,
+      otpSent,
+      otp,
+      name,
+      surname,
+      phone,
+      password,
+      password2,
+      pendingToken,
+      dniFront,
+      dniBack,
+      selfie,
+    });
+  }, [
+    step,
+    email,
+    otpSent,
+    otp,
+    name,
+    surname,
+    phone,
+    password,
+    password2,
+    pendingToken,
+    dniFront,
+    dniBack,
+    selfie,
+  ]);
 
   // ✅ hint suave paso 2 (exactamente qué falta)
   const [step2Hint, setStep2Hint] = useState<string | null>(null);
@@ -219,25 +318,42 @@ export default function RegisterSpecialist() {
     const restorePendingPickerResult = async () => {
       try {
         const pending = await ImagePicker.getPendingResultAsync();
+        const storedField = await AsyncStorage.getItem(REGISTER_PENDING_FIELD_KEY);
 
-        if (!pending) return;
+        if (!pending) {
+          console.log('[ImagePicker] no pending result');
+          return;
+        }
 
         if ('code' in pending) {
           console.log('[ImagePicker] pending result error:', pending);
           return;
         }
 
-        if (pending.canceled) return;
+        if (pending.canceled) {
+          console.log('[ImagePicker] pending result canceled');
+          await AsyncStorage.removeItem(REGISTER_PENDING_FIELD_KEY);
+          setPendingKycField(null);
+          return;
+        }
 
         const uri = pending.assets?.[0]?.uri;
-        if (!uri) return;
+        if (!uri) {
+          console.log('[ImagePicker] pending result sin uri');
+          return;
+        }
 
-        console.log('[ImagePicker] pending result restored:', uri, 'field:', pendingKycField);
+        console.log('[ImagePicker] pending result restored:', {
+          uri,
+          storedField,
+        });
 
-        if (pendingKycField === 'dniFront') setDniFront(uri);
-        else if (pendingKycField === 'dniBack') setDniBack(uri);
-        else if (pendingKycField === 'selfie') setSelfie(uri);
+        if (storedField === 'dniFront') setDniFront(uri);
+        else if (storedField === 'dniBack') setDniBack(uri);
+        else if (storedField === 'selfie') setSelfie(uri);
+        else console.log('[ImagePicker] campo pendiente desconocido:', storedField);
 
+        await AsyncStorage.removeItem(REGISTER_PENDING_FIELD_KEY);
         setPendingKycField(null);
       } catch (e) {
         console.log('[ImagePicker] getPendingResultAsync error', e);
@@ -245,7 +361,7 @@ export default function RegisterSpecialist() {
     };
 
     restorePendingPickerResult();
-  }, [pendingKycField]);
+  }, []);
 
   const pickFrom = async (
     from: 'camera' | 'gallery',
@@ -254,20 +370,27 @@ export default function RegisterSpecialist() {
     opts?: { cameraType?: ImagePicker.CameraType },
   ) => {
     try {
+      console.log('[register-specialist][pickFrom] inicio', { from, field });
+
       if (Platform.OS !== 'web') {
         if (from === 'camera') {
           const perm = await ImagePicker.requestCameraPermissionsAsync();
+          console.log('[register-specialist][pickFrom] camera perm', perm);
+
           if (!perm.granted) {
             return Alert.alert('Permiso requerido', 'Necesitamos acceso a la cámara.');
           }
         } else {
           const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          console.log('[register-specialist][pickFrom] gallery perm', perm);
+
           if (!perm.granted) {
             return Alert.alert('Permiso requerido', 'Necesitamos acceso a tus fotos.');
           }
         }
       }
 
+      await AsyncStorage.setItem(REGISTER_PENDING_FIELD_KEY, field);
       setPendingKycField(field);
 
       const fn =
@@ -281,13 +404,28 @@ export default function RegisterSpecialist() {
         exif: false,
       });
 
-      if (!res.canceled && res.assets?.[0]?.uri) {
-        setter(res.assets[0].uri);
+      console.log('[register-specialist][pickFrom] resultado', {
+        canceled: 'canceled' in res ? res.canceled : undefined,
+        hasAssets: 'assets' in res ? !!res.assets?.length : false,
+        field,
+      });
+
+      if (!('canceled' in res)) {
+        console.log('[register-specialist][pickFrom] respuesta inesperada', res);
+        return;
       }
 
+      if (!res.canceled && res.assets?.[0]?.uri) {
+        const pickedUri = res.assets[0].uri;
+        console.log('[register-specialist][pickFrom] uri seleccionada', pickedUri);
+        setter(pickedUri);
+      }
+
+      await AsyncStorage.removeItem(REGISTER_PENDING_FIELD_KEY);
       setPendingKycField(null);
     } catch (e) {
-      console.log('[pickFrom]', e);
+      console.log('[register-specialist][pickFrom][error]', e);
+      await AsyncStorage.removeItem(REGISTER_PENDING_FIELD_KEY);
       setPendingKycField(null);
       Alert.alert('Error', 'No se pudo abrir la cámara o la galería.');
     }
@@ -341,7 +479,9 @@ export default function RegisterSpecialist() {
       setLoadingUpload(true);
 
       const [f, b, s] = await Promise.all([upload(dniFront), upload(dniBack), upload(selfie)]);
-      setKycUrls({ dniFrontUrl: f, dniBackUrl: b, selfieUrl: s });
+      const newKycUrls = { dniFrontUrl: f, dniBackUrl: b, selfieUrl: s };
+      setKycUrls(newKycUrls);
+      await saveDraft({ step: 3, kycUrls: newKycUrls });
 
       // opcional pro: si existe este endpoint, deja el KYC en PENDING ya mismo.
       // (si no existe, ignoramos silenciosamente)
@@ -576,6 +716,8 @@ export default function RegisterSpecialist() {
       try {
         await api.post('/specialists/kyc/submit', kycUrls, { headers: { ...tempAuthHeaders() } });
       } catch {}
+
+      await clearDraft();
     } catch (e: any) {
       console.log('[specialists/register]', e?.response?.data || e.message);
       Alert.alert('Error', e?.response?.data?.error ?? 'No se pudo finalizar el registro.');
@@ -584,17 +726,18 @@ export default function RegisterSpecialist() {
     }
   };
 
-  const goToPreviousStep = () => {
+  const goToPreviousStep = async () => {
     if (step === 2) {
+      await saveDraft({ step: 1 });
       setStep(1);
       return;
     }
 
     if (step === 3) {
+      await saveDraft({ step: 2 });
       setStep(2);
     }
   };
-
   const checksForStep = step === 1 ? step1Checks : step === 2 ? step2Checks : step3Checks;
 
   // ===== UI ================================================================

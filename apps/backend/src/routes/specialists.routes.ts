@@ -251,8 +251,9 @@ async function syncSearchIndexForUser(userId: string) {
       ratingAvg: true,
       ratingCount: true,
       badge: true,
+      serviceModes: true,
       user: { select: { status: true } },
-      backgroundCheck: { select: { status: true } }, // ✅ NUEVO
+      backgroundCheck: { select: { status: true } },
       specialties: {
         include: {
           category: { select: { slug: true, group: { select: { slug: true } } } },
@@ -273,7 +274,9 @@ async function syncSearchIndexForUser(userId: string) {
   // availableNow solo true si está VERIFIED
   const userOk = spec.user?.status !== 'BLOCKED';
 
-  const bgOk = spec.backgroundCheck?.status === 'APPROVED';
+  const requiresBackgroundCheck = requiresBackgroundCheckByServiceModes(spec.serviceModes);
+  const bgApproved = spec.backgroundCheck?.status === 'APPROVED';
+  const bgOk = requiresBackgroundCheck ? bgApproved : true;
 
   const safeAvailableNow =
     userOk && spec.kycStatus === 'VERIFIED' && bgOk ? (spec.availableNow ?? false) : false;
@@ -318,6 +321,49 @@ async function hasApprovedBackgroundCheck(specialistId: string) {
   return bg?.status === 'APPROVED';
 }
 
+function normalizeStoredServiceModes(input: any): ('HOME' | 'OFFICE' | 'ONLINE')[] {
+  const allowed = new Set(['HOME', 'OFFICE', 'ONLINE']);
+
+  if (!Array.isArray(input)) return [];
+
+  const out = Array.from(
+    new Set(
+      input
+        .map((x) =>
+          String(x ?? '')
+            .trim()
+            .toUpperCase(),
+        )
+        .filter((x) => allowed.has(x)),
+    ),
+  ).sort();
+
+  return out as ('HOME' | 'OFFICE' | 'ONLINE')[];
+}
+
+function hasExplicitServiceModes(input: any): boolean {
+  return normalizeStoredServiceModes(input).length > 0;
+}
+
+function getEffectiveServiceModes(input: any): ('HOME' | 'OFFICE' | 'ONLINE')[] {
+  const normalized = normalizeStoredServiceModes(input);
+
+  // ✅ legacy-safe: si no hay modalidades explícitas, tratamos como HOME
+  return normalized.length > 0 ? normalized : ['HOME'];
+}
+
+function requiresBackgroundCheckByServiceModes(input: any): boolean {
+  const normalized = normalizeStoredServiceModes(input);
+
+  // ✅ legacy-safe:
+  // sin modalidades explícitas => seguimos exigiendo antecedentes
+  if (normalized.length === 0) return true;
+
+  // ✅ nueva regla:
+  // solo requiere antecedentes si ofrece HOME
+  return normalized.includes('HOME');
+}
+
 async function getMaxAllowedRadiusKmForUser(userId: string): Promise<number> {
   const spec = await prisma.specialistProfile.findUnique({
     where: { userId },
@@ -350,12 +396,23 @@ async function computeSafeAvailability(opts: {
   const userOk = user?.status !== 'BLOCKED';
   const kycOk = opts.kycStatus === 'VERIFIED';
 
+  const spec = await prisma.specialistProfile.findUnique({
+    where: { id: opts.specialistId },
+    select: { serviceModes: true },
+  });
+
+  const serviceModesConfigured = hasExplicitServiceModes(spec?.serviceModes);
+  const effectiveServiceModes = getEffectiveServiceModes(spec?.serviceModes);
+  const requiresBackgroundCheck = requiresBackgroundCheckByServiceModes(spec?.serviceModes);
+
   const bg = await prisma.specialistBackgroundCheck.findUnique({
     where: { specialistId: opts.specialistId },
     select: { status: true },
   });
 
-  const bgOk = bg?.status === 'APPROVED';
+  const bgApproved = bg?.status === 'APPROVED';
+  const bgOk = requiresBackgroundCheck ? bgApproved : true;
+
   const gate = await canSpecialistBeVisible(opts.userId);
   const subOk = gate.ok; // ACTIVE o TRIALING válido
 
@@ -366,6 +423,10 @@ async function computeSafeAvailability(opts: {
     userOk,
     kycOk,
     bgOk,
+    bgApproved,
+    requiresBackgroundCheck,
+    serviceModesConfigured,
+    serviceModes: effectiveServiceModes,
     subOk,
     toggleOk,
     scheduleOk,
@@ -638,8 +699,11 @@ router.get('/search', async (req, res) => {
 
         // ✅ 2) disponibilidad real
         const kycOk = prof?.kycStatus === 'VERIFIED';
-        const bgOk = prof?.backgroundCheck?.status === 'APPROVED';
-        const toggleAvailable = kycOk && bgOk ? !!prof?.availableNow : false;
+        const requiresBackgroundCheck = requiresBackgroundCheckByServiceModes(prof?.serviceModes);
+        const bgApproved = prof?.backgroundCheck?.status === 'APPROVED';
+        const bgOk = requiresBackgroundCheck ? bgApproved : true;
+
+        const toggleAvailable = userOk && kycOk && bgOk ? !!prof?.availableNow : false;
         const scheduleOk = isWithinAvailability(prof?.availability);
 
         const gate = await gateFor(prof?.userId ?? '');
@@ -706,6 +770,9 @@ router.get('/search', async (req, res) => {
             Array.isArray((prof as any)?.serviceModes) && (prof as any).serviceModes.length
               ? (prof as any).serviceModes
               : ['HOME'],
+          serviceModesConfigured: hasExplicitServiceModes(prof?.serviceModes),
+          requiresBackgroundCheck,
+          backgroundCheckApproved: !!bgApproved,
           officeAddressId: (prof as any)?.officeAddressId ?? null,
           visible,
           availableNow, // pill (incluye horario)
@@ -1055,9 +1122,16 @@ router.post('/register', auth, async (req: AuthReq, res: Response) => {
   try {
     const schema = z.object({
       specialties: z.array(z.string().min(1)).min(1),
+
+      // ✅ NUEVO: obligatorio en registro, sin default
+      serviceModes: z.array(z.enum(['HOME', 'OFFICE', 'ONLINE'])).min(1),
+
+      // ✅ NUEVO: requerido solo si viene OFFICE
+      officeAddress: OfficeAddressSchema.nullable().optional(),
+
       visitPrice: z.coerce.number().int().nonnegative().optional(),
       radiusKm: z.coerce.number().int().min(1).max(200).optional(),
-      pricingLabel: z.string().max(40).optional().nullable(), // ✅ NUEVO (opt)
+      pricingLabel: z.string().max(40).optional().nullable(),
       availability: z.any().optional(),
       bio: z.string().optional().default(''),
       kyc: z.object({
@@ -1078,6 +1152,123 @@ router.post('/register', auth, async (req: AuthReq, res: Response) => {
       selfieUrl: toAbsoluteUrl(data.kyc.selfieUrl),
     };
 
+    // ✅ NUEVO: perfil actual para reutilizar officeAddress si ya existe
+    const existingProfile = await prisma.specialistProfile.findUnique({
+      where: { userId },
+      select: { officeAddressId: true },
+    });
+
+    // ✅ NUEVO: resolver modalidades + dirección de oficina/local
+    let nextOfficeAddressId: string | null = null;
+
+    const includesOffice = data.serviceModes.includes('OFFICE');
+
+    if (includesOffice) {
+      if (!data.officeAddress) {
+        return res.status(400).json({ ok: false, error: 'office_address_required' });
+      }
+
+      const officeAddress = data.officeAddress;
+
+      let formatted = String(officeAddress.formatted ?? '').trim();
+      if (!formatted) {
+        return res.status(400).json({ ok: false, error: 'office_address_required' });
+      }
+
+      let lat = officeAddress.lat;
+      let lng = officeAddress.lng;
+      let inferredLocality: string | null = null;
+
+      // Si no vienen coords, geocodificamos con fallback
+      if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) {
+        try {
+          const result = await geocodeOfficeAddressWithFallback({
+            formatted,
+            locality: officeAddress.locality ?? null,
+          });
+
+          inferredLocality = result.inferredLocality;
+          formatted = result.usedFormatted;
+
+          dbg(debugSpecialists, '[POST /specialists/register] geocode input', {
+            originalFormatted: result.originalFormatted,
+            normalizedFormatted: result.usedFormatted,
+            locality: officeAddress.locality ?? null,
+            inferredLocality,
+          });
+
+          dbg(debugSpecialists, '[POST /specialists/register] geocode result', {
+            normalizedFormatted: result.usedFormatted,
+            geo: result.geo,
+          });
+
+          lat = result.geo?.lat;
+          lng = result.geo?.lng;
+        } catch (e) {
+          dbg(debugSpecialists, '[POST /specialists/register] geocodeAddress failed', {
+            originalFormatted: officeAddress.formatted,
+            normalizedFormatted: formatted,
+            locality: officeAddress.locality ?? null,
+            error: e instanceof Error ? { message: e.message, stack: e.stack } : e,
+          });
+
+          return res.status(400).json({
+            ok: false,
+            error: 'office_geocode_failed',
+            message:
+              'No pudimos ubicar esa dirección. Revisá que la calle esté bien escrita y agregá altura, barrio o una referencia.',
+          });
+        }
+
+        if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) {
+          return res.status(400).json({
+            ok: false,
+            error: 'office_geocode_failed',
+            message:
+              'No pudimos ubicar esa dirección. Revisá que la calle esté bien escrita y agregá altura, barrio o una referencia.',
+          });
+        }
+      }
+
+      // Córdoba-only, igual que PATCH /me
+      const inCordoba = lat >= -35.5 && lat <= -29.0 && lng >= -66.8 && lng <= -62.0;
+      if (!inCordoba) {
+        return res.status(400).json({
+          ok: false,
+          error: 'office_coords_outside_cordoba',
+          message:
+            'La dirección encontrada quedó fuera de Córdoba. Revisá la calle y la localidad ingresadas.',
+        });
+      }
+
+      if (existingProfile?.officeAddressId) {
+        const updatedAddress = await prisma.address.update({
+          where: { id: existingProfile.officeAddressId },
+          data: {
+            placeId: officeAddress.placeId ?? null,
+            formatted,
+            lat,
+            lng,
+          },
+          select: { id: true },
+        });
+
+        nextOfficeAddressId = updatedAddress.id;
+      } else {
+        const createdAddress = await prisma.address.create({
+          data: {
+            placeId: officeAddress.placeId ?? null,
+            formatted,
+            lat,
+            lng,
+          },
+          select: { id: true },
+        });
+
+        nextOfficeAddressId = createdAddress.id;
+      }
+    }
+
     // 1) upsert profile
     const specialist = await prisma.specialistProfile.upsert({
       where: { userId },
@@ -1089,7 +1280,8 @@ router.post('/register', auth, async (req: AuthReq, res: Response) => {
         bio: data.bio,
         kycStatus: 'PENDING',
         availableNow: false,
-        serviceModes: ['HOME'],
+        serviceModes: data.serviceModes as any,
+        officeAddressId: nextOfficeAddressId,
       },
       create: {
         userId,
@@ -1100,11 +1292,11 @@ router.post('/register', auth, async (req: AuthReq, res: Response) => {
         bio: data.bio,
         kycStatus: 'PENDING',
         availableNow: false,
-        serviceModes: ['HOME'],
+        serviceModes: data.serviceModes as any,
+        officeAddressId: nextOfficeAddressId,
       },
       select: { id: true },
     });
-
     console.log(`[spec/register] t1 after_profile ms=${Date.now() - t0}`);
 
     // 2) specialties
@@ -1517,6 +1709,9 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
           visitPrice: 0,
           pricingLabel: null,
           serviceModes: ['HOME'],
+          serviceModesConfigured: false,
+          requiresBackgroundCheck: true,
+          backgroundCheckApproved: false,
           officeAddressId: null,
           availability: { days: [1, 2, 3, 4, 5], start: '09:00', end: '18:00' },
           ratingAvg: null,
@@ -1559,6 +1754,10 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
       availability: avail,
     });
 
+    const requiresBackgroundCheck = safe.requiresBackgroundCheck;
+    const serviceModesConfigured = safe.serviceModesConfigured;
+    const backgroundCheckApproved = safe.bgApproved;
+
     // 👉 visible real (para clientes)
     const available = safe.visibleNow;
 
@@ -1588,6 +1787,9 @@ router.get('/me', auth, async (req: AuthReq, res: Response) => {
           Array.isArray(profile.serviceModes) && profile.serviceModes.length
             ? (profile.serviceModes as any)
             : ['HOME'],
+        serviceModesConfigured,
+        requiresBackgroundCheck,
+        backgroundCheckApproved,
         officeAddressId: profile.officeAddressId ?? null,
         officeAddress: profile.officeAddress
           ? {
@@ -1701,9 +1903,11 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
       }
 
       const kyc = current?.kycStatus ?? 'UNVERIFIED';
-      if (kyc !== 'VERIFIED') return res.status(403).json({ ok: false, error: 'kyc_required' });
+      if (kyc !== 'VERIFIED') {
+        return res.status(403).json({ ok: false, error: 'kyc_required' });
+      }
 
-      // ✅ NUEVO: si el usuario está bloqueado, no puede ponerse disponible
+      // ✅ usuario bloqueado
       const u = await prisma.user.findUnique({
         where: { id: userId },
         select: { status: true },
@@ -1712,15 +1916,30 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
       if (u && (u as any).status === 'BLOCKED') {
         return res.status(403).json({ ok: false, error: 'user_blocked' });
       }
-      // ✅ NUEVO: antecedente penal aprobado
+
+      // ✅ perfil y modalidades efectivas
       const spec = await prisma.specialistProfile.findUnique({
         where: { userId },
-        select: { id: true },
+        select: { id: true, serviceModes: true },
       });
+
       if (!spec) return res.status(400).json({ ok: false, error: 'no_profile' });
 
-      const bgOk = await hasApprovedBackgroundCheck(spec.id);
-      if (!bgOk) return res.status(403).json({ ok: false, error: 'background_check_required' });
+      const nextServiceModes =
+        data.serviceModes !== undefined ? data.serviceModes : (spec.serviceModes as any);
+
+      const requiresBackgroundCheck = requiresBackgroundCheckByServiceModes(nextServiceModes);
+
+      if (requiresBackgroundCheck) {
+        const bgOk = await hasApprovedBackgroundCheck(spec.id);
+
+        if (!bgOk) {
+          return res.status(403).json({
+            ok: false,
+            error: 'background_check_required',
+          });
+        }
+      }
     }
 
     let nextAvail = currentAvail;
@@ -1921,10 +2140,7 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
         ...(data.serviceModes !== undefined
           ? {
               serviceModes: {
-                set:
-                  Array.isArray(data.serviceModes) && data.serviceModes.length
-                    ? (data.serviceModes as any)
-                    : (['HOME'] as any),
+                set: data.serviceModes as any,
               },
             }
           : {}),
@@ -2457,7 +2673,9 @@ router.get('/:id', async (req, res) => {
     if (!spec) return res.status(404).json({ ok: false, error: 'Not found' });
 
     const userOk = spec.user?.status !== 'BLOCKED';
-    const bgOk = spec.backgroundCheck?.status === 'APPROVED';
+    const requiresBackgroundCheck = requiresBackgroundCheckByServiceModes(spec.serviceModes);
+    const bgApproved = spec.backgroundCheck?.status === 'APPROVED';
+    const bgOk = requiresBackgroundCheck ? bgApproved : true;
 
     const safeAvailableNow =
       userOk && spec.kycStatus === 'VERIFIED' && bgOk ? !!spec.availableNow : false;
@@ -2691,6 +2909,9 @@ router.get('/:id', async (req, res) => {
         Array.isArray((spec as any).serviceModes) && (spec as any).serviceModes.length
           ? (spec as any).serviceModes
           : ['HOME'],
+      serviceModesConfigured: hasExplicitServiceModes(spec.serviceModes),
+      requiresBackgroundCheck,
+      backgroundCheckApproved: !!bgApproved,
       officeAddressId: (spec as any).officeAddressId ?? null,
       specialties: spec.specialties.map((s) => ({
         id: s.category.id,

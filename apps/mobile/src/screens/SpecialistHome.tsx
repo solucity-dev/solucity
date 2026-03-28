@@ -313,7 +313,7 @@ function normalizeModes(input: any): ('HOME' | 'OFFICE' | 'ONLINE')[] {
     ),
   ).sort();
 
-  return (out.length ? out : ['HOME']) as any;
+  return out as ('HOME' | 'OFFICE' | 'ONLINE')[];
 }
 
 // ✅ Extrae solo "Calle y número" aunque venga "Calle 123, Ciudad..."
@@ -518,6 +518,9 @@ export default function SpecialistHome() {
   const certsLoadedOnceRef = useRef(false);
   const [certsLoading, setCertsLoading] = useState(false);
   const [openServiceModes, setOpenServiceModes] = useState(false);
+
+  const [missingModesModalOpen, setMissingModesModalOpen] = useState(false);
+  const [homeBgRequiredModalOpen, setHomeBgRequiredModalOpen] = useState(false);
 
   // portfolio / trabajos realizados
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
@@ -1141,6 +1144,13 @@ export default function SpecialistHome() {
   const kycStatus = profile?.kycStatus ?? 'UNVERIFIED';
   const bgStatus = profile?.backgroundCheck?.status ?? null;
 
+  const requiresBackgroundCheck = !!(profile as any)?.requiresBackgroundCheck;
+  const serviceModesConfigured = !!(profile as any)?.serviceModesConfigured;
+  const backgroundCheckApproved =
+    typeof (profile as any)?.backgroundCheckApproved === 'boolean'
+      ? !!(profile as any)?.backgroundCheckApproved
+      : bgStatus === 'APPROVED';
+
   // ✅ Suscripción OK: ACTIVE o TRIALING con días > 0
   const subscriptionOk = useMemo(() => {
     if (!subscription) return false;
@@ -1148,7 +1158,10 @@ export default function SpecialistHome() {
   }, [subscription]);
 
   const canToggleAvailability =
-    kycStatus === 'VERIFIED' && bgStatus === 'APPROVED' && subscriptionOk;
+    subscriptionOk &&
+    serviceModesConfigured &&
+    kycStatus === 'VERIFIED' &&
+    (!requiresBackgroundCheck || backgroundCheckApproved);
 
   // 1) "visible" = aparece en búsquedas (SIN horario)
   const visibleEffective = canToggleAvailability && availableNow;
@@ -1412,7 +1425,7 @@ export default function SpecialistHome() {
   }
 
   async function toggleAvailable(v: boolean) {
-    // 1) Si el problema es suscripción, lo mandamos directo a la pantalla de suscripción
+    // 1) Suscripción
     if (!subscriptionOk) {
       Alert.alert(
         'Suscripción requerida',
@@ -1425,11 +1438,29 @@ export default function SpecialistHome() {
       return;
     }
 
-    // 2) Si el problema es KYC / antecedentes, mostramos el mensaje correspondiente
-    if (!(kycStatus === 'VERIFIED' && bgStatus === 'APPROVED')) {
+    // 2) Modalidades obligatorias
+    if (!serviceModesConfigured) {
+      Alert.alert(
+        'Configurá tus modalidades',
+        'Primero tenés que indicar cómo ofrecés tu servicio: a domicilio, en local/oficina u online.',
+      );
+      return;
+    }
+
+    // 3) KYC
+    if (kycStatus !== 'VERIFIED') {
       Alert.alert(
         'Verificación requerida',
-        'Para activar tu disponibilidad necesitás verificacion de identidad y el certificado de buena conducta aprobado.',
+        'Para activar tu disponibilidad necesitás tener la verificación de identidad aprobada.',
+      );
+      return;
+    }
+
+    // 4) Antecedentes solo si corresponden por modalidad
+    if (requiresBackgroundCheck && !backgroundCheckApproved) {
+      Alert.alert(
+        'Antecedentes requeridos',
+        'Para esta modalidad necesitás tener el certificado de buena conducta aprobado.',
       );
       return;
     }
@@ -1437,11 +1468,10 @@ export default function SpecialistHome() {
     try {
       setAvailableNow(v);
       await api.patch('/specialists/me', {
-        available: v, // legacy
-        availableNow: v, // nuevo
+        available: v,
+        availableNow: v,
       });
 
-      // ✅ asegura coherencia contra reglas server-side
       await reloadProfileAndSubscription({ silent: true });
     } catch (e: any) {
       const err = e?.response?.data?.error;
@@ -1449,7 +1479,25 @@ export default function SpecialistHome() {
       if (e?.response?.status === 403 && err === 'background_check_required') {
         Alert.alert(
           'Antecedentes requeridos',
-          'Para activar tu disponibilidad necesitás tener el antecedente penal aprobado.',
+          'Para esta modalidad necesitás tener el certificado de buena conducta aprobado.',
+        );
+        setAvailableNow(false);
+        return;
+      }
+
+      if (e?.response?.status === 403 && err === 'kyc_required') {
+        Alert.alert(
+          'Verificación requerida',
+          'Para activar tu disponibilidad necesitás tener la verificación de identidad aprobada.',
+        );
+        setAvailableNow(false);
+        return;
+      }
+
+      if (e?.response?.status === 403 && err === 'subscription_required') {
+        Alert.alert(
+          'Suscripción requerida',
+          'Necesitás una suscripción activa o una prueba gratuita vigente para activar tu disponibilidad.',
         );
         setAvailableNow(false);
         return;
@@ -1457,15 +1505,6 @@ export default function SpecialistHome() {
 
       if (e?.response?.status === 403 && err === 'user_blocked') {
         Alert.alert('Cuenta bloqueada', 'Tu cuenta está bloqueada. Contactá soporte.');
-        setAvailableNow(false);
-        return;
-      }
-
-      if (e?.response?.status === 403 || err === 'kyc_required') {
-        Alert.alert(
-          'Verificación requerida',
-          'Para activar tu disponibilidad necesitás verificacion de identidad y antecedentes aprobados.',
-        );
         setAvailableNow(false);
         return;
       }
@@ -1576,6 +1615,14 @@ export default function SpecialistHome() {
 
       const normalizedModes = normalizeModes(serviceModes);
 
+      if (normalizedModes.length === 0) {
+        Alert.alert(
+          'Falta un paso',
+          'Seleccioná al menos una modalidad de servicio para continuar.',
+        );
+        return;
+      }
+
       const payload: {
         serviceModes: ('HOME' | 'OFFICE' | 'ONLINE')[];
         officeAddress?: {
@@ -1667,13 +1714,14 @@ export default function SpecialistHome() {
 
   function toggleServiceMode(mode: 'HOME' | 'OFFICE' | 'ONLINE') {
     setServiceModes((prev) => {
-      const next = prev.includes(mode) ? prev.filter((m) => m !== mode) : [...prev, mode];
+      const alreadySelected = prev.includes(mode);
+      const next = alreadySelected ? prev.filter((m) => m !== mode) : [...prev, mode];
 
-      // ✅ nunca dejamos vacío
-      if (next.length === 0) return ['HOME'];
+      const isAddingHome = mode === 'HOME' && !alreadySelected;
 
-      // ✅ opcional: siempre mantener HOME (si querés obligarlo)
-      // if (!next.includes('HOME')) next.push('HOME');
+      if (isAddingHome && !backgroundCheckApproved) {
+        setHomeBgRequiredModalOpen(true);
+      }
 
       return next;
     });
@@ -1927,6 +1975,17 @@ export default function SpecialistHome() {
     const current = serviceModesSnapshot(serviceModes, officeAddress, officeLocality);
     return current !== serviceModesSnapRef.current;
   }, [serviceModes, officeAddress, officeLocality]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (!profile) return;
+
+    if (!serviceModesConfigured) {
+      setMissingModesModalOpen(true);
+    } else {
+      setMissingModesModalOpen(false);
+    }
+  }, [loading, profile, serviceModesConfigured]);
 
   if (loading) {
     return (
@@ -2198,8 +2257,34 @@ export default function SpecialistHome() {
               <Text style={[styles.muted, { marginTop: 6 }]}>
                 {!subscriptionOk
                   ? 'Tu disponibilidad requiere una suscripción activa o una prueba gratuita vigente. Tocá la tarjeta de Suscripción para revisarla.'
-                  : 'Tu disponibilidad se habilita cuando validemos tu identidad y el certificado de buena conducta esté aprobado.'}
+                  : !serviceModesConfigured
+                    ? 'Primero tenés que configurar cómo ofrecés tu servicio: a domicilio, local/oficina u online.'
+                    : kycStatus !== 'VERIFIED'
+                      ? 'Tu disponibilidad se habilita cuando validemos tu identidad.'
+                      : requiresBackgroundCheck && !backgroundCheckApproved
+                        ? 'Para esta modalidad necesitás tener el certificado de buena conducta aprobado.'
+                        : 'Completá los requisitos pendientes para habilitar tu disponibilidad.'}
               </Text>
+            ) : null}
+
+            {!serviceModesConfigured ? (
+              <Pressable
+                onPress={() => {
+                  setOpenServiceModes(true);
+                  setMissingModesModalOpen(false);
+                }}
+                style={[
+                  styles.btn,
+                  {
+                    backgroundColor: 'transparent',
+                    borderWidth: 1,
+                    borderColor: '#E9FEFF',
+                    marginTop: 10,
+                  },
+                ]}
+              >
+                <Text style={[styles.btnT, { color: '#E9FEFF' }]}>Configurar modalidades</Text>
+              </Pressable>
             ) : null}
 
             {!subscriptionOk ? (
@@ -2255,10 +2340,8 @@ export default function SpecialistHome() {
             <View style={{ marginTop: 10 }}>
               <Pressable
                 onPress={() => {
-                  // 1) Primero aseguramos que el stack Perfil tenga ProfileMain
                   (navigation as any).navigate('Perfil', { screen: 'ProfileMain' });
 
-                  // 2) Luego empujamos BackgroundCheck arriba (crea historial)
                   setTimeout(() => {
                     (navigation as any).navigate('Perfil', { screen: 'BackgroundCheck' });
                   }, 0);
@@ -2284,11 +2367,19 @@ export default function SpecialistHome() {
                         ? 'En revisión'
                         : bgStatus === 'REJECTED'
                           ? 'Rechazado'
-                          : 'No cargado'}
+                          : requiresBackgroundCheck
+                            ? 'No cargado'
+                            : 'Opcional para tu modalidad actual'}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="#E9FEFF" />
               </Pressable>
+
+              <Text style={[styles.muted, { marginTop: 8 }]}>
+                {requiresBackgroundCheck
+                  ? 'Este requisito es obligatorio si ofrecés servicio a domicilio.'
+                  : 'Solo se vuelve obligatorio si activás la modalidad a domicilio.'}
+              </Text>
 
               {bgStatus === 'REJECTED' && profile?.backgroundCheck?.rejectionReason ? (
                 <Text style={[styles.muted, { marginTop: 8 }]}>
@@ -2596,6 +2687,10 @@ export default function SpecialistHome() {
             onToggle={() => setOpenServiceModes((v) => !v)}
           >
             <View style={{ marginTop: 12, gap: 10 }}>
+              <Text style={styles.muted}>
+                Elegí cómo ofrecés tu servicio. Si activás “A domicilio”, vas a necesitar tener
+                aprobado el certificado de buena conducta para poder estar visible.
+              </Text>
               <Pressable
                 onPress={() => toggleServiceMode('HOME')}
                 style={[
@@ -2650,6 +2745,45 @@ export default function SpecialistHome() {
                 </Text>
               </Pressable>
             </View>
+
+            {serviceModes.includes('HOME') && !backgroundCheckApproved ? (
+              <View
+                style={{
+                  marginTop: 10,
+                  padding: 12,
+                  borderRadius: 14,
+                  backgroundColor: 'rgba(255, 226, 155, 0.12)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(255, 226, 155, 0.25)',
+                }}
+              >
+                <Text style={{ color: '#FFE29B', fontWeight: '800' }}>
+                  Para ofrecer servicio a domicilio necesitás tener aprobado el certificado de buena
+                  conducta.
+                </Text>
+
+                <Pressable
+                  onPress={() => {
+                    (navigation as any).navigate('Perfil', { screen: 'ProfileMain' });
+
+                    setTimeout(() => {
+                      (navigation as any).navigate('Perfil', { screen: 'BackgroundCheck' });
+                    }, 0);
+                  }}
+                  style={[
+                    styles.btn,
+                    {
+                      marginTop: 10,
+                      backgroundColor: 'transparent',
+                      borderWidth: 1,
+                      borderColor: '#FFE29B',
+                    },
+                  ]}
+                >
+                  <Text style={[styles.btnT, { color: '#FFE29B' }]}>Cargar certificado</Text>
+                </Pressable>
+              </View>
+            ) : null}
 
             {serviceModes.includes('OFFICE') && (
               <>
@@ -3333,6 +3467,124 @@ export default function SpecialistHome() {
                 ) : (
                   <Text style={styles.btnT}>Usar imagen</Text>
                 )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal: faltan modalidades */}
+      <Modal
+        transparent
+        visible={missingModesModalOpen}
+        animationType="fade"
+        onRequestClose={() => setMissingModesModalOpen(false)}
+      >
+        <View style={styles.previewBG}>
+          <View style={styles.previewCard}>
+            <Text
+              style={{
+                color: '#0A5B63',
+                fontWeight: '900',
+                fontSize: 18,
+                textAlign: 'center',
+              }}
+            >
+              Configurá tus modalidades
+            </Text>
+
+            <Text
+              style={{
+                color: '#4A6C70',
+                fontWeight: '700',
+                textAlign: 'center',
+                marginTop: 10,
+                lineHeight: 20,
+              }}
+            >
+              Para completar tu perfil y poder activar tu visibilidad, primero tenés que indicar
+              cómo ofrecés tu servicio: a domicilio, en local/oficina u online.
+            </Text>
+
+            <View style={styles.previewRow}>
+              <Pressable
+                style={[styles.btn, { flex: 1, backgroundColor: 'rgba(10,91,99,0.12)' }]}
+                onPress={() => setMissingModesModalOpen(false)}
+              >
+                <Text style={[styles.btnT, { color: '#0A5B63' }]}>Ahora no</Text>
+              </Pressable>
+
+              <View style={{ width: 10 }} />
+
+              <Pressable
+                style={[styles.btn, { flex: 1 }]}
+                onPress={() => {
+                  setMissingModesModalOpen(false);
+                  setOpenServiceModes(true);
+                }}
+              >
+                <Text style={styles.btnT}>Configurar</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal: HOME requiere certificado */}
+      <Modal
+        transparent
+        visible={homeBgRequiredModalOpen}
+        animationType="fade"
+        onRequestClose={() => setHomeBgRequiredModalOpen(false)}
+      >
+        <View style={styles.previewBG}>
+          <View style={styles.previewCard}>
+            <Text
+              style={{
+                color: '#0A5B63',
+                fontWeight: '900',
+                fontSize: 18,
+                textAlign: 'center',
+              }}
+            >
+              Servicio a domicilio
+            </Text>
+
+            <Text
+              style={{
+                color: '#4A6C70',
+                fontWeight: '700',
+                textAlign: 'center',
+                marginTop: 10,
+                lineHeight: 20,
+              }}
+            >
+              Para ofrecer la modalidad a domicilio necesitás tener aprobado el certificado de buena
+              conducta.
+            </Text>
+
+            <View style={styles.previewRow}>
+              <Pressable
+                style={[styles.btn, { flex: 1, backgroundColor: 'rgba(10,91,99,0.12)' }]}
+                onPress={() => setHomeBgRequiredModalOpen(false)}
+              >
+                <Text style={[styles.btnT, { color: '#0A5B63' }]}>Entendido</Text>
+              </Pressable>
+
+              <View style={{ width: 10 }} />
+
+              <Pressable
+                style={[styles.btn, { flex: 1 }]}
+                onPress={() => {
+                  setHomeBgRequiredModalOpen(false);
+                  (navigation as any).navigate('Perfil', { screen: 'ProfileMain' });
+
+                  setTimeout(() => {
+                    (navigation as any).navigate('Perfil', { screen: 'BackgroundCheck' });
+                  }, 0);
+                }}
+              >
+                <Text style={styles.btnT}>Ir al certificado</Text>
               </Pressable>
             </View>
           </View>

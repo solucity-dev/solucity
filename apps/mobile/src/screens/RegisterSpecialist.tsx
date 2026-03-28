@@ -372,17 +372,37 @@ export default function RegisterSpecialist() {
   const [finalizing, setFinalizing] = useState(false);
   const [serviceQuery, setServiceQuery] = useState('');
 
+  // ===== PASO 3: modalidades de servicio ==================
+  const [serviceModes, setServiceModes] = useState<('HOME' | 'OFFICE' | 'ONLINE')[]>([]);
+  const [officeAddress, setOfficeAddress] = useState('');
+  const [officeLocality, setOfficeLocality] = useState('Río Cuarto');
+
   // ✅ hint suave paso 3
   const [step3Hint, setStep3Hint] = useState<string | null>(null);
 
   useEffect(() => {
-    if (selectedSlugs.length > 0) setStep3Hint(null);
-  }, [selectedSlugs.length]);
+    const hasModes = serviceModes.length > 0;
+    const officeOk =
+      !serviceModes.includes('OFFICE') ||
+      (officeAddress.trim().length > 0 && officeLocality.trim().length > 0);
+    const hasRubros = selectedSlugs.length > 0;
+
+    if (hasModes && officeOk && hasRubros) setStep3Hint(null);
+  }, [serviceModes, officeAddress, officeLocality, selectedSlugs.length]);
 
   // ✅ checks paso 3
   const step3Checks = useMemo(
-    () => [{ ok: selectedSlugs.length > 0, label: 'Rubros' }],
-    [selectedSlugs.length],
+    () => [
+      { ok: serviceModes.length > 0, label: 'Modalidades' },
+      {
+        ok:
+          !serviceModes.includes('OFFICE') ||
+          (officeAddress.trim().length > 0 && officeLocality.trim().length > 0),
+        label: 'Local/oficina',
+      },
+      { ok: selectedSlugs.length > 0, label: 'Rubros' },
+    ],
+    [serviceModes, officeAddress, officeLocality, selectedSlugs.length],
   );
 
   useEffect(() => {
@@ -446,6 +466,24 @@ export default function RegisterSpecialist() {
     );
   };
 
+  const toggleServiceMode = (mode: 'HOME' | 'OFFICE' | 'ONLINE') => {
+    setServiceModes((prev) =>
+      prev.includes(mode) ? prev.filter((m) => m !== mode) : [...prev, mode],
+    );
+  };
+
+  const buildOfficeAddressPayload = () => {
+    const street = officeAddress.trim();
+    const locality = officeLocality.trim() || 'Río Cuarto';
+
+    if (!street) return null;
+
+    return {
+      formatted: street,
+      locality,
+    };
+  };
+
   function normalizeText(text: string = '') {
     return String(text)
       .normalize('NFD')
@@ -485,6 +523,22 @@ export default function RegisterSpecialist() {
         return Alert.alert('Error', 'Sesión pendiente perdida. Reintentá el registro.');
       if (!kycUrls) return Alert.alert('Error', 'Faltan las imágenes de identidad.');
 
+      if (serviceModes.length === 0) {
+        setStep3Hint('Elegí al menos una modalidad de servicio para continuar.');
+        return Alert.alert(
+          'Falta un paso',
+          'Elegí al menos una modalidad de servicio para poder finalizar.',
+        );
+      }
+
+      if (serviceModes.includes('OFFICE') && !officeAddress.trim()) {
+        setStep3Hint('Si trabajás en oficina/local, cargá la dirección.');
+        return Alert.alert(
+          'Falta la dirección',
+          'Completá la dirección de tu oficina o local para continuar.',
+        );
+      }
+
       if (selectedSlugs.length === 0) {
         setStep3Hint('Elegí al menos un rubro para continuar.');
         return Alert.alert('Falta un paso', 'Elegí al menos un rubro para poder finalizar.');
@@ -492,9 +546,19 @@ export default function RegisterSpecialist() {
 
       setFinalizing(true);
 
+      const officeAddressPayload = serviceModes.includes('OFFICE')
+        ? buildOfficeAddressPayload()
+        : null;
+
       const r2 = await api.post(
         '/specialists/register',
-        { specialties: selectedSlugs, bio: '', kyc: kycUrls },
+        {
+          specialties: selectedSlugs,
+          serviceModes,
+          officeAddress: officeAddressPayload,
+          bio: '',
+          kyc: kycUrls,
+        },
         { headers: { ...tempAuthHeaders() } },
       );
 
@@ -787,7 +851,66 @@ export default function RegisterSpecialist() {
 
         {step === 3 && (
           <View style={s.card}>
-            <Text style={s.label}>Seleccioná los servicios que realizás</Text>
+            <Text style={s.label}>¿Cómo brindás tu servicio?</Text>
+
+            <Text style={s.helperText}>
+              Elegí una o más modalidades según cómo trabajás actualmente.
+            </Text>
+
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              <Pressable
+                onPress={() => toggleServiceMode('HOME')}
+                style={[s.chip, serviceModes.includes('HOME') && s.chipActive]}
+              >
+                <Text style={[s.chipT, serviceModes.includes('HOME') && s.chipTActive]}>
+                  A domicilio
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => toggleServiceMode('OFFICE')}
+                style={[s.chip, serviceModes.includes('OFFICE') && s.chipActive]}
+              >
+                <Text style={[s.chipT, serviceModes.includes('OFFICE') && s.chipTActive]}>
+                  En oficina / local
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => toggleServiceMode('ONLINE')}
+                style={[s.chip, serviceModes.includes('ONLINE') && s.chipActive]}
+              >
+                <Text style={[s.chipT, serviceModes.includes('ONLINE') && s.chipTActive]}>
+                  Online
+                </Text>
+              </Pressable>
+            </View>
+
+            {serviceModes.includes('OFFICE') && (
+              <View style={{ gap: 8, marginTop: 6 }}>
+                <Text style={s.subLabel}>Dirección del local</Text>
+
+                <TextInput
+                  style={s.input}
+                  value={officeAddress}
+                  onChangeText={setOfficeAddress}
+                  placeholder="Calle y número (ej: San Martín 123)"
+                  placeholderTextColor="#cfe"
+                />
+
+                <Text style={s.subLabel}>Localidad</Text>
+
+                <TextInput
+                  style={s.input}
+                  value={officeLocality}
+                  onChangeText={setOfficeLocality}
+                  placeholder="Ej: Río Cuarto"
+                  placeholderTextColor="#cfe"
+                />
+              </View>
+            )}
+
+            <Text style={[s.label, { marginTop: 10 }]}>Seleccioná los servicios que realizás</Text>
 
             <Text style={s.helperText}>
               Escribí parte del servicio para encontrarlo más rápido.
@@ -850,8 +973,9 @@ export default function RegisterSpecialist() {
             {/* ✅ Aviso simple: documentación se sube después desde Home */}
             <View style={s.infoBox}>
               <Text style={s.infoText}>
-                La documentación (matrícula/título) se carga después, desde tu Inicio como
-                especialista, en cada rubro.
+                Después vas a poder editar tus modalidades, dirección y rubros desde tu Inicio como
+                especialista. La documentación (matrícula/título) también se carga después, en cada
+                rubro.
               </Text>
             </View>
 

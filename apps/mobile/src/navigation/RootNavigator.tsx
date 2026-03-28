@@ -26,11 +26,15 @@ import SubscriptionScreen from '../screens/SubscriptionScreen';
 import Welcome from '../screens/Welcome';
 
 const Stack = createNativeStackNavigator();
+
 const ONBOARDING_KEY = 'onboarding:seen';
+const REGISTER_DRAFT_KEY = 'register_specialist_draft_v1';
 
 export default function RootNavigator() {
   const { token, loading, user } = useAuth();
+
   const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
+  const [initialRoute, setInitialRoute] = useState<string | null>(null);
 
   useEffect(() => {
     setNavRole(user?.role ?? null);
@@ -53,17 +57,63 @@ export default function RootNavigator() {
     };
   }, []);
 
-  // ✅ Mientras hidrata auth + onboarding, mostramos splash
+  useEffect(() => {
+    if (onboardingSeen === null) return;
+
+    let cancelled = false;
+
+    const resolveInitialRoute = async () => {
+      try {
+        const draftRaw = await AsyncStorage.getItem(REGISTER_DRAFT_KEY);
+
+        if (draftRaw) {
+          const draft = JSON.parse(draftRaw);
+
+          const hasDraft =
+            !!draft?.pendingToken ||
+            !!draft?.dniFront ||
+            !!draft?.dniBack ||
+            !!draft?.selfie ||
+            draft?.step === 2 ||
+            draft?.step === 3;
+
+          if (hasDraft) {
+            console.log('[RootNavigator] draft detectado → ir a RegisterSpecialist');
+            if (!cancelled) setInitialRoute('RegisterSpecialist');
+            return;
+          }
+        }
+
+        console.log('[RootNavigator] sin draft → flujo normal');
+        if (!cancelled) {
+          setInitialRoute(onboardingSeen ? 'Welcome' : 'Onboarding');
+        }
+      } catch (e) {
+        console.log('[RootNavigator] error leyendo draft', e);
+        if (!cancelled) {
+          setInitialRoute(onboardingSeen ? 'Welcome' : 'Onboarding');
+        }
+      }
+    };
+
+    resolveInitialRoute();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onboardingSeen]);
+
+  // Mientras hidrata auth + onboarding
   if (loading || onboardingSeen === null) {
     return Platform.OS === 'web' ? <Splash /> : null;
   }
 
-  // ✅ Anti-flash: si hay token pero aún no cargó user (/auth/me)
+  // Anti-flash: si hay token pero aún no cargó user (/auth/me)
   if (token && !user) {
     return Platform.OS === 'web' ? <Splash /> : null;
   }
 
-  // ✅ Con token → stack privado (según role real)
+  // Con token → stack privado
   if (token && user) {
     const isSpecialist = user.role === 'SPECIALIST';
 
@@ -75,11 +125,9 @@ export default function RootNavigator() {
           <Stack.Screen name="Main" component={ClientTabs} />
         )}
 
-        {/* ✅ Global */}
         <Stack.Screen name="KycStatus" component={KycStatusScreen} />
         <Stack.Screen name="KycUpload" component={KycUploadScreen} />
 
-        {/* ✅ Legal + soporte global */}
         <Stack.Screen name="Support" component={SupportScreen} />
         <Stack.Screen name="Terms" component={TermsScreen} />
         <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
@@ -88,12 +136,14 @@ export default function RootNavigator() {
     );
   }
 
-  // ✅ Sin token → flujo público
+  // Sin token pero todavía resolviendo ruta inicial pública
+  if (!initialRoute) {
+    return Platform.OS === 'web' ? <Splash /> : null;
+  }
+
+  // Sin token → flujo público
   return (
-    <Stack.Navigator
-      screenOptions={{ headerShown: false }}
-      initialRouteName={onboardingSeen ? 'Welcome' : 'Onboarding'}
-    >
+    <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={initialRoute}>
       <Stack.Screen
         name="Onboarding"
         children={({ navigation }) => (
@@ -147,7 +197,6 @@ export default function RootNavigator() {
         )}
       />
 
-      {/* ✅ Legal + soporte global */}
       <Stack.Screen name="Support" component={SupportScreen} />
       <Stack.Screen name="Terms" component={TermsScreen} />
       <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />

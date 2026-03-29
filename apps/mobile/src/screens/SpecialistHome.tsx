@@ -587,6 +587,9 @@ export default function SpecialistHome() {
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
 
+  const [activeOrdersCount, setActiveOrdersCount] = useState(0);
+  const [activeOrdersLoading, setActiveOrdersLoading] = useState(false);
+
   // form fields
   const [bio, setBio] = useState('');
   const [headline, setHeadline] = useState('');
@@ -1048,6 +1051,32 @@ export default function SpecialistHome() {
     }
   }, [token]);
 
+  const loadActiveOrdersCount = useCallback(async () => {
+    if (!token) return;
+
+    try {
+      setActiveOrdersLoading(true);
+
+      const { data } = await api.get('/orders/mine', {
+        params: { role: 'specialist', status: 'open' },
+        headers: { 'Cache-Control': 'no-cache' },
+      });
+
+      const orders = Array.isArray(data?.orders) ? data.orders : [];
+
+      const active = orders.filter((o: any) =>
+        ['ASSIGNED', 'IN_PROGRESS', 'PAUSED'].includes(String(o?.status ?? '').toUpperCase()),
+      );
+
+      setActiveOrdersCount(active.length);
+    } catch (e) {
+      if (__DEV__) console.log('[SpecialistHome] error cargando órdenes activas', e);
+      setActiveOrdersCount(0);
+    } finally {
+      setActiveOrdersLoading(false);
+    }
+  }, [token]);
+
   useEffect(() => {
     if (!token) return;
 
@@ -1060,13 +1089,21 @@ export default function SpecialistHome() {
 
     const task = InteractionManager.runAfterInteractions(() => {
       loadReviews();
+      loadActiveOrdersCount();
     });
 
     return () => {
       const maybeCancel = (task as any)?.cancel;
       if (typeof maybeCancel === 'function') maybeCancel();
     };
-  }, [token, loadCategories, reloadProfileAndSubscription, loadReviews, loadCertsOnce]);
+  }, [
+    token,
+    loadCategories,
+    reloadProfileAndSubscription,
+    loadReviews,
+    loadCertsOnce,
+    loadActiveOrdersCount,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1080,7 +1117,8 @@ export default function SpecialistHome() {
 
       reloadProfileAndSubscription({ silent: true });
       loadCategories();
-    }, [token, reloadProfileAndSubscription, loadCategories]),
+      loadActiveOrdersCount();
+    }, [token, reloadProfileAndSubscription, loadCategories, loadActiveOrdersCount]),
   );
 
   // ✅ pedir ubicación apenas entra el especialista (una vez por sesión y sin bloquear)
@@ -1157,11 +1195,14 @@ export default function SpecialistHome() {
     return subscription.isTrialActive || subscription.isSubscriptionActive;
   }, [subscription]);
 
+  const specialistOrdersLimitReached = activeOrdersCount >= 3;
+
   const canToggleAvailability =
     subscriptionOk &&
     serviceModesConfigured &&
     kycStatus === 'VERIFIED' &&
-    (!requiresBackgroundCheck || backgroundCheckApproved);
+    (!requiresBackgroundCheck || backgroundCheckApproved) &&
+    !specialistOrdersLimitReached;
 
   // 1) "visible" = aparece en búsquedas (SIN horario)
   const visibleEffective = canToggleAvailability && availableNow;
@@ -2245,25 +2286,63 @@ export default function SpecialistHome() {
                 </Text>
               </View>
             </View>
+            {specialistOrdersLimitReached ? (
+              <View
+                style={{
+                  marginTop: 10,
+                  marginBottom: 10,
+                  padding: 12,
+                  borderRadius: 14,
+                  backgroundColor: 'rgba(255, 226, 155, 0.12)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(255, 226, 155, 0.25)',
+                }}
+              >
+                <Text style={{ color: '#FFE29B', fontWeight: '800' }}>
+                  Ya tenés 3 órdenes en proceso. Debés finalizar o cancelar al menos 1 para volver a
+                  tener visibilidad.
+                </Text>
+
+                <Pressable
+                  onPress={() =>
+                    (navigation as any).navigate('AgendaMain', { initialSection: 'ASSIGNED' })
+                  }
+                  style={[
+                    styles.btn,
+                    {
+                      marginTop: 10,
+                      backgroundColor: 'transparent',
+                      borderWidth: 1,
+                      borderColor: '#FFE29B',
+                    },
+                  ]}
+                >
+                  <Text style={[styles.btnT, { color: '#FFE29B' }]}>Ir a Agenda</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             <View style={styles.stateRow}>
               <Text style={styles.label}>Habilitar disponibilidad</Text>
               <Switch
                 value={availableNow}
                 onValueChange={toggleAvailable}
-                disabled={!canToggleAvailability}
+                disabled={!canToggleAvailability || activeOrdersLoading}
               />
             </View>
             {!canToggleAvailability ? (
               <Text style={[styles.muted, { marginTop: 6 }]}>
-                {!subscriptionOk
-                  ? 'Tu disponibilidad requiere una suscripción activa o una prueba gratuita vigente. Tocá la tarjeta de Suscripción para revisarla.'
-                  : !serviceModesConfigured
-                    ? 'Primero tenés que configurar cómo ofrecés tu servicio: a domicilio, local/oficina u online.'
-                    : kycStatus !== 'VERIFIED'
-                      ? 'Tu disponibilidad se habilita cuando validemos tu identidad.'
-                      : requiresBackgroundCheck && !backgroundCheckApproved
-                        ? 'Para esta modalidad necesitás tener el certificado de buena conducta aprobado.'
-                        : 'Completá los requisitos pendientes para habilitar tu disponibilidad.'}
+                {specialistOrdersLimitReached
+                  ? 'Tu visibilidad está pausada porque ya alcanzaste el límite de 3 órdenes activas.'
+                  : !subscriptionOk
+                    ? 'Tu disponibilidad requiere una suscripción activa o una prueba gratuita vigente. Tocá la tarjeta de Suscripción para revisarla.'
+                    : !serviceModesConfigured
+                      ? 'Primero tenés que configurar cómo ofrecés tu servicio: a domicilio, local/oficina u online.'
+                      : kycStatus !== 'VERIFIED'
+                        ? 'Tu disponibilidad se habilita cuando validemos tu identidad.'
+                        : requiresBackgroundCheck && !backgroundCheckApproved
+                          ? 'Para esta modalidad necesitás tener el certificado de buena conducta aprobado.'
+                          : 'Completá los requisitos pendientes para habilitar tu disponibilidad.'}
               </Text>
             ) : null}
 

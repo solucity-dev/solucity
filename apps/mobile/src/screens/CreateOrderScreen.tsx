@@ -573,9 +573,33 @@ export default function CreateOrderScreen() {
     } catch (e: any) {
       const status = e?.response?.status;
       const data = e?.response?.data;
+      const errorCode = data?.error;
 
       console.log('🟥 [CreateOrder] error status =', status);
       console.log('🟥 [CreateOrder] error data =', safeJson(data));
+
+      if (errorCode === 'customer_active_orders_limit_reached') {
+        Alert.alert(
+          'Tenés órdenes pendientes',
+          'Para solicitar un nuevo servicio, primero debés cerrar una orden en revisión.',
+          [
+            {
+              text: 'Ir a Agenda',
+              onPress: () => {
+                nav.navigate('AgendaMain' as any, {
+                  initialSection: 'IN_CLIENT_REVIEW',
+                  refresh: true,
+                });
+              },
+            },
+            {
+              text: 'Cancelar',
+              style: 'cancel',
+            },
+          ],
+        );
+        return;
+      }
 
       const msg =
         data?.error?.message ||

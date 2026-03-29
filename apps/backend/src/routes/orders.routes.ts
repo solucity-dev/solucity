@@ -316,6 +316,36 @@ const CLOSED_STATUSES: OrderStatus[] = [
   'CLOSED',
 ];
 
+const MAX_ACTIVE_ORDERS_SPECIALIST = 3;
+const MAX_ACTIVE_ORDERS_CUSTOMER = 5;
+
+const SPECIALIST_ACTIVE_STATUSES: OrderStatus[] = ['ASSIGNED', 'IN_PROGRESS', 'PAUSED'];
+
+const CUSTOMER_ACTIVE_STATUSES: OrderStatus[] = [
+  'ASSIGNED',
+  'IN_PROGRESS',
+  'PAUSED',
+  'IN_CLIENT_REVIEW',
+];
+
+async function countActiveOrdersForSpecialist(specialistId: string) {
+  return prisma.serviceOrder.count({
+    where: {
+      specialistId,
+      status: { in: SPECIALIST_ACTIVE_STATUSES },
+    },
+  });
+}
+
+async function countActiveOrdersForCustomer(customerId: string) {
+  return prisma.serviceOrder.count({
+    where: {
+      customerId,
+      status: { in: CUSTOMER_ACTIVE_STATUSES },
+    },
+  });
+}
+
 const WHATSAPP_ALLOWED_STATUSES: OrderStatus[] = [
   'ASSIGNED',
   'IN_PROGRESS',
@@ -666,6 +696,20 @@ orders.post('/', auth, async (req, res) => {
       if (!cust) return res.status(400).json({ ok: false, error: 'user_not_customer' });
       customerId = cust.id;
       locationId = locationId ?? (addressText ? null : (cust.defaultAddressId ?? null));
+    }
+
+    // 🔒 Límite de órdenes activas para cliente
+    const activeOrdersCustomer = await countActiveOrdersForCustomer(customerId!);
+
+    if (activeOrdersCustomer >= MAX_ACTIVE_ORDERS_CUSTOMER) {
+      return res.status(409).json({
+        ok: false,
+        error: 'customer_active_orders_limit_reached',
+        message:
+          'Tenés 5 órdenes activas o en revisión. Confirmá la finalización de alguna para poder solicitar un nuevo servicio.',
+        limit: MAX_ACTIVE_ORDERS_CUSTOMER,
+        activeOrders: activeOrdersCustomer,
+      });
     }
 
     // 2) serviceId + categorySlug (VALIDADO)
@@ -1297,6 +1341,20 @@ orders.post('/:id/accept', auth, async (req, res) => {
   });
   if (!sub || (sub.status !== 'TRIALING' && sub.status !== 'ACTIVE')) {
     return res.status(402).json({ ok: false, error: 'subscription_inactive' });
+  }
+
+  // 🔒 Límite de órdenes activas para especialista
+  const activeOrdersSpecialist = await countActiveOrdersForSpecialist(specialistId);
+
+  if (activeOrdersSpecialist >= MAX_ACTIVE_ORDERS_SPECIALIST) {
+    return res.status(409).json({
+      ok: false,
+      error: 'specialist_active_orders_limit_reached',
+      message:
+        'Tenés 3 trabajos activos. Debés finalizar o cancelar al menos 1 para seguir recibiendo solicitudes.',
+      limit: MAX_ACTIVE_ORDERS_SPECIALIST,
+      activeOrders: activeOrdersSpecialist,
+    });
   }
 
   // ✅ 1) actualizamos estado + asignamos especialista

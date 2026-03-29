@@ -410,13 +410,18 @@ export default function CreateOrderScreen() {
         return;
       }
 
-      const customerId = me?.profiles?.customerId;
-      if (!customerId) {
-        Alert.alert('Sesión requerida', 'No pudimos identificar el perfil de cliente (auth/me).');
+      const customerId = me?.profiles?.customerId ?? null;
+      const mySpecialistProfileId = me?.profiles?.specialistId ?? null;
+
+      // ✅ Permitimos continuar si el usuario ya tiene perfil cliente
+      // o si es especialista y el backend debe crear el CustomerProfile automáticamente.
+      if (!customerId && !mySpecialistProfileId) {
+        Alert.alert(
+          'Sesión requerida',
+          'No pudimos identificar un perfil válido para crear la solicitud.',
+        );
         return;
       }
-
-      const mySpecialistProfileId = me?.profiles?.specialistId ?? null;
 
       // ✅ Rubro (categorySlug) desde el que se eligió al especialista
       const categorySlug = categorySlugParam;

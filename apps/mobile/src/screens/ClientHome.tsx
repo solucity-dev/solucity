@@ -95,29 +95,29 @@ export default function ClientHome() {
           </View>
         )}
 
-        {canUseSpecialistMode && currentMode === 'client' && (
-          <View style={styles.modeSwitchWrap}>
-            <Pressable style={styles.modeSwitchCard} onPress={handleSwitchToSpecialistMode}>
-              <View style={styles.modeSwitchIconWrap}>
-                <Ionicons name="sparkles-outline" size={22} color="#0A5B63" />
-              </View>
-
-              <View style={{ flex: 1 }}>
-                <Text style={styles.modeSwitchEyebrow}>Modo actual: Cliente</Text>
-                <Text style={styles.modeSwitchTitle}>Volver a modo especialista</Text>
-                <Text style={styles.modeSwitchText}>
-                  Gestioná tus órdenes, tu perfil profesional y tu disponibilidad.
-                </Text>
-              </View>
-
-              <Ionicons name="chevron-forward" size={22} color="#0A5B63" />
-            </Pressable>
-          </View>
-        )}
-
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <Text style={styles.title}>¡Bienvenido!</Text>
           <Text style={styles.subtitle}>Elegí una categoría para empezar</Text>
+
+          {canUseSpecialistMode && currentMode === 'client' && (
+            <View style={styles.modeSwitchWrap}>
+              <Pressable style={styles.modeSwitchCard} onPress={handleSwitchToSpecialistMode}>
+                <View style={styles.modeSwitchIconWrap}>
+                  <Ionicons name="sparkles-outline" size={22} color="#0A5B63" />
+                </View>
+
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modeSwitchEyebrow}>Modo actual: Cliente</Text>
+                  <Text style={styles.modeSwitchTitle}>Volver a modo especialista</Text>
+                  <Text style={styles.modeSwitchText}>
+                    Gestioná tus órdenes, tu perfil profesional y tu disponibilidad.
+                  </Text>
+                </View>
+
+                <Ionicons name="chevron-forward" size={22} color="#0A5B63" />
+              </Pressable>
+            </View>
+          )}
 
           <View style={styles.grid}>
             {ROOT_CATEGORIES.map((c) => (
@@ -237,9 +237,8 @@ const styles = StyleSheet.create({
   },
 
   modeSwitchWrap: {
-    paddingHorizontal: 16,
     marginTop: 4,
-    marginBottom: 6,
+    marginBottom: 14,
   },
 
   modeSwitchCard: {

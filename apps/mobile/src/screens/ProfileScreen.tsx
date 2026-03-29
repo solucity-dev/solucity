@@ -7,6 +7,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   Image,
   Platform,
   Pressable,
@@ -109,6 +111,33 @@ export default function ProfileScreen() {
   const setAuthMode: ((mode: 'client' | 'specialist') => Promise<void>) | undefined = auth?.setMode;
   const canUseSpecialistMode = !!auth?.user?.profiles?.specialistId;
 
+  const [switchingMode, setSwitchingMode] = useState<'client' | 'specialist' | null>(null);
+  const switchFade = useRef(new Animated.Value(0)).current;
+  const switchScale = useRef(new Animated.Value(0.96)).current;
+
+  useEffect(() => {
+    if (!switchingMode) {
+      switchFade.setValue(0);
+      switchScale.setValue(0.96);
+      return;
+    }
+
+    Animated.parallel([
+      Animated.timing(switchFade, {
+        toValue: 1,
+        duration: 180,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.timing(switchScale, {
+        toValue: 1,
+        duration: 220,
+        easing: Easing.out(Easing.back(1.1)),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [switchingMode, switchFade, switchScale]);
+
   const mountedRef = useRef(true);
   const requestIdRef = useRef(0);
 
@@ -174,9 +203,20 @@ export default function ProfileScreen() {
         text: 'Cambiar',
         onPress: async () => {
           try {
-            await setAuthMode?.(nextMode);
+            setSwitchingMode(nextMode);
+
+            setTimeout(async () => {
+              try {
+                await setAuthMode?.(nextMode);
+              } catch (e) {
+                if (__DEV__) console.log('[Profile] toggle mode error', e);
+                setSwitchingMode(null);
+                Alert.alert('Ups', 'No pudimos cambiar de modo. Intentá nuevamente.');
+              }
+            }, 420);
           } catch (e) {
             if (__DEV__) console.log('[Profile] toggle mode error', e);
+            setSwitchingMode(null);
             Alert.alert('Ups', 'No pudimos cambiar de modo. Intentá nuevamente.');
           }
         },
@@ -882,6 +922,32 @@ export default function ProfileScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      {switchingMode && (
+        <View style={styles.switchOverlay}>
+          <Animated.View
+            style={[
+              styles.switchCard,
+              {
+                opacity: switchFade,
+                transform: [{ scale: switchScale }],
+              },
+            ]}
+          >
+            <View style={styles.switchIconWrap}>
+              <Ionicons name="sparkles-outline" size={28} color="#0A5B63" />
+            </View>
+
+            <Text style={styles.switchTitle}>
+              {switchingMode === 'specialist'
+                ? 'Cambiando a modo especialista'
+                : 'Cambiando a modo cliente'}
+            </Text>
+
+            <Text style={styles.switchSubtitle}>Estamos preparando tu experiencia.</Text>
+          </Animated.View>
+        </View>
+      )}
     </LinearGradient>
   );
 }
@@ -1029,4 +1095,51 @@ const styles = StyleSheet.create({
     backgroundColor: '#ff3b30',
   },
   logoutText: { color: '#fff', fontWeight: '800' },
+  switchOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 35, 40, 0.42)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+
+  switchCard: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: '#E9FEFF',
+    borderRadius: 24,
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 20,
+    elevation: 10,
+  },
+
+  switchIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(10,91,99,0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+
+  switchTitle: {
+    color: '#0A5B63',
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+
+  switchSubtitle: {
+    color: '#4A6C70',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginTop: 6,
+  },
 });

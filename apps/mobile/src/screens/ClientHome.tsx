@@ -1,7 +1,18 @@
 import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  Alert,
+  Animated,
+  Easing,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../auth/AuthProvider';
@@ -25,6 +36,33 @@ export default function ClientHome() {
   const canUseSpecialistMode = !!auth?.user?.profiles?.specialistId;
   const setAuthMode: ((mode: 'client' | 'specialist') => Promise<void>) | undefined = auth?.setMode;
 
+  const [switchingMode, setSwitchingMode] = useState<'client' | 'specialist' | null>(null);
+  const switchFade = useRef(new Animated.Value(0)).current;
+  const switchScale = useRef(new Animated.Value(0.96)).current;
+
+  useEffect(() => {
+    if (!switchingMode) {
+      switchFade.setValue(0);
+      switchScale.setValue(0.96);
+      return;
+    }
+
+    Animated.parallel([
+      Animated.timing(switchFade, {
+        toValue: 1,
+        duration: 180,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.timing(switchScale, {
+        toValue: 1,
+        duration: 220,
+        easing: Easing.out(Easing.back(1.1)),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [switchingMode, switchFade, switchScale]);
+
   useSyncCustomerLocationOnMount();
 
   const handleOpenNotifications = () => {
@@ -42,9 +80,20 @@ export default function ClientHome() {
           text: 'Cambiar',
           onPress: async () => {
             try {
-              await setAuthMode?.('specialist');
+              setSwitchingMode('specialist');
+
+              setTimeout(async () => {
+                try {
+                  await setAuthMode?.('specialist');
+                } catch (e) {
+                  if (__DEV__) console.log('[ClientHome] switch to specialist mode error', e);
+                  setSwitchingMode(null);
+                  Alert.alert('Ups', 'No pudimos cambiar de modo. Intentá nuevamente.');
+                }
+              }, 420);
             } catch (e) {
               if (__DEV__) console.log('[ClientHome] switch to specialist mode error', e);
+              setSwitchingMode(null);
               Alert.alert('Ups', 'No pudimos cambiar de modo. Intentá nuevamente.');
             }
           },
@@ -142,6 +191,32 @@ export default function ClientHome() {
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      {switchingMode && (
+        <View style={styles.switchOverlay}>
+          <Animated.View
+            style={[
+              styles.switchCard,
+              {
+                opacity: switchFade,
+                transform: [{ scale: switchScale }],
+              },
+            ]}
+          >
+            <View style={styles.switchIconWrap}>
+              <Ionicons name="sparkles-outline" size={28} color="#0A5B63" />
+            </View>
+
+            <Text style={styles.switchTitle}>
+              {switchingMode === 'specialist'
+                ? 'Cambiando a modo especialista'
+                : 'Cambiando a modo cliente'}
+            </Text>
+
+            <Text style={styles.switchSubtitle}>Estamos preparando tu experiencia.</Text>
+          </Animated.View>
+        </View>
+      )}
     </LinearGradient>
   );
 }
@@ -283,5 +358,52 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     marginTop: 2,
+  },
+  switchOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 35, 40, 0.42)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+
+  switchCard: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: '#E9FEFF',
+    borderRadius: 24,
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 20,
+    elevation: 10,
+  },
+
+  switchIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(10,91,99,0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+
+  switchTitle: {
+    color: '#0A5B63',
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+
+  switchSubtitle: {
+    color: '#4A6C70',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginTop: 6,
   },
 });

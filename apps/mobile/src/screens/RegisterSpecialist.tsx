@@ -1,6 +1,6 @@
 // apps/mobile/src/screens/RegisterSpecialist.tsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -34,12 +34,12 @@ type CategoriesRes = { ok: true; groups: CategoryGroup[] };
 
 const REGISTER_DRAFT_KEY = 'register_specialist_draft_v1';
 const REGISTER_PENDING_FIELD_KEY = 'register_specialist_pending_field_v1';
+const REGISTER_CAPTURE_RESULT_KEY = 'register_specialist_capture_result_v1';
 
 export default function RegisterSpecialist() {
   const insets = useSafeAreaInsets();
 
   const navigation = useNavigation<any>();
-  const route = useRoute<any>();
 
   const { setMode, login } = useAuth();
 
@@ -277,24 +277,44 @@ export default function RegisterSpecialist() {
 
   const step2Complete = !!dniFront && !!dniBack && !!selfie;
 
-  useEffect(() => {
-    const selfieUri = route.params?.selfieUri;
-    const selfieCapturedAt = route.params?.selfieCapturedAt;
+  useFocusEffect(
+    useMemo(
+      () => () => {
+        let cancelled = false;
 
-    if (!selfieUri) return;
+        const restoreCaptureResult = async () => {
+          try {
+            const raw = await AsyncStorage.getItem(REGISTER_CAPTURE_RESULT_KEY);
+            if (!raw) return;
 
-    console.log('[register-specialist] selfie recibida desde SelfieCapture', {
-      selfieUri,
-      selfieCapturedAt,
-    });
+            const result = JSON.parse(raw);
+            if (cancelled) return;
 
-    setSelfie(selfieUri);
+            console.log('[register-specialist] capture result restaurado', result);
 
-    navigation.setParams({
-      selfieUri: undefined,
-      selfieCapturedAt: undefined,
-    });
-  }, [route.params?.selfieUri, route.params?.selfieCapturedAt, navigation]);
+            if (result?.field === 'selfie' && result?.uri) {
+              setSelfie(result.uri);
+            } else if (result?.field === 'dniFront' && result?.uri) {
+              setDniFront(result.uri);
+            } else if (result?.field === 'dniBack' && result?.uri) {
+              setDniBack(result.uri);
+            }
+
+            await AsyncStorage.removeItem(REGISTER_CAPTURE_RESULT_KEY);
+          } catch (e) {
+            console.log('[register-specialist] restoreCaptureResult error', e);
+          }
+        };
+
+        restoreCaptureResult();
+
+        return () => {
+          cancelled = true;
+        };
+      },
+      [],
+    ),
+  );
 
   useEffect(() => {
     saveDraft({

@@ -1,3 +1,5 @@
+//apps/mobile/src/screens/SelfieCaptureScreen.tsx
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraType, CameraView, useCameraPermissions } from 'expo-camera';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -11,6 +13,8 @@ type Props = {
     };
   };
 };
+
+const REGISTER_CAPTURE_RESULT_KEY = 'register_specialist_capture_result_v1';
 
 export default function SelfieCaptureScreen({ navigation }: Props) {
   const cameraRef = useRef<CameraView | null>(null);
@@ -33,10 +37,16 @@ export default function SelfieCaptureScreen({ navigation }: Props) {
         return;
       }
 
-      navigation.navigate('RegisterSpecialist', {
-        selfieUri: uri,
-        selfieCapturedAt: Date.now(),
-      });
+      await AsyncStorage.setItem(
+        REGISTER_CAPTURE_RESULT_KEY,
+        JSON.stringify({
+          field: 'selfie',
+          uri,
+          capturedAt: Date.now(),
+        }),
+      );
+
+      navigation.goBack();
     } catch (e) {
       console.log('[SelfieCaptureScreen][takePhoto][error]', e);
       Alert.alert('Error', 'No se pudo tomar la selfie.');

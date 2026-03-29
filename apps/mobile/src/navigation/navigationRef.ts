@@ -3,9 +3,9 @@ import { createNavigationContainerRef } from '@react-navigation/native';
 
 export const navigationRef = createNavigationContainerRef<any>();
 
-type NavRole = 'SPECIALIST' | 'CUSTOMER' | 'ADMIN' | null;
+type NavMode = 'specialist' | 'client' | null;
 
-let navRole: NavRole = null;
+let navMode: NavMode = null;
 
 type PendingNav =
   | { type: 'orderDetail'; orderId: string }
@@ -17,9 +17,9 @@ type PendingNav =
 
 let pendingNav: PendingNav = null;
 
-export function setNavRole(role: NavRole) {
-  navRole = role;
-  if (__DEV__) console.log('[NAV] setNavRole =', role);
+export function setNavMode(mode: NavMode) {
+  navMode = mode;
+  if (__DEV__) console.log('[NAV] setNavMode =', mode);
   flushPendingNav();
 }
 
@@ -96,12 +96,12 @@ export function navigateToKycStatus() {
  * ✅ Navegación global al OrderDetail
  */
 export function navigateToOrderDetail(orderId: string) {
-  if (!navigationRef.isReady() || !navRole) {
+  if (!navigationRef.isReady() || !navMode) {
     queueOrderDetail(orderId);
     return;
   }
 
-  const isSpecialist = navRole === 'SPECIALIST';
+  const isSpecialist = navMode === 'specialist';
   const root = isSpecialist ? 'MainSpecialist' : 'Main';
 
   navigationRef.navigate(root, {
@@ -122,12 +122,12 @@ export function navigateToOrderDetail(orderId: string) {
  * ✅ Navegación global al chat thread
  */
 export function navigateToChatThread(threadId: string, orderId?: string | null) {
-  if (!navigationRef.isReady() || !navRole) {
+  if (!navigationRef.isReady() || !navMode) {
     queueChatThread(threadId, orderId ?? null);
     return;
   }
 
-  const isSpecialist = navRole === 'SPECIALIST';
+  const isSpecialist = navMode === 'specialist';
   const root = isSpecialist ? 'MainSpecialist' : 'Main';
 
   if (__DEV__) {
@@ -159,14 +159,14 @@ export function navigateToBackgroundCheck() {
     return;
   }
 
-  // si ya sabemos el rol y no es specialist, descartamos
-  if (navRole && navRole !== 'SPECIALIST') {
-    if (__DEV__) console.log('[NAV] drop backgroundCheck nav (role not specialist)');
+  // si ya sabemos el modo y no es specialist, descartamos
+  if (navMode && navMode !== 'specialist') {
+    if (__DEV__) console.log('[NAV] drop backgroundCheck nav (mode not specialist)');
     return;
   }
 
-  // si todavía no sabemos rol, esperamos
-  if (!navRole) {
+  // si todavía no sabemos modo, esperamos
+  if (!navMode) {
     queueBackgroundCheck();
     return;
   }
@@ -174,7 +174,7 @@ export function navigateToBackgroundCheck() {
   navigationRef.navigate('MainSpecialist', {
     screen: 'Perfil',
     params: {
-      screen: 'BackgroundCheck', // ✅ screen dentro del ProfileStack
+      screen: 'BackgroundCheck',
     },
   });
 }

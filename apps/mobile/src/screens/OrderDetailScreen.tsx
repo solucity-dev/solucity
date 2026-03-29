@@ -258,7 +258,7 @@ export default function OrderDetailScreen() {
   const insets = useSafeAreaInsets();
   const nav = useNavigation<any>();
   const route = useRoute<any>();
-  const { user } = useAuth() as any;
+  const { user, mode } = useAuth() as any;
 
   const tabBarHeightRaw = useBottomTabBarHeight();
   const tabBarHeight = Math.max(tabBarHeightRaw, 60);
@@ -608,8 +608,9 @@ export default function OrderDetailScreen() {
     return map[t] ?? type;
   };
 
-  // ✅ rol REAL
-  const isSpecialist = user?.role === 'SPECIALIST';
+  // ✅ rol visual según modo actual
+  const canUseSpecialistMode = !!user?.profiles?.specialistId;
+  const isSpecialist = canUseSpecialistMode && mode === 'specialist';
   const isClient = !isSpecialist;
 
   const isExpired = meta?.deadline === 'expired';

@@ -689,11 +689,28 @@ orders.post('/', auth, async (req, res) => {
           : null;
 
     if (!customerId) {
-      const cust = await prisma.customerProfile.findUnique({
+      let cust = await prisma.customerProfile.findUnique({
         where: { userId: uid },
         select: { id: true, defaultAddressId: true },
       });
-      if (!cust) return res.status(400).json({ ok: false, error: 'user_not_customer' });
+
+      if (!cust) {
+        // 🔥 nuevo: permitir especialista → cliente automático
+        const specialist = await prisma.specialistProfile.findUnique({
+          where: { userId: uid },
+          select: { id: true },
+        });
+
+        if (!specialist) {
+          return res.status(400).json({ ok: false, error: 'user_not_customer' });
+        }
+
+        cust = await prisma.customerProfile.create({
+          data: { userId: uid },
+          select: { id: true, defaultAddressId: true },
+        });
+      }
+
       customerId = cust.id;
       locationId = locationId ?? (addressText ? null : (cust.defaultAddressId ?? null));
     }
@@ -725,6 +742,24 @@ orders.post('/', auth, async (req, res) => {
 
     if (!specialistId) {
       return res.status(400).json({ ok: false, error: 'specialist_required' });
+    }
+
+    // ✅ BLOQUEO: no permitir auto-contratación
+    const mySpecialistProfile = await prisma.specialistProfile.findUnique({
+      where: { userId: uid },
+      select: { id: true },
+    });
+
+    if (
+      mySpecialistProfile?.id &&
+      specialistId &&
+      String(mySpecialistProfile.id) === String(specialistId)
+    ) {
+      return res.status(409).json({
+        ok: false,
+        error: 'cannot_create_order_for_self',
+        message: 'No podés contratarte a vos mismo.',
+      });
     }
 
     dbg(debugOrders, '[POST /orders][specialistId received]', {

@@ -105,6 +105,9 @@ export default function ProfileScreen() {
   const navigation = useNavigation<any>();
   const auth = useAuth() as any;
   const signOut = auth?.signOut ?? auth?.logout ?? auth?.signOutAsync;
+  const currentMode: 'client' | 'specialist' = auth?.mode ?? 'client';
+  const setAuthMode: ((mode: 'client' | 'specialist') => Promise<void>) | undefined = auth?.setMode;
+  const canUseSpecialistMode = !!auth?.user?.profiles?.specialistId;
 
   const mountedRef = useRef(true);
   const requestIdRef = useRef(0);
@@ -153,6 +156,33 @@ export default function ProfileScreen() {
 
   const isSpecialist = role === 'SPECIALIST';
   const isCustomer = role === 'CUSTOMER';
+
+  const handleToggleMode = useCallback(() => {
+    const nextMode: 'client' | 'specialist' =
+      currentMode === 'specialist' ? 'client' : 'specialist';
+
+    const title = nextMode === 'client' ? 'Cambiar a modo cliente' : 'Cambiar a modo especialista';
+
+    const message =
+      nextMode === 'client'
+        ? 'Vas a pasar al modo cliente para buscar y contratar especialistas.'
+        : 'Vas a volver al modo especialista para gestionar tus trabajos, disponibilidad y perfil profesional.';
+
+    Alert.alert(title, message, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Cambiar',
+        onPress: async () => {
+          try {
+            await setAuthMode?.(nextMode);
+          } catch (e) {
+            if (__DEV__) console.log('[Profile] toggle mode error', e);
+            Alert.alert('Ups', 'No pudimos cambiar de modo. Intentá nuevamente.');
+          }
+        },
+      },
+    ]);
+  }, [currentMode, setAuthMode]);
 
   // ✅ Carga rápida: /auth/me bloqueante, extras background
   const loadProfile = useCallback(async () => {
@@ -687,6 +717,31 @@ export default function ProfileScreen() {
                 style={[styles.saveBtn, { marginTop: 12 }]}
               >
                 <Text style={styles.saveText}>Ver suscripción</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
+          {canUseSpecialistMode ? (
+            <View style={styles.card}>
+              <View style={styles.sectionHeader}>
+                <MDI name="swap-horizontal" size={18} color="#E9FEFF" />
+                <Text style={styles.sectionTitle}>Modo de uso</Text>
+              </View>
+
+              <Text style={styles.muted}>
+                Estás usando la app en modo{' '}
+                <Text style={{ color: '#E9FEFF', fontWeight: '800' }}>
+                  {currentMode === 'specialist' ? 'especialista' : 'cliente'}
+                </Text>
+                .
+              </Text>
+
+              <Pressable onPress={handleToggleMode} style={[styles.saveBtn, { marginTop: 12 }]}>
+                <Text style={styles.saveText}>
+                  {currentMode === 'specialist'
+                    ? 'Cambiar a modo cliente'
+                    : 'Volver a modo especialista'}
+                </Text>
               </Pressable>
             </View>
           ) : null}

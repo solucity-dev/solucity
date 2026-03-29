@@ -436,7 +436,29 @@ export default function SpecialistHome() {
   const token: string | null = auth.token ?? null;
   const logout: (() => void) | undefined = auth.logout;
   const uid: string | null = auth?.user?.id ?? null;
+  const currentMode: 'client' | 'specialist' = auth?.mode ?? 'specialist';
+  const setAuthMode: ((mode: 'client' | 'specialist') => Promise<void>) | undefined = auth?.setMode;
 
+  const handleSwitchToClientMode = useCallback(() => {
+    Alert.alert(
+      'Cambiar a modo cliente',
+      'Vas a pasar al modo cliente para buscar y contratar especialistas. Después vas a poder volver al modo especialista.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Cambiar',
+          onPress: async () => {
+            try {
+              await setAuthMode?.('client');
+            } catch (e) {
+              if (__DEV__) console.log('[SpecialistHome] switch to client mode error', e);
+              Alert.alert('Ups', 'No pudimos cambiar de modo. Intentá nuevamente.');
+            }
+          },
+        },
+      ],
+    );
+  }, [setAuthMode]);
   // ✅ Loading real
   const [loading, setLoading] = useState(true);
 
@@ -2079,6 +2101,26 @@ export default function SpecialistHome() {
               <Pressable onPress={dismissWebBanner} hitSlop={10} style={styles.bannerCloseBtn}>
                 <Ionicons name="close" size={18} color="#015A69" />
               </Pressable>
+            </Pressable>
+          </View>
+        )}
+
+        {currentMode === 'specialist' && (
+          <View style={styles.modeSwitchWrap}>
+            <Pressable style={styles.modeSwitchCard} onPress={handleSwitchToClientMode}>
+              <View style={styles.modeSwitchIconWrap}>
+                <Ionicons name="swap-horizontal" size={22} color="#0A5B63" />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modeSwitchEyebrow}>Modo actual: Especialista</Text>
+                <Text style={styles.modeSwitchTitle}>Cambiar a modo cliente</Text>
+                <Text style={styles.modeSwitchText}>
+                  Buscá especialistas y creá órdenes sin salir de tu cuenta.
+                </Text>
+              </View>
+
+              <Ionicons name="chevron-forward" size={22} color="#0A5B63" />
             </Pressable>
           </View>
         )}
@@ -4031,4 +4073,54 @@ const styles = StyleSheet.create({
   previewPillGood: { backgroundColor: 'rgba(34, 197, 94, 0.22)' },
   previewPillBad: { backgroundColor: 'rgba(239, 68, 68, 0.18)' },
   avatarBox: { alignItems: 'center' },
+
+  modeSwitchWrap: {
+    paddingHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+
+  modeSwitchCard: {
+    backgroundColor: '#E9FEFF',
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 12,
+    elevation: 8,
+  },
+
+  modeSwitchIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(10,91,99,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  modeSwitchEyebrow: {
+    color: '#0A5B63',
+    fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+
+  modeSwitchTitle: {
+    color: '#0A5B63',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+
+  modeSwitchText: {
+    color: '#4A6C70',
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 2,
+  },
 });

@@ -14,7 +14,7 @@ import {
 } from '../lib/api';
 import { ensureLocationPermissionOnce } from '../lib/locationOnce';
 import { clearSubscriptionCache } from '../lib/subscriptionApi';
-import { setNavRole } from '../navigation/navigationRef';
+import { setNavMode } from '../navigation/navigationRef';
 import Splash from '../screens/Splash';
 
 type Role = 'ADMIN' | 'CUSTOMER' | 'SPECIALIST';
@@ -27,6 +27,10 @@ export type AuthUser = {
   name?: string | null;
   surname?: string | null;
   phone?: string | null;
+  profiles: {
+    customerId: string | null;
+    specialistId: string | null;
+  };
 };
 
 type MeResponse = {
@@ -38,6 +42,10 @@ type MeResponse = {
     name?: string | null;
     surname?: string | null;
     phone?: string | null;
+  };
+  profiles: {
+    customerId: string | null;
+    specialistId: string | null;
   };
 };
 
@@ -82,10 +90,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [meLoading, setMeLoading] = useState(false);
 
-  const setMode = useCallback(async (m: Mode) => {
-    await AsyncStorage.setItem(MODE_KEY, m);
-    setModeState(m);
-  }, []);
+  const setMode = useCallback(
+    async (m: Mode) => {
+      const canUseSpecialistMode = !!user?.profiles?.specialistId;
+      const nextMode: Mode = m === 'specialist' && canUseSpecialistMode ? 'specialist' : 'client';
+
+      await AsyncStorage.setItem(MODE_KEY, nextMode);
+      setModeState(nextMode);
+      setNavMode(nextMode);
+    },
+    [user],
+  );
 
   const logout = useCallback(async () => {
     await AsyncStorage.multiRemove([TOKEN_KEY, MODE_KEY]);
@@ -95,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setTokenState(null);
     setUser(null);
     setModeState('client');
-    setNavRole(null);
+    setNavMode(null);
   }, []);
 
   const fetchMe = useCallback(async () => {
@@ -106,20 +121,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!r.data?.ok) throw new Error('auth_me_failed');
 
     const u = r.data.user;
+    const profiles = r.data.profiles ?? {
+      customerId: null,
+      specialistId: null,
+    };
 
-    setUser({
+    const hydratedUser: AuthUser = {
       id: u.id,
       email: u.email,
       role: u.role,
       name: u.name,
       surname: u.surname,
       phone: u.phone,
-    });
+      profiles,
+    };
 
+    setUser(hydratedUser);
     setCachedUserId(u.id);
 
-    setNavRole(u.role);
-    return u.role;
+    return hydratedUser;
   }, []);
 
   const login = useCallback(
@@ -130,11 +150,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setMeLoading(true);
       try {
-        const role = await fetchMe();
-        if (role !== 'SPECIALIST') {
-          await AsyncStorage.setItem(MODE_KEY, 'client');
-          setModeState('client');
-        }
+        const hydratedUser = await fetchMe();
+        const canUseSpecialistMode = !!hydratedUser.profiles?.specialistId;
+
+        const storedMode = await AsyncStorage.getItem(MODE_KEY);
+        const nextMode: Mode =
+          canUseSpecialistMode && storedMode === 'specialist' ? 'specialist' : 'client';
+
+        await AsyncStorage.setItem(MODE_KEY, nextMode);
+        setModeState(nextMode);
+        setNavMode(nextMode);
       } finally {
         setMeLoading(false);
       }
@@ -157,10 +182,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAuthToken(storedToken);
         setTokenState(storedToken);
 
-        const role = await fetchMe();
-        if (role === 'SPECIALIST' && storedMode) {
-          setModeState(storedMode as Mode);
-        }
+        const hydratedUser = await fetchMe();
+        const canUseSpecialistMode = !!hydratedUser.profiles?.specialistId;
+
+        const nextMode: Mode =
+          canUseSpecialistMode && storedMode === 'specialist' ? 'specialist' : 'client';
+
+        setModeState(nextMode);
+        setNavMode(nextMode);
       } catch (e) {
         if (axios.isAxiosError(e) && isUnauthorizedStatus(e.response?.status)) {
           await logout();

@@ -1,9 +1,10 @@
 import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAuth } from '../auth/AuthProvider';
 import AppLogo from '../components/AppLogo';
 import { ROOT_CATEGORIES } from '../data/categories';
 import { useSyncCustomerLocationOnMount } from '../hooks/useSyncCustomerLocationOnMount';
@@ -19,11 +20,37 @@ export default function ClientHome() {
   const insets = useSafeAreaInsets();
   const { unread, webBannerVisible, webBannerCount, dismissWebBanner } = useNotifications();
 
+  const auth = useAuth() as any;
+  const currentMode: 'client' | 'specialist' = auth?.mode ?? 'client';
+  const canUseSpecialistMode = !!auth?.user?.profiles?.specialistId;
+  const setAuthMode: ((mode: 'client' | 'specialist') => Promise<void>) | undefined = auth?.setMode;
+
   useSyncCustomerLocationOnMount();
 
   const handleOpenNotifications = () => {
     dismissWebBanner();
     nav.navigate('Notifications' as never);
+  };
+
+  const handleSwitchToSpecialistMode = () => {
+    Alert.alert(
+      'Cambiar a modo especialista',
+      'Vas a volver al modo especialista para gestionar tus trabajos, disponibilidad y perfil profesional.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Cambiar',
+          onPress: async () => {
+            try {
+              await setAuthMode?.('specialist');
+            } catch (e) {
+              if (__DEV__) console.log('[ClientHome] switch to specialist mode error', e);
+              Alert.alert('Ups', 'No pudimos cambiar de modo. Intentá nuevamente.');
+            }
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -64,6 +91,26 @@ export default function ClientHome() {
               <Pressable onPress={dismissWebBanner} hitSlop={10} style={styles.bannerCloseBtn}>
                 <Ionicons name="close" size={18} color="#015A69" />
               </Pressable>
+            </Pressable>
+          </View>
+        )}
+
+        {canUseSpecialistMode && currentMode === 'client' && (
+          <View style={styles.modeSwitchWrap}>
+            <Pressable style={styles.modeSwitchCard} onPress={handleSwitchToSpecialistMode}>
+              <View style={styles.modeSwitchIconWrap}>
+                <Ionicons name="sparkles-outline" size={22} color="#0A5B63" />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modeSwitchEyebrow}>Modo actual: Cliente</Text>
+                <Text style={styles.modeSwitchTitle}>Volver a modo especialista</Text>
+                <Text style={styles.modeSwitchText}>
+                  Gestioná tus órdenes, tu perfil profesional y tu disponibilidad.
+                </Text>
+              </View>
+
+              <Ionicons name="chevron-forward" size={22} color="#0A5B63" />
             </Pressable>
           </View>
         )}
@@ -187,5 +234,55 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlign: 'center',
     lineHeight: 20,
+  },
+
+  modeSwitchWrap: {
+    paddingHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+
+  modeSwitchCard: {
+    backgroundColor: '#E9FEFF',
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 12,
+    elevation: 8,
+  },
+
+  modeSwitchIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(10,91,99,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  modeSwitchEyebrow: {
+    color: '#0A5B63',
+    fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+
+  modeSwitchTitle: {
+    color: '#0A5B63',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+
+  modeSwitchText: {
+    color: '#4A6C70',
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 2,
   },
 });

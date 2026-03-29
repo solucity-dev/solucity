@@ -416,12 +416,27 @@ export default function CreateOrderScreen() {
         return;
       }
 
+      const mySpecialistProfileId = me?.profiles?.specialistId ?? null;
+
       // ✅ Rubro (categorySlug) desde el que se eligió al especialista
       const categorySlug = categorySlugParam;
       if (!categorySlug || !categorySlug.trim()) {
         Alert.alert(
           'Falta el rubro',
           'No recibimos categorySlug. Volvé atrás y entrá desde un rubro.',
+        );
+        return;
+      }
+
+      // ✅ BLOQUEO: no permitir contratarse a sí mismo
+      if (
+        mySpecialistProfileId &&
+        specialistIdParam &&
+        String(mySpecialistProfileId) === String(specialistIdParam)
+      ) {
+        Alert.alert(
+          'Acción no permitida',
+          'No podés contratarte a vos mismo. Elegí otro especialista para continuar.',
         );
         return;
       }

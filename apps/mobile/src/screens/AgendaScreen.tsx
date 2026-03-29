@@ -76,10 +76,12 @@ export default function AgendaScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { user } = useAuth();
+  const { user, mode } = useAuth() as any;
 
-  // ✅ role REAL para API (NO depende de mode)
-  const role: 'customer' | 'specialist' = user?.role === 'SPECIALIST' ? 'specialist' : 'customer';
+  // ✅ role para API según modo actual
+  const canUseSpecialistMode = !!user?.profiles?.specialistId;
+  const role: 'customer' | 'specialist' =
+    canUseSpecialistMode && mode === 'specialist' ? 'specialist' : 'customer';
 
   const incomingSection = route.params?.initialSection as AgendaSection | undefined;
   const needsRefresh = route.params?.refresh as boolean | undefined;

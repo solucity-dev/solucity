@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 
 import ClientTabs from './ClientTabs';
-import { setNavRole } from './navigationRef';
+import { setNavMode } from './navigationRef';
 import SpecialistTabs from './SpecialistTabs';
 import { useAuth } from '../auth/AuthProvider';
 import ChooseRole from '../screens/ChooseRole';
@@ -32,14 +32,22 @@ const ONBOARDING_KEY = 'onboarding:seen';
 const REGISTER_DRAFT_KEY = 'register_specialist_draft_v1';
 
 export default function RootNavigator() {
-  const { token, loading, user } = useAuth();
+  const { token, loading, user, mode } = useAuth();
 
   const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
   const [initialRoute, setInitialRoute] = useState<string | null>(null);
 
   useEffect(() => {
-    setNavRole(user?.role ?? null);
-  }, [user?.role]);
+    if (!user) {
+      setNavMode(null);
+      return;
+    }
+
+    const canUseSpecialistMode = !!(user as any)?.profiles?.specialistId;
+    const navMode = canUseSpecialistMode && mode === 'specialist' ? 'specialist' : 'client';
+
+    setNavMode(navMode);
+  }, [user, mode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,11 +124,12 @@ export default function RootNavigator() {
 
   // Con token → stack privado
   if (token && user) {
-    const isSpecialist = user.role === 'SPECIALIST';
+    const canUseSpecialistMode = !!(user as any)?.profiles?.specialistId;
+    const isSpecialistMode = canUseSpecialistMode && mode === 'specialist';
 
     return (
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {isSpecialist ? (
+        {isSpecialistMode ? (
           <Stack.Screen name="MainSpecialist" component={SpecialistTabs} />
         ) : (
           <Stack.Screen name="Main" component={ClientTabs} />

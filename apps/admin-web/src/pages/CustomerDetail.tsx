@@ -142,6 +142,10 @@ setOkMsg(`Email liberado correctamente → ${r.newEmail ?? 'deleted+...@deleted.
     <span>Email</span>
     <strong>{data.email}</strong>
   </div>
+        <div>
+  <span>Teléfono</span>
+  <strong>{data.phone ?? '—'}</strong>
+</div>
   <div>
     <span>Estado</span>
     <strong>{data.status}</strong>
@@ -182,6 +186,13 @@ setOkMsg(`Email liberado correctamente → ${r.newEmail ?? 'deleted+...@deleted.
     </div>
 
     <div>
+  <div className="cdState" style={{ marginBottom: 6 }}>
+    Teléfono
+  </div>
+  <strong>{data.phone ?? '—'}</strong>
+</div>
+
+    <div>
       <div className="cdState" style={{ marginBottom: 6 }}>
         Estado
       </div>
@@ -200,6 +211,51 @@ setOkMsg(`Email liberado correctamente → ${r.newEmail ?? 'deleted+...@deleted.
         User ID
       </div>
       <strong>{data.userId}</strong>
+    </div>
+  </div>
+</Card>
+
+    <Card title="Actividad del cliente">
+  <div
+    style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+      gap: 12,
+    }}
+  >
+    <div>
+      <div className="cdState" style={{ marginBottom: 6 }}>
+        Órdenes totales
+      </div>
+      <strong>{data.totalOrders ?? 0}</strong>
+    </div>
+
+    <div>
+      <div className="cdState" style={{ marginBottom: 6 }}>
+        Activas
+      </div>
+      <strong>{data.activeOrders ?? 0}</strong>
+    </div>
+
+    <div>
+      <div className="cdState" style={{ marginBottom: 6 }}>
+        Finalizadas
+      </div>
+      <strong>{data.finishedOrders ?? 0}</strong>
+    </div>
+
+    <div>
+      <div className="cdState" style={{ marginBottom: 6 }}>
+        Canceladas
+      </div>
+      <strong>{data.cancelledOrders ?? 0}</strong>
+    </div>
+
+    <div>
+      <div className="cdState" style={{ marginBottom: 6 }}>
+        Última orden
+      </div>
+      <strong>{formatDateAR(data.lastOrderAt)}</strong>
     </div>
   </div>
 </Card>

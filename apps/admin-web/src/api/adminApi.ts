@@ -541,10 +541,13 @@ export async function deleteAdminUser(userId: string, mode: DeleteAdminUserMode 
 
 export type AdminCustomerRow = {
   userId: string;
+  customerId?: string | null;
   email: string;
   name: string | null;
+  phone?: string | null;
   status: UserStatus;
   createdAt: string;
+  avatarUrl?: string | null;
 };
 
 export type AdminCustomersResponse = {
@@ -556,10 +559,21 @@ export type AdminCustomersResponse = {
 export type AdminCustomerDetail = {
   ok: true;
   userId: string;
+  customerId?: string | null;
+
   email: string;
+  phone?: string | null;
   name: string | null;
   status: UserStatus;
   createdAt: string | null;
+
+  avatarUrl?: string | null;
+
+  totalOrders?: number;
+  activeOrders?: number;
+  finishedOrders?: number;
+  cancelledOrders?: number;
+  lastOrderAt?: string | null;
 };
 
 export async function getAdminCustomers(params?: { q?: string; status?: UserStatus | 'ALL' }) {

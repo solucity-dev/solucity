@@ -340,9 +340,22 @@ adminRouter.get('/customers/:id', async (req, res) => {
       email: true,
       name: true,
       surname: true,
+      phone: true, // ✅ nuevo
       status: true,
       createdAt: true,
-      customer: { select: { id: true, avatarUrl: true } },
+      customer: {
+        select: {
+          id: true,
+          avatarUrl: true,
+          orders: {
+            select: {
+              status: true,
+              createdAt: true,
+            },
+            orderBy: { createdAt: 'desc' },
+          },
+        },
+      },
     },
   });
 
@@ -353,12 +366,20 @@ adminRouter.get('/customers/:id', async (req, res) => {
       select: {
         id: true,
         avatarUrl: true,
+        orders: {
+          select: {
+            status: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        },
         user: {
           select: {
             id: true,
             email: true,
             name: true,
             surname: true,
+            phone: true, // ✅ nuevo
             status: true,
             createdAt: true,
           },
@@ -377,15 +398,53 @@ adminRouter.get('/customers/:id', async (req, res) => {
 
   if (!user) return res.status(404).json({ ok: false, error: 'not_found' });
 
+  const customerData = (user as any).customer;
+
+  const orders = customerData?.orders ?? [];
+
+  const totalOrders = orders.length;
+
+  const activeOrders = orders.filter((o: any) =>
+    ['ASSIGNED', 'IN_PROGRESS', 'PAUSED', 'FINISHED_BY_SPECIALIST', 'IN_CLIENT_REVIEW'].includes(
+      o.status,
+    ),
+  ).length;
+
+  const finishedOrders = orders.filter((o: any) =>
+    ['CONFIRMED_BY_CLIENT', 'CLOSED'].includes(o.status),
+  ).length;
+
+  const cancelledOrders = orders.filter((o: any) =>
+    [
+      'CANCELLED_BY_CUSTOMER',
+      'CANCELLED_BY_SPECIALIST',
+      'CANCELLED_AUTO',
+      'REJECTED_BY_CLIENT',
+    ].includes(o.status),
+  ).length;
+
+  const lastOrderAt = orders[0]?.createdAt ? orders[0].createdAt.toISOString() : null;
+
   return res.json({
     ok: true,
     userId: user.id,
     customerId: (user as any).customer?.id ?? null,
+
     email: user.email,
+    phone: (user as any).phone ?? null, // ✅ nuevo
+
     name: `${user.name ?? ''} ${user.surname ?? ''}`.trim() || null,
     status: user.status,
     createdAt: user.createdAt ? user.createdAt.toISOString() : null,
+
     avatarUrl: (user as any).customer?.avatarUrl ?? null,
+
+    // ✅ MÉTRICAS
+    totalOrders,
+    activeOrders,
+    finishedOrders,
+    cancelledOrders,
+    lastOrderAt,
   });
 });
 

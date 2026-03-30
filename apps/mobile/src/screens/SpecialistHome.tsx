@@ -238,11 +238,26 @@ const SPECIALTY_OPTIONS = [
   'mecanico-automotor',
   'electricidad-del-automotor',
   'mecanica-de-motos',
+  'gomeria',
+  'car-detailing',
+  'lavadero-de-autos',
 
   // ── Arreglos y reparaciones ───────────────────────────────
   'reparacion-de-calzado',
   'arreglos-de-indumentaria',
   'costura-modista',
+
+  // ── Alquiler ─────────────────────────────────────────────
+  'alquiler-de-herramientas',
+  'alquiler-de-maquinaria-liviana',
+  'alquiler-de-maquinaria-pesada',
+  'alquiler-de-generadores',
+  'alquiler-de-andamios',
+  'alquiler-de-hidrolavadoras',
+  'alquiler-de-hormigoneras',
+  'alquiler-de-elevadores',
+  'alquiler-de-equipos-de-sonido-e-iluminacion',
+  'alquiler-de-carpas-y-mobiliario',
 ] as const;
 
 const REQUIRES_CERT_FALLBACK = new Set([
@@ -2498,56 +2513,54 @@ export default function SpecialistHome() {
               <Ionicons name="chevron-forward" size={18} color="#E9FEFF" />
             </Pressable>
 
-            <View style={{ marginTop: 10 }}>
-              <Pressable
-                onPress={() => {
-                  (navigation as any).navigate('Perfil', { screen: 'ProfileMain' });
+            {serviceModes.includes('HOME') ? (
+              <View style={{ marginTop: 10 }}>
+                <Pressable
+                  onPress={() => {
+                    (navigation as any).navigate('Perfil', { screen: 'ProfileMain' });
 
-                  setTimeout(() => {
-                    (navigation as any).navigate('Perfil', { screen: 'BackgroundCheck' });
-                  }, 0);
-                }}
-                style={{
-                  padding: 12,
-                  borderRadius: 14,
-                  backgroundColor: 'rgba(255,255,255,0.10)',
-                  borderWidth: 1,
-                  borderColor: 'rgba(233,254,255,0.18)',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-                  <Ionicons name="document-text-outline" size={18} color="#E9FEFF" />
-                  <Text style={{ color: '#E9FEFF', fontWeight: '800', flex: 1 }}>
-                    Certificado de buena conducta:{' '}
-                    {bgStatus === 'APPROVED'
-                      ? 'Aprobado ✅'
-                      : bgStatus === 'PENDING'
-                        ? 'En revisión'
-                        : bgStatus === 'REJECTED'
-                          ? 'Rechazado'
-                          : requiresBackgroundCheck
-                            ? 'No cargado'
-                            : 'Opcional para tu modalidad actual'}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color="#E9FEFF" />
-              </Pressable>
+                    setTimeout(() => {
+                      (navigation as any).navigate('Perfil', { screen: 'BackgroundCheck' });
+                    }, 0);
+                  }}
+                  style={{
+                    padding: 12,
+                    borderRadius: 14,
+                    backgroundColor: 'rgba(255,255,255,0.10)',
+                    borderWidth: 1,
+                    borderColor: 'rgba(233,254,255,0.18)',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                    <Ionicons name="document-text-outline" size={18} color="#E9FEFF" />
+                    <Text style={{ color: '#E9FEFF', fontWeight: '800', flex: 1 }}>
+                      Certificado de buena conducta:{' '}
+                      {bgStatus === 'APPROVED'
+                        ? 'Aprobado ✅'
+                        : bgStatus === 'PENDING'
+                          ? 'En revisión'
+                          : bgStatus === 'REJECTED'
+                            ? 'Rechazado'
+                            : 'No cargado'}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color="#E9FEFF" />
+                </Pressable>
 
-              <Text style={[styles.muted, { marginTop: 8 }]}>
-                {requiresBackgroundCheck
-                  ? 'Este requisito es obligatorio si ofrecés servicio a domicilio.'
-                  : 'Solo se vuelve obligatorio si activás la modalidad a domicilio.'}
-              </Text>
-
-              {bgStatus === 'REJECTED' && profile?.backgroundCheck?.rejectionReason ? (
                 <Text style={[styles.muted, { marginTop: 8 }]}>
-                  Motivo: {profile.backgroundCheck.rejectionReason}
+                  Este requisito es obligatorio si ofrecés servicio a domicilio.
                 </Text>
-              ) : null}
-            </View>
+
+                {bgStatus === 'REJECTED' && profile?.backgroundCheck?.rejectionReason ? (
+                  <Text style={[styles.muted, { marginTop: 8 }]}>
+                    Motivo: {profile.backgroundCheck.rejectionReason}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
           </View>
 
           {/* Contrataciones */}
@@ -3144,21 +3157,31 @@ export default function SpecialistHome() {
                 {filteredChipSource.length === 0 ? (
                   <Text style={styles.searchEmptyText}>No encontramos rubros con ese nombre.</Text>
                 ) : (
-                  <View style={styles.chipsWrap}>
-                    {filteredChipSource.map((opt) => {
-                      const on = specialties.includes(opt.slug);
-                      return (
-                        <Pressable
-                          key={opt.slug}
-                          onPress={() => toggleSpecialty(opt.slug)}
-                          style={[styles.chip, on ? styles.chipOn : styles.chipOff]}
-                        >
-                          <Text style={[styles.chipT, { color: on ? '#063A40' : '#9ec9cd' }]}>
-                            {opt.name}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
+                  <View style={styles.specialtiesScrollBox}>
+                    <RNScrollView
+                      style={styles.specialtiesInnerScroll}
+                      contentContainerStyle={styles.specialtiesInnerContent}
+                      showsVerticalScrollIndicator
+                      nestedScrollEnabled
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      <View style={styles.chipsWrap}>
+                        {filteredChipSource.map((opt) => {
+                          const on = specialties.includes(opt.slug);
+                          return (
+                            <Pressable
+                              key={opt.slug}
+                              onPress={() => toggleSpecialty(opt.slug)}
+                              style={[styles.chip, on ? styles.chipOn : styles.chipOff]}
+                            >
+                              <Text style={[styles.chipT, { color: on ? '#063A40' : '#9ec9cd' }]}>
+                                {opt.name}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </RNScrollView>
                   </View>
                 )}
 
@@ -4235,5 +4258,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
     marginTop: 6,
+  },
+  specialtiesScrollBox: {
+    marginTop: 6,
+    maxHeight: 260,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(233,254,255,0.12)',
+    overflow: 'hidden',
+  },
+
+  specialtiesInnerScroll: {
+    maxHeight: 260,
+  },
+
+  specialtiesInnerContent: {
+    padding: 10,
   },
 });

@@ -128,6 +128,70 @@ function stripStreetNumber(input: string): string {
     .trim();
 }
 
+function dedupeAddressParts(parts: string[]): string[] {
+  const out: string[] = [];
+
+  for (const part of parts) {
+    const normalized = part.trim().toLowerCase();
+    if (!normalized) continue;
+
+    if (!out.some((p) => p.trim().toLowerCase() === normalized)) {
+      out.push(part.trim());
+    }
+  }
+
+  return out;
+}
+
+function formatDisplayAddress(raw?: string | null): string | null {
+  const input = String(raw ?? '').trim();
+  if (!input) return null;
+
+  const parts = dedupeAddressParts(
+    input
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean),
+  );
+
+  if (!parts.length) return null;
+
+  const blacklist = [
+    /^municipio de /i,
+    /^pedan[ií]a /i,
+    /^departamento /i,
+    /^provincia de /i,
+    /^argentina$/i,
+    /^[A-Z]\d{4,}$/i, // X5800
+  ];
+
+  const clean = parts.filter((part) => !blacklist.some((rx) => rx.test(part)));
+
+  if (!clean.length) return input;
+
+  const first = clean[0] ?? '';
+  const second = clean[1] ?? '';
+  const third = clean[2] ?? '';
+  const fourth = clean[3] ?? '';
+  const fifth = clean[4] ?? '';
+
+  const firstIsNumber = /^\d+[A-Za-z]?$/.test(first);
+
+  // Caso típico:
+  // 875, Fray Luis Beltrán, Leandro N. Alem, Río Cuarto, Córdoba
+  // => Fray Luis Beltrán 875, Río Cuarto, Córdoba
+  if (firstIsNumber && second) {
+    const streetLine = `${second} ${first}`.trim();
+    const city = fourth || third || null;
+    const province = fifth || null;
+
+    return [streetLine, city, province].filter(Boolean).join(', ');
+  }
+
+  // Fallback simple
+  return clean.slice(0, 3).join(', ');
+}
+
 async function geocodeHomeAddressWithFallback(params: {
   formatted: string;
   locality?: string | null;
@@ -2300,32 +2364,29 @@ orders.get('/:id', auth, async (req, res) => {
       .filter(Boolean);
 
     // ───────── DIRECCIÓN ─────────
-    // ✅ HOME: preferimos lo que escribió el cliente (más “limpio”)
-    // ✅ OFFICE: mostramos la dirección del especialista
-    let resolvedAddress =
-      sm2 === 'HOME'
-        ? typeof order.addressText === 'string' && order.addressText.trim()
-          ? order.addressText.trim()
-          : typeof order.location?.formatted === 'string' && order.location.formatted.trim()
-            ? order.location.formatted.trim()
-            : null
+    // ✅ HOME: preferimos lo que escribió el cliente
+    // ✅ OFFICE: mostramos la dirección de la oficina/local del especialista
+    const homeRawAddress =
+      typeof order.addressText === 'string' && order.addressText.trim()
+        ? order.addressText.trim()
         : typeof order.location?.formatted === 'string' && order.location.formatted.trim()
           ? order.location.formatted.trim()
-          : typeof order.addressText === 'string' && order.addressText.trim()
-            ? order.addressText.trim()
-            : null;
+          : null;
 
-    if (sm2 === 'OFFICE') {
-      const officeFormatted =
-        typeof order.location?.formatted === 'string' && order.location.formatted.trim()
-          ? order.location.formatted.trim()
-          : typeof order.specialist?.officeAddress?.formatted === 'string' &&
-              order.specialist.officeAddress.formatted.trim()
-            ? order.specialist.officeAddress.formatted.trim()
-            : null;
+    const officeRawAddress =
+      typeof order.location?.formatted === 'string' && order.location.formatted.trim()
+        ? order.location.formatted.trim()
+        : typeof order.specialist?.officeAddress?.formatted === 'string' &&
+            order.specialist.officeAddress.formatted.trim()
+          ? order.specialist.officeAddress.formatted.trim()
+          : null;
 
-      resolvedAddress = officeFormatted;
-    }
+    let resolvedAddress =
+      sm2 === 'HOME'
+        ? formatDisplayAddress(homeRawAddress)
+        : sm2 === 'OFFICE'
+          ? formatDisplayAddress(officeRawAddress)
+          : null;
 
     if (sm2 === 'ONLINE') resolvedAddress = null;
 
@@ -2335,9 +2396,10 @@ orders.get('/:id', auth, async (req, res) => {
       locationFormatted: order.location?.formatted,
       addressText: order.addressText,
       officeAddressFormatted: order.specialist?.officeAddress?.formatted,
+      homeRawAddress,
+      officeRawAddress,
       resolvedAddress,
     });
-
     // ───────── PAYLOAD FINAL ─────────
     const payload = {
       id: order.id,

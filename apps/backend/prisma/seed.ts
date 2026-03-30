@@ -153,6 +153,9 @@ const groups: GroupSeed[] = [
       'Mecánico automotor',
       'Electricidad del automotor',
       'Mecánica de motos',
+      'Gomería',
+      'Car detailing',
+      'Lavadero de autos',
     ],
   },
   {

@@ -112,6 +112,9 @@ export type CategorySlug =
   | 'mecanico-automotor'
   | 'electricidad-del-automotor'
   | 'mecanica-de-motos'
+  | 'gomeria'
+  | 'car-detailing'
+  | 'lavadero-de-autos'
   // ── Arreglos y reparaciones ───────────────────────────────
   | 'reparacion-de-calzado'
   | 'arreglos-de-indumentaria'

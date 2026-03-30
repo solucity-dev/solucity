@@ -6,14 +6,17 @@ import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   AppState,
   Easing,
   Image,
   Keyboard,
+  Modal,
   Platform,
   Pressable,
+  ScrollView as RNScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -23,6 +26,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../auth/AuthProvider';
+import { LOCALITIES_CORDOBA } from '../data/localitiesCordoba';
 import { api } from '../lib/api';
 import { registerForPush } from '../notifications/registerForPush';
 
@@ -44,6 +48,8 @@ export default function RegisterSpecialist() {
   const { setMode, login } = useAuth();
 
   const [step, setStep] = useState<Step>(1);
+
+  const scrollRef = useRef<any>(null);
 
   const saveDraft = async (patch: Record<string, any> = {}) => {
     try {
@@ -111,6 +117,11 @@ export default function RegisterSpecialist() {
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
+
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollToPosition?.(0, 0, true);
+      scrollRef.current?.scrollTo?.({ y: 0, animated: true });
+    });
   }, [step, progressAnim]);
 
   useEffect(() => {
@@ -559,6 +570,8 @@ export default function RegisterSpecialist() {
   const [serviceModes, setServiceModes] = useState<('HOME' | 'OFFICE' | 'ONLINE')[]>([]);
   const [officeAddress, setOfficeAddress] = useState('');
   const [officeLocality, setOfficeLocality] = useState('Río Cuarto');
+  const [officeLocalityOpen, setOfficeLocalityOpen] = useState(false);
+  const [officeLocalityQuery, setOfficeLocalityQuery] = useState('');
 
   // ✅ hint suave paso 3
   const [step3Hint, setStep3Hint] = useState<string | null>(null);
@@ -675,6 +688,13 @@ export default function RegisterSpecialist() {
       .trim();
   }
 
+  const filteredOfficeLocalities = useMemo(() => {
+    const q = normalizeText(officeLocalityQuery);
+    if (!q) return LOCALITIES_CORDOBA;
+
+    return LOCALITIES_CORDOBA.filter((x) => normalizeText(x).includes(q));
+  }, [officeLocalityQuery]);
+
   /**
    * ✅ MÁS SEGURO:
    * - registramos el push token "a demanda" después del login
@@ -787,6 +807,7 @@ export default function RegisterSpecialist() {
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
       <KeyboardAwareScrollView
+        ref={scrollRef}
         enableOnAndroid={Platform.OS === 'android'}
         extraScrollHeight={Platform.OS === 'web' ? 0 : 18}
         keyboardShouldPersistTaps="handled"
@@ -1019,13 +1040,16 @@ export default function RegisterSpecialist() {
                 disabled={loadingUpload || !step2Complete}
                 style={[s.btn, s.halfBtn, (loadingUpload || !step2Complete) && s.disabled]}
               >
-                <Text style={s.btnT}>
-                  {loadingUpload
-                    ? 'Subiendo…'
-                    : !step2Complete
-                      ? 'Completá las fotos'
-                      : 'Continuar ▸ Paso 3'}
-                </Text>
+                {loadingUpload ? (
+                  <View style={s.btnLoadingRow}>
+                    <ActivityIndicator color="#0B6B76" />
+                    <Text style={s.btnT}>Preparando siguiente paso…</Text>
+                  </View>
+                ) : (
+                  <Text style={s.btnT}>
+                    {!step2Complete ? 'Completá las fotos' : 'Continuar ▸ Paso 3'}
+                  </Text>
+                )}
               </Pressable>
             </View>
           </View>
@@ -1082,13 +1106,17 @@ export default function RegisterSpecialist() {
 
                 <Text style={s.subLabel}>Localidad</Text>
 
-                <TextInput
+                <Pressable
                   style={s.input}
-                  value={officeLocality}
-                  onChangeText={setOfficeLocality}
-                  placeholder="Ej: Río Cuarto"
-                  placeholderTextColor="#cfe"
-                />
+                  onPress={() => {
+                    setOfficeLocalityQuery('');
+                    setOfficeLocalityOpen(true);
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>
+                    {officeLocality || 'Seleccionar localidad'}
+                  </Text>
+                </Pressable>
               </View>
             )}
 
@@ -1135,19 +1163,29 @@ export default function RegisterSpecialist() {
               {filteredCategories.length === 0 ? (
                 <Text style={s.emptyText}>No encontramos servicios con ese nombre.</Text>
               ) : (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                  {filteredCategories.map((c) => {
-                    const active = selectedSlugs.includes(c.slug);
-                    return (
-                      <Pressable
-                        key={c.slug}
-                        onPress={() => toggleSlug(c.slug)}
-                        style={[s.chip, active && s.chipActive]}
-                      >
-                        <Text style={[s.chipT, active && s.chipTActive]}>{c.name}</Text>
-                      </Pressable>
-                    );
-                  })}
+                <View style={s.servicesScrollBox}>
+                  <RNScrollView
+                    style={s.servicesInnerScroll}
+                    contentContainerStyle={s.servicesInnerContent}
+                    showsVerticalScrollIndicator
+                    nestedScrollEnabled
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                      {filteredCategories.map((c) => {
+                        const active = selectedSlugs.includes(c.slug);
+                        return (
+                          <Pressable
+                            key={c.slug}
+                            onPress={() => toggleSlug(c.slug)}
+                            style={[s.chip, active && s.chipActive]}
+                          >
+                            <Text style={[s.chipT, active && s.chipTActive]}>{c.name}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </RNScrollView>
                 </View>
               )}
             </View>
@@ -1173,12 +1211,73 @@ export default function RegisterSpecialist() {
                 disabled={finalizing}
                 style={[s.btn, s.halfBtn, { marginTop: 8 }, finalizing && s.disabled]}
               >
-                <Text style={s.btnT}>{finalizing ? 'Finalizando…' : 'Finalizar registro'}</Text>
+                {finalizing ? (
+                  <View style={s.btnLoadingRow}>
+                    <ActivityIndicator color="#0B6B76" />
+                    <Text style={s.btnT}>Finalizando registro…</Text>
+                  </View>
+                ) : (
+                  <Text style={s.btnT}>Finalizar registro</Text>
+                )}
               </Pressable>
             </View>
           </View>
         )}
       </KeyboardAwareScrollView>
+
+      <Modal
+        visible={officeLocalityOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOfficeLocalityOpen(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.55)',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+        >
+          <View style={s.localityModalCard}>
+            <Text style={s.localityModalTitle}>Elegir localidad</Text>
+
+            <TextInput
+              value={officeLocalityQuery}
+              onChangeText={setOfficeLocalityQuery}
+              placeholder="Buscar localidad…"
+              placeholderTextColor="#7fa5a9"
+              style={s.localitySearchInput}
+            />
+
+            <RNScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
+              {filteredOfficeLocalities.map((loc) => (
+                <Pressable
+                  key={loc}
+                  onPress={() => {
+                    setOfficeLocality(loc);
+                    setOfficeLocalityQuery('');
+                    setOfficeLocalityOpen(false);
+                  }}
+                  style={[s.localityOption, loc === officeLocality && s.localityOptionActive]}
+                >
+                  <Text style={s.localityOptionText}>{loc}</Text>
+                </Pressable>
+              ))}
+            </RNScrollView>
+
+            <Pressable
+              onPress={() => {
+                setOfficeLocalityQuery('');
+                setOfficeLocalityOpen(false);
+              }}
+              style={s.localityCloseBtn}
+            >
+              <Text style={s.localityCloseBtnText}>Cerrar</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -1455,6 +1554,66 @@ const s = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
+  servicesScrollBox: {
+    marginTop: 4,
+    maxHeight: 260,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    overflow: 'hidden',
+  },
+  servicesInnerScroll: {
+    maxHeight: 260,
+  },
+  servicesInnerContent: {
+    padding: 10,
+  },
+
+  localityModalCard: {
+    backgroundColor: '#E9FEFF',
+    borderRadius: 16,
+    padding: 14,
+  },
+  localityModalTitle: {
+    color: '#0B6B76',
+    fontWeight: '900',
+    fontSize: 16,
+    marginBottom: 10,
+  },
+  localitySearchInput: {
+    backgroundColor: 'rgba(11,107,118,0.08)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#0B6B76',
+    marginBottom: 10,
+    fontWeight: '700',
+  },
+  localityOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    marginBottom: 6,
+  },
+  localityOptionActive: {
+    backgroundColor: 'rgba(11,107,118,0.10)',
+  },
+  localityOptionText: {
+    color: '#0B6B76',
+    fontWeight: '800',
+  },
+  localityCloseBtn: {
+    marginTop: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: '#0B6B76',
+  },
+  localityCloseBtnText: {
+    color: '#E9FEFF',
+    fontWeight: '900',
+  },
 
   // card base
   card: { backgroundColor: 'rgba(255,255,255,0.10)', borderRadius: 16, padding: 14, gap: 10 },
@@ -1475,6 +1634,11 @@ const s = StyleSheet.create({
     marginTop: 6,
   },
   btnT: { color: '#0B6B76', fontWeight: '800' },
+  btnLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   btnSecondary: {
     backgroundColor: 'rgba(255,255,255,0.12)',
     borderWidth: 1,

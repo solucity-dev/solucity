@@ -118,24 +118,20 @@ const openInMapsCoords = async (lat: number, lng: number, label?: string) => {
   const safeLabel = (label ?? '').replace(/\s+/g, ' ').trim();
   const encodedLabel = encodeURIComponent(safeLabel);
 
-  // ✅ Android: navegación directa por coordenadas (evita “Coincidencias parciales”)
+  // ✅ Android: navegación directa por coordenadas
   const androidNav = `google.navigation:q=${lat},${lng}`;
 
-  // ✅ Android fallback: geo (también suele abrir directo)
-  const androidGeo = safeLabel
-    ? `geo:${lat},${lng}?q=${lat},${lng}`
-    : `geo:${lat},${lng}?q=${lat},${lng}`;
+  // ✅ Android fallback
+  const androidGeo = `geo:${lat},${lng}?q=${lat},${lng}`;
 
-  // ✅ Web: NO usar lat,lng(label) en query (eso te provoca parciales)
-  // Mejor abrir directo en “place” por coordenadas:
+  // ✅ Web
   const webGoogle = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
-  // ✅ iOS: Apple Maps
+  // ✅ iOS
   const iosApple = safeLabel
     ? `maps://?ll=${lat},${lng}&q=${encodedLabel}`
     : `maps://?ll=${lat},${lng}`;
 
-  // 1) Android intent más confiable
   if (Platform.OS === 'android') {
     try {
       await Linking.openURL(androidNav);
@@ -147,7 +143,6 @@ const openInMapsCoords = async (lat: number, lng: number, label?: string) => {
     } catch {}
   }
 
-  // 2) iOS Apple Maps
   if (Platform.OS === 'ios') {
     try {
       await Linking.openURL(iosApple);
@@ -155,7 +150,6 @@ const openInMapsCoords = async (lat: number, lng: number, label?: string) => {
     } catch {}
   }
 
-  // 3) Web fallback
   try {
     await Linking.openURL(webGoogle);
     return;

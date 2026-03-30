@@ -378,6 +378,21 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
       title: 'Mecánica de motos',
       icon: { set: 'mdi', name: 'motorbike' },
     },
+    {
+      id: 'gomeria',
+      title: 'Gomería',
+      icon: { set: 'mdi', name: 'car-tire-alert' },
+    },
+    {
+      id: 'car-detailing',
+      title: 'Car detailing',
+      icon: { set: 'mdi', name: 'car-wash' },
+    },
+    {
+      id: 'lavadero-de-autos',
+      title: 'Lavadero de autos',
+      icon: { set: 'mdi', name: 'spray' },
+    },
   ],
 
   'arreglos-reparaciones': [

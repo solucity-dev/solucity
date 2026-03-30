@@ -42,6 +42,18 @@ function formatDateAR(iso?: string | null) {
   });
 }
 
+function formatServiceModes(modes?: ('HOME' | 'OFFICE' | 'ONLINE')[] | null) {
+  if (!modes?.length) return '—';
+
+  const labels: Record<'HOME' | 'OFFICE' | 'ONLINE', string> = {
+    HOME: 'Domicilio',
+    OFFICE: 'Local',
+    ONLINE: 'Online',
+  };
+
+  return modes.map((m) => labels[m] ?? m).join(' · ');
+}
+
 export default function Specialists() {
   const nav = useNavigate();
   const { data, loading, error, reload } = useAdminSpecialists();
@@ -111,16 +123,26 @@ export default function Specialists() {
     const list: AdminSpecialistRow[] = data ?? [];
     const query = q.trim().toLowerCase();
 
-    return list
-      .filter((r) => {
-        if (!query) return true;
-        return (
-          r.email.toLowerCase().includes(query) ||
-          r.name.toLowerCase().includes(query) ||
-          r.userId.toLowerCase().includes(query) ||
-          (r.specialistId ?? '').toLowerCase().includes(query)
-        );
-      })
+return list
+  .filter((r) => {
+    if (!query) return true;
+
+    const businessName = (r.businessName ?? '').toLowerCase();
+    const phone = (r.phone ?? '').toLowerCase();
+    const headline = (r.specialtyHeadline ?? '').toLowerCase();
+    const officeAddress = (r.officeAddress ?? '').toLowerCase();
+
+    return (
+      r.email.toLowerCase().includes(query) ||
+      r.name.toLowerCase().includes(query) ||
+      r.userId.toLowerCase().includes(query) ||
+      (r.specialistId ?? '').toLowerCase().includes(query) ||
+      businessName.includes(query) ||
+      phone.includes(query) ||
+      headline.includes(query) ||
+      officeAddress.includes(query)
+    );
+  })
       .filter((r) => (filterKyc === 'ALL' ? true : r.kycStatus === filterKyc))
       .filter((r) => {
         if (filterSub === 'ALL') return true;
@@ -226,11 +248,11 @@ export default function Specialists() {
 
           <div className="specFilters">
             <input
-              className="specInput"
-              placeholder="Buscar por nombre, email o ID"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-            />
+  className="specInput"
+  placeholder="Buscar por nombre, negocio, teléfono, email o ID"
+  value={q}
+  onChange={(e) => setQ(e.target.value)}
+/>
 
             <select className="specSelect" value={filterKyc} onChange={(e) => setFilterKyc(e.target.value as KycFilter)}>
               <option value="ALL">KYC: Todos</option>
@@ -270,44 +292,84 @@ export default function Specialists() {
           <div className="specTableWrap">
             <table className="specTable">
               <thead>
-                <tr>
-                  <th>Especialista</th>
-                  <th>KYC</th>
-                  <th>Suscripción</th>
-                  <th>Rating</th>
-                  <th>Días</th>
-                  <th>Estado</th>
-                  <th />
-                </tr>
-              </thead>
+  <tr>
+    <th>Especialista</th>
+    <th>KYC</th>
+    <th>Suscripción</th>
+    <th>Rating</th>
+    <th>Órdenes</th>
+    <th>Portfolio</th>
+    <th>Días</th>
+    <th>Estado</th>
+    <th />
+  </tr>
+</thead>
 
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.userId}>
                     <td>
-                      <strong>{r.name}</strong>
-                      <div className="muted">{r.email}</div>
+  <strong>{r.name}</strong>
 
-                      <div className="muted" style={{ marginTop: 2 }}>
-                        <span style={{ opacity: 0.8 }}>ID:</span> {r.specialistId ?? r.userId}
-                      </div>
+  {r.businessName ? (
+    <div className="muted" style={{ marginTop: 2 }}>
+      <span style={{ opacity: 0.8 }}>Negocio:</span> {r.businessName}
+    </div>
+  ) : null}
 
-                      <div className="muted" style={{ marginTop: 2 }}>
-  <span style={{ opacity: 0.8 }}>Creado:</span> {formatDateAR(r.createdAt)}
-</div>
+  <div className="muted">{r.email}</div>
 
+  {r.phone ? (
+    <div className="muted" style={{ marginTop: 2 }}>
+      <span style={{ opacity: 0.8 }}>Tel:</span> {r.phone}
+    </div>
+  ) : null}
 
-                      {r.specialties?.length ? (
-                        <div className="muted" style={{ marginTop: 4 }}>
-                          {r.specialties.slice(0, 3).map((x) => x.name).join(' · ')}
-                          {r.specialties.length > 3 ? ` · +${r.specialties.length - 3}` : ''}
-                        </div>
-                      ) : null}
-                    </td>
+  {r.specialtyHeadline ? (
+    <div className="muted" style={{ marginTop: 2 }}>
+      <span style={{ opacity: 0.8 }}>Perfil:</span> {r.specialtyHeadline}
+    </div>
+  ) : null}
+
+  <div className="muted" style={{ marginTop: 2 }}>
+    <span style={{ opacity: 0.8 }}>Modalidades:</span> {formatServiceModes(r.serviceModes)}
+  </div>
+
+  {r.officeAddress ? (
+    <div className="muted" style={{ marginTop: 2 }}>
+      <span style={{ opacity: 0.8 }}>Oficina:</span> {r.officeAddress}
+    </div>
+  ) : null}
+
+  <div className="muted" style={{ marginTop: 2 }}>
+    <span style={{ opacity: 0.8 }}>Disponible:</span> {r.availableNow ? 'Sí' : 'No'}
+  </div>
+
+  <div className="muted" style={{ marginTop: 2 }}>
+    <span style={{ opacity: 0.8 }}>ID:</span> {r.specialistId ?? r.userId}
+  </div>
+
+  <div className="muted" style={{ marginTop: 2 }}>
+    <span style={{ opacity: 0.8 }}>Creado:</span> {formatDateAR(r.createdAt)}
+  </div>
+
+  {r.specialties?.length ? (
+    <div className="muted" style={{ marginTop: 4 }}>
+      {r.specialties.slice(0, 3).map((x) => x.name).join(' · ')}
+      {r.specialties.length > 3 ? ` · +${r.specialties.length - 3}` : ''}
+    </div>
+  ) : null}
+</td>
 
                     <td>
-                      <Pill>{r.kycStatus}</Pill>
-                    </td>
+  <Pill>{r.kycStatus}</Pill>
+
+  {r.backgroundCheckStatus ? (
+    <div className="muted" style={{ marginTop: 6 }}>
+      Antecedentes: {r.backgroundCheckStatus}
+    </div>
+  ) : null}
+</td>
 
                     <td>
                       <Pill>{r.subscription?.status ?? 'NONE'}</Pill>
@@ -317,6 +379,20 @@ export default function Specialists() {
                       {Number.isFinite(r.ratingAvg) ? r.ratingAvg.toFixed(1) : '0.0'} ({r.ratingCount ?? 0})
 
                     </td>
+                    <td>
+  <div>{r.totalOrders ?? 0} total</div>
+  <div className="muted" style={{ marginTop: 4 }}>
+    Activas: {r.activeOrders ?? 0}
+  </div>
+  <div className="muted" style={{ marginTop: 2 }}>
+    Finalizadas: {r.finishedOrders ?? 0}
+  </div>
+  <div className="muted" style={{ marginTop: 2 }}>
+    Canceladas: {r.cancelledOrders ?? 0}
+  </div>
+</td>
+
+<td>{r.portfolioCount ?? 0}</td>
 
 <td>
   {r.subscription ? (

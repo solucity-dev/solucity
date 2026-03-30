@@ -92,6 +92,18 @@ function certTone(status?: string): Tone {
   return 'neutral';
 }
 
+function formatServiceModes(modes?: ('HOME' | 'OFFICE' | 'ONLINE')[] | null) {
+  if (!modes?.length) return '—';
+
+  const labels: Record<'HOME' | 'OFFICE' | 'ONLINE', string> = {
+    HOME: 'Domicilio',
+    OFFICE: 'Local',
+    ONLINE: 'Online',
+  };
+
+  return modes.map((m) => labels[m] ?? m).join(' · ');
+}
+
 export default function SpecialistDetail() {
   const { id } = useParams<{ id: string }>();
   const { data, loading, error, reload } = useAdminSpecialistDetail(id);
@@ -598,29 +610,39 @@ export default function SpecialistDetail() {
               </div>
 
               <div className="sdMeta">
-                <div>
-                  <span className="sdMetaLabel">Email</span>
-                  <div className="sdMetaValue">{typed.email}</div>
-                </div>
+  <div>
+    <span className="sdMetaLabel">Email</span>
+    <div className="sdMetaValue">{typed.email}</div>
+  </div>
 
-                <div>
-                  <span className="sdMetaLabel">Estado</span>
-                  <div className="sdMetaValue">{typed.status}</div>
-                </div>
+  <div>
+    <span className="sdMetaLabel">Teléfono</span>
+    <div className="sdMetaValue">{typed.phone ?? '—'}</div>
+  </div>
 
-                <div>
-                  <span className="sdMetaLabel">Rating</span>
-                  <div className="sdMetaValue">
-                    {typed.ratingAvg != null ? typed.ratingAvg.toFixed(1) : '—'}{' '}
-                    <span className="sdMuted">({typed.ratingCount ?? 0})</span>
-                  </div>
-                </div>
+  <div>
+    <span className="sdMetaLabel">Estado</span>
+    <div className="sdMetaValue">{typed.status}</div>
+  </div>
 
-                <div>
-                  <span className="sdMetaLabel">Badge</span>
-                  <div className="sdMetaValue">{typed.badge ?? '—'}</div>
-                </div>
-              </div>
+  <div>
+    <span className="sdMetaLabel">Rating</span>
+    <div className="sdMetaValue">
+      {typed.ratingAvg != null ? typed.ratingAvg.toFixed(1) : '—'}{' '}
+      <span className="sdMuted">({typed.ratingCount ?? 0})</span>
+    </div>
+  </div>
+
+  <div>
+    <span className="sdMetaLabel">Badge</span>
+    <div className="sdMetaValue">{typed.badge ?? '—'}</div>
+  </div>
+
+  <div>
+    <span className="sdMetaLabel">Último login</span>
+    <div className="sdMetaValue">{formatDateAR(typed.lastLoginAt)}</div>
+  </div>
+</div>
             </div>
           </div>
 
@@ -701,33 +723,105 @@ export default function SpecialistDetail() {
               )}
             </Card>
 
+              <Card title="Negocio y contacto">
+  <div className="sdKV">
+    <div className="k">
+      <span>Negocio</span>
+      <strong>{typed.businessName?.trim() ? typed.businessName : '—'}</strong>
+    </div>
+
+    <div className="k">
+      <span>Teléfono</span>
+      <strong>{typed.phone?.trim() ? typed.phone : '—'}</strong>
+    </div>
+
+    <div className="k">
+      <span>Modalidades</span>
+      <strong>{formatServiceModes(typed.serviceModes)}</strong>
+    </div>
+
+    <div className="k">
+      <span>Disponible</span>
+      <strong>
+        {typeof typed.availableNow === 'boolean' ? (typed.availableNow ? 'Sí' : 'No') : '—'}
+      </strong>
+    </div>
+  </div>
+
+  <div className="sdBlock">
+    <div className="sdBlockLabel">Titular / headline</div>
+    <div className="sdBlockText">
+      {typed.specialtyHeadline?.trim() ? typed.specialtyHeadline : '—'}
+    </div>
+  </div>
+
+  <div className="sdBlock">
+    <div className="sdBlockLabel">Dirección de oficina/local</div>
+    <div className="sdBlockText">{typed.officeAddress?.formatted ?? '—'}</div>
+  </div>
+</Card>
+
             <Card title="Perfil">
-              <div className="sdKV">
-                <div className="k">
-                  <span>Disponible ahora</span>
-                  <strong>
-                    {typeof typed.availableNow === 'boolean' ? (typed.availableNow ? 'Sí' : 'No') : '—'}
-                  </strong>
-                </div>
+  <div className="sdKV">
+    <div className="k">
+      <span>Radio</span>
+      <strong>{typed.radiusKm != null ? `${typed.radiusKm} km` : '—'}</strong>
+    </div>
 
-                <div className="k">
-                  <span>Radio</span>
-                  <strong>{typed.radiusKm != null ? `${typed.radiusKm} km` : '—'}</strong>
-                </div>
+    <div className="k">
+      <span>Visita</span>
+      <strong>
+        {typed.visitPrice != null ? `$${typed.visitPrice}` : '—'} {typed.currency ?? ''}
+      </strong>
+    </div>
 
-                <div className="k">
-                  <span>Visita</span>
-                  <strong>
-                    {typed.visitPrice != null ? `$${typed.visitPrice}` : '—'} {typed.currency ?? ''}
-                  </strong>
-                </div>
-              </div>
+    <div className="k">
+      <span>Portfolio</span>
+      <strong>{typed.portfolioCount ?? 0}</strong>
+    </div>
 
-              <div className="sdBlock">
-                <div className="sdBlockLabel">Bio</div>
-                <div className="sdBlockText">{typed.bio?.trim() ? typed.bio : '—'}</div>
-              </div>
-            </Card>
+    <div className="k">
+      <span>Trabajos stats</span>
+      <strong>
+        {typed.statsFinished ?? 0} ok / {typed.statsCanceled ?? 0} cancelados
+      </strong>
+    </div>
+  </div>
+
+  <div className="sdBlock">
+    <div className="sdBlockLabel">Bio</div>
+    <div className="sdBlockText">{typed.bio?.trim() ? typed.bio : '—'}</div>
+  </div>
+</Card>
+
+<Card title="Actividad">
+  <div className="sdKV">
+    <div className="k">
+      <span>Órdenes totales</span>
+      <strong>{typed.totalOrders ?? 0}</strong>
+    </div>
+
+    <div className="k">
+      <span>Activas</span>
+      <strong>{typed.activeOrders ?? 0}</strong>
+    </div>
+
+    <div className="k">
+      <span>Finalizadas</span>
+      <strong>{typed.finishedOrders ?? 0}</strong>
+    </div>
+
+    <div className="k">
+      <span>Canceladas</span>
+      <strong>{typed.cancelledOrders ?? 0}</strong>
+    </div>
+
+    <div className="k">
+      <span>Última orden</span>
+      <strong>{formatDateAR(typed.lastOrderAt)}</strong>
+    </div>
+  </div>
+</Card>
 
             <Card title="Rubros">
               {typed.specialties.length === 0 ? (
@@ -999,21 +1093,28 @@ export default function SpecialistDetail() {
               ) : (
                 <div>
                   <div className="sdKV">
-                    <div className="k">
-                      <span>Estado</span>
-                      <strong>{typed.backgroundCheck.status}</strong>
-                    </div>
+  <div className="k">
+    <span>Estado</span>
+    <strong>{typed.backgroundCheck.status}</strong>
+  </div>
 
-                    <div className="k">
-                      <span>Subido</span>
-                      <strong>{formatDateAR(typed.backgroundCheck.createdAt)}</strong>
-                    </div>
+  <div className="k">
+    <span>Subido</span>
+    <strong>{formatDateAR(typed.backgroundCheck.createdAt)}</strong>
+  </div>
 
-                    <div className="k">
-                      <span>Revisado</span>
-                      <strong>{formatDateAR(typed.backgroundCheck.reviewedAt)}</strong>
-                    </div>
-                  </div>
+  <div className="k">
+    <span>Revisado</span>
+    <strong>{formatDateAR(typed.backgroundCheck.reviewedAt)}</strong>
+  </div>
+
+  <div className="k">
+    <span>Disponible ahora</span>
+    <strong>
+      {typeof typed.availableNow === 'boolean' ? (typed.availableNow ? 'Sí' : 'No') : '—'}
+    </strong>
+  </div>
+</div>
 
                   {typed.backgroundCheck.rejectionReason ? (
                     <div className="sdMuted" style={{ marginTop: 8 }}>

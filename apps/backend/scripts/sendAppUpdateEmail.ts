@@ -55,9 +55,9 @@ function buildHtml(name?: string | null) {
         </p>
 
         <ul style="font-size:15px; line-height:1.7; padding-left:20px; margin-bottom:18px;">
-          <li>mejoras en la experiencia de uso</li>
+          <li>cambios de requisitos con la modalidad de servicios</li>
           <li>nuevos servicios disponibles</li>
-          <li>correcciones y optimizaciones generales</li>
+          <li>modo dual para el especialista</li>
           <li>mejoras en perfiles y visualización de trabajos realizados</li>
         </ul>
 

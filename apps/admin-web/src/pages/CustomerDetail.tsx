@@ -99,8 +99,8 @@ export default function CustomerDetail() {
     setErrMsg(null);
 
     try {
-      const r = await deleteAdminUser(data.userId, 'anonymize');
-if (!r.ok) throw new Error();
+const r = await deleteAdminUser(data.userId, 'anonymize');
+if (!r.ok) throw new Error('No se pudo liberar el email');
 
 // reflejar en UI
 setData({ ...data, email: r.newEmail ?? data.email, status: 'BLOCKED' });
@@ -121,8 +121,8 @@ setOkMsg(`Email liberado correctamente → ${r.newEmail ?? 'deleted+...@deleted.
             ← Volver a clientes
           </Link>
 
-          <h1 className="cdTitle">Detalle del cliente</h1>
-          <p className="cdSubtitle">Información general y acciones</p>
+<h1 className="cdTitle">Detalle del cliente</h1>
+<p className="cdSubtitle">Información general, estado de cuenta y acciones administrativas</p>
         </div>
       </div>
 
@@ -137,42 +137,94 @@ setOkMsg(`Email liberado correctamente → ${r.newEmail ?? 'deleted+...@deleted.
 
             <div className="cdHeroMain">
               <div className="cdName">{data.name ?? '—'}</div>
-              <div className="cdMeta">
-                <div>
-                  <span>Email</span>
-                  <strong>{data.email}</strong>
-                </div>
-                <div>
-                  <span>Estado</span>
-                  <strong>{data.status}</strong>
-                </div>
-                <div>
-                  <span>Creado</span>
-                  <strong>{formatDateAR(data.createdAt)}</strong>
-                </div>
-              </div>
+      <div className="cdMeta">
+  <div>
+    <span>Email</span>
+    <strong>{data.email}</strong>
+  </div>
+  <div>
+    <span>Estado</span>
+    <strong>{data.status}</strong>
+  </div>
+  <div>
+    <span>Creado</span>
+    <strong>{formatDateAR(data.createdAt)}</strong>
+  </div>
+  <div>
+    <span>User ID</span>
+    <strong>{data.userId}</strong>
+  </div>
+</div>
             </div>
           </div>
 
           <div className="cdGrid">
+            <Card title="Información general">
+  <div
+    style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+      gap: 12,
+    }}
+  >
+    <div>
+      <div className="cdState" style={{ marginBottom: 6 }}>
+        Nombre
+      </div>
+      <strong>{data.name ?? '—'}</strong>
+    </div>
+
+    <div>
+      <div className="cdState" style={{ marginBottom: 6 }}>
+        Email
+      </div>
+      <strong>{data.email}</strong>
+    </div>
+
+    <div>
+      <div className="cdState" style={{ marginBottom: 6 }}>
+        Estado
+      </div>
+      <strong>{data.status}</strong>
+    </div>
+
+    <div>
+      <div className="cdState" style={{ marginBottom: 6 }}>
+        Fecha de alta
+      </div>
+      <strong>{formatDateAR(data.createdAt)}</strong>
+    </div>
+
+    <div>
+      <div className="cdState" style={{ marginBottom: 6 }}>
+        User ID
+      </div>
+      <strong>{data.userId}</strong>
+    </div>
+  </div>
+</Card>
             <Card title="Acciones">
-              <div className="cdActions">
-                <button className="cdBtn" onClick={toggleStatus} disabled={actionLoading}>
-                  {data.status === 'ACTIVE' ? '🚫 Bloquear' : '✅ Activar'}
-                </button>
+  <div className="cdState" style={{ marginBottom: 12 }}>
+    Desde acá podés bloquear o reactivar la cuenta del cliente, o liberar su email para permitir un nuevo registro de prueba.
+  </div>
 
-                <button
-                  className="cdBtn danger"
-                  onClick={handleFreeEmail}
-                  disabled={actionLoading}
-                >
-                  🧹 Liberar email
-                </button>
-              </div>
+  <div className="cdActions">
+    <button className="cdBtn" onClick={toggleStatus} disabled={actionLoading}>
+      {data.status === 'ACTIVE' ? '🚫 Bloquear' : '✅ Activar'}
+    </button>
 
-              {okMsg && <div className="cdState">{okMsg}</div>}
-              {errMsg && <div className="cdState cdError">{errMsg}</div>}
-            </Card>
+    <button
+      className="cdBtn danger"
+      onClick={handleFreeEmail}
+      disabled={actionLoading}
+    >
+      🧹 Liberar email
+    </button>
+  </div>
+
+  {okMsg && <div className="cdState">{okMsg}</div>}
+  {errMsg && <div className="cdState cdError">{errMsg}</div>}
+</Card>
           </div>
         </>
       )}

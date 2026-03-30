@@ -803,6 +803,7 @@ adminRouter.get('/specialists', async (_req, res) => {
     select: {
       id: true,
       email: true,
+      phone: true,
       name: true,
       surname: true,
       status: true,
@@ -815,6 +816,31 @@ adminRouter.get('/specialists', async (_req, res) => {
           ratingAvg: true,
           ratingCount: true,
           avatarUrl: true,
+
+          businessName: true,
+          specialtyHeadline: true,
+          availableNow: true,
+          serviceModes: true,
+
+          backgroundCheck: {
+            select: {
+              status: true,
+            },
+          },
+
+          officeAddress: {
+            select: {
+              formatted: true,
+            },
+          },
+
+          _count: {
+            select: {
+              portfolioImages: true,
+              orders: true,
+            },
+          },
+
           specialties: {
             select: { category: { select: { slug: true, name: true } } },
           },
@@ -824,6 +850,12 @@ adminRouter.get('/specialists', async (_req, res) => {
               currentPeriodEnd: true,
               currentPeriodStart: true,
               trialEnd: true,
+            },
+          },
+          orders: {
+            select: {
+              status: true,
+              createdAt: true,
             },
           },
         },
@@ -881,10 +913,32 @@ adminRouter.get('/specialists', async (_req, res) => {
 
     const specialtySlugs = specialties.map((s) => s.slug);
 
+    const specOrders = u.specialist?.orders ?? [];
+
+    const activeOrders = specOrders.filter((o) =>
+      ['ASSIGNED', 'IN_PROGRESS', 'PAUSED', 'FINISHED_BY_SPECIALIST', 'IN_CLIENT_REVIEW'].includes(
+        o.status,
+      ),
+    ).length;
+
+    const finishedOrders = specOrders.filter((o) =>
+      ['CONFIRMED_BY_CLIENT', 'CLOSED'].includes(o.status),
+    ).length;
+
+    const cancelledOrders = specOrders.filter((o) =>
+      [
+        'CANCELLED_BY_CUSTOMER',
+        'CANCELLED_BY_SPECIALIST',
+        'CANCELLED_AUTO',
+        'REJECTED_BY_CLIENT',
+      ].includes(o.status),
+    ).length;
+
     return {
       userId: u.id,
       specialistId: u.specialist?.id,
       email: u.email,
+      phone: u.phone ?? null,
       name: `${u.name ?? ''} ${u.surname ?? ''}`.trim(),
       status: u.status,
       createdAt: u.createdAt,
@@ -894,6 +948,19 @@ adminRouter.get('/specialists', async (_req, res) => {
       ratingAvg: u.specialist?.ratingAvg ?? 0,
       ratingCount: u.specialist?.ratingCount ?? 0,
       avatarUrl: u.specialist?.avatarUrl ?? null,
+
+      businessName: u.specialist?.businessName ?? null,
+      specialtyHeadline: u.specialist?.specialtyHeadline ?? null,
+      availableNow: u.specialist?.availableNow ?? false,
+      serviceModes: u.specialist?.serviceModes ?? [],
+      officeAddress: u.specialist?.officeAddress?.formatted ?? null,
+      backgroundCheckStatus: u.specialist?.backgroundCheck?.status ?? null,
+
+      portfolioCount: u.specialist?._count?.portfolioImages ?? 0,
+      totalOrders: u.specialist?._count?.orders ?? 0,
+      activeOrders,
+      finishedOrders,
+      cancelledOrders,
 
       subscription: sub
         ? {
@@ -934,11 +1001,42 @@ adminRouter.get('/specialists/:id', async (req, res) => {
     availableNow: true,
     radiusKm: true,
 
+    businessName: true,
+    specialtyHeadline: true,
+    serviceModes: true,
+    statsFinished: true,
+    statsCanceled: true,
+
     kycStatus: true,
     badge: true,
     ratingAvg: true,
     ratingCount: true,
     avatarUrl: true,
+
+    officeAddress: {
+      select: {
+        formatted: true,
+        lat: true,
+        lng: true,
+      },
+    },
+
+    _count: {
+      select: {
+        portfolioImages: true,
+        orders: true,
+      },
+    },
+
+    orders: {
+      select: {
+        status: true,
+        createdAt: true,
+      },
+      orderBy: {
+        createdAt: 'desc' as const,
+      },
+    },
 
     subscription: {
       select: {
@@ -1001,10 +1099,12 @@ adminRouter.get('/specialists/:id', async (req, res) => {
     select: {
       id: true,
       email: true,
+      phone: true,
       name: true,
       surname: true,
       status: true,
       createdAt: true,
+      lastLoginAt: true,
       specialist: { select: specialistSelect },
     },
   });
@@ -1015,10 +1115,12 @@ adminRouter.get('/specialists/:id', async (req, res) => {
       select: {
         id: true,
         email: true,
+        phone: true,
         name: true,
         surname: true,
         status: true,
         createdAt: true,
+        lastLoginAt: true,
         specialist: { select: specialistSelect },
       },
     });
@@ -1090,14 +1192,41 @@ adminRouter.get('/specialists/:id', async (req, res) => {
       : null,
   }));
 
+  const specOrders = spec.orders ?? [];
+
+  const totalOrders = spec._count?.orders ?? specOrders.length;
+
+  const activeOrders = specOrders.filter((o) =>
+    ['ASSIGNED', 'IN_PROGRESS', 'PAUSED', 'FINISHED_BY_SPECIALIST', 'IN_CLIENT_REVIEW'].includes(
+      o.status,
+    ),
+  ).length;
+
+  const finishedOrders = specOrders.filter((o) =>
+    ['CONFIRMED_BY_CLIENT', 'CLOSED'].includes(o.status),
+  ).length;
+
+  const cancelledOrders = specOrders.filter((o) =>
+    [
+      'CANCELLED_BY_CUSTOMER',
+      'CANCELLED_BY_SPECIALIST',
+      'CANCELLED_AUTO',
+      'REJECTED_BY_CLIENT',
+    ].includes(o.status),
+  ).length;
+
+  const lastOrderAt = specOrders[0]?.createdAt ? specOrders[0].createdAt.toISOString() : null;
+
   return res.json({
     userId: user.id,
     specialistId: spec.id,
 
     email: user.email,
+    phone: user.phone ?? null,
     name: `${user.name ?? ''} ${user.surname ?? ''}`.trim(),
     status: user.status,
     createdAt: user.createdAt ? user.createdAt.toISOString() : null,
+    lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
 
     kycStatus: spec.kycStatus ?? 'UNVERIFIED',
     badge: spec.badge ?? 'BRONZE',
@@ -1105,11 +1234,32 @@ adminRouter.get('/specialists/:id', async (req, res) => {
     ratingCount: spec.ratingCount ?? 0,
     avatarUrl: spec.avatarUrl ?? null,
 
+    businessName: spec.businessName ?? null,
+    specialtyHeadline: spec.specialtyHeadline ?? null,
     availableNow: spec.availableNow ?? false,
     radiusKm: spec.radiusKm ?? null,
     visitPrice: spec.visitPrice ?? null,
     currency: spec.currency ?? null,
     bio: spec.bio ?? null,
+    serviceModes: spec.serviceModes ?? [],
+
+    officeAddress: spec.officeAddress
+      ? {
+          formatted: spec.officeAddress.formatted,
+          lat: spec.officeAddress.lat ?? null,
+          lng: spec.officeAddress.lng ?? null,
+        }
+      : null,
+
+    portfolioCount: spec._count?.portfolioImages ?? 0,
+    statsFinished: spec.statsFinished ?? 0,
+    statsCanceled: spec.statsCanceled ?? 0,
+
+    totalOrders,
+    activeOrders,
+    finishedOrders,
+    cancelledOrders,
+    lastOrderAt,
 
     specialties,
 

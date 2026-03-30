@@ -67,6 +67,16 @@ export type AdminSpecialtyChip = {
   name: string;
 };
 
+export type AdminServiceMode = 'HOME' | 'OFFICE' | 'ONLINE';
+
+export type AdminBackgroundCheckStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | null;
+
+export type AdminOfficeAddress = {
+  formatted: string;
+  lat?: number | null;
+  lng?: number | null;
+};
+
 /* ─────────────────────────────────────────────────────────────
  * Especialistas (listado)
  * ───────────────────────────────────────────────────────────── */
@@ -76,6 +86,7 @@ export type AdminSpecialistRow = {
   specialistId?: string;
 
   email: string;
+  phone?: string | null;
   name: string;
   status: UserStatus;
   createdAt: string;
@@ -87,6 +98,19 @@ export type AdminSpecialistRow = {
   ratingCount: number;
 
   avatarUrl: string | null;
+
+  businessName?: string | null;
+  specialtyHeadline?: string | null;
+  availableNow?: boolean | null;
+  serviceModes?: AdminServiceMode[];
+  officeAddress?: string | null;
+  backgroundCheckStatus?: AdminBackgroundCheckStatus;
+
+  portfolioCount?: number;
+  totalOrders?: number;
+  activeOrders?: number;
+  finishedOrders?: number;
+  cancelledOrders?: number;
 
   subscription: SubscriptionDTO | null;
   daysLeft: number | null;
@@ -156,6 +180,7 @@ export type AdminSpecialistDetail = {
   phone?: string | null;
   status: UserStatus;
   createdAt: string | null;
+  lastLoginAt?: string | null;
 
   avatarUrl: string | null;
   bio: string | null;
@@ -166,10 +191,26 @@ export type AdminSpecialistDetail = {
   ratingAvg: number | null;
   ratingCount: number | null;
 
+  businessName?: string | null;
+  specialtyHeadline?: string | null;
+
   availableNow: boolean | null;
   radiusKm: number | null;
   visitPrice: number | null;
   currency: string | null;
+  serviceModes?: AdminServiceMode[];
+
+  officeAddress?: AdminOfficeAddress | null;
+
+  portfolioCount?: number;
+  statsFinished?: number | null;
+  statsCanceled?: number | null;
+
+  totalOrders?: number;
+  activeOrders?: number;
+  finishedOrders?: number;
+  cancelledOrders?: number;
+  lastOrderAt?: string | null;
 
   specialties: { id: string; name: string; slug: string }[];
 

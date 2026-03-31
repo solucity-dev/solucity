@@ -13,6 +13,7 @@ export type RootCategoryId =
   | 'estetica'
   | 'transporte'
   | 'arreglos-reparaciones'
+  | 'consultoria-desarrollo-profesional'
   | 'alquiler';
 
 /**
@@ -26,6 +27,7 @@ export type CategorySlug =
   | 'yeseria-durlock'
   | 'carpinteria'
   | 'herreria'
+  | 'plomeria'
   | 'plomeria-gasista'
   | 'pintura'
   | 'jardineria'
@@ -129,7 +131,14 @@ export type CategorySlug =
   | 'alquiler-de-hormigoneras'
   | 'alquiler-de-elevadores'
   | 'alquiler-de-equipos-de-sonido-e-iluminacion'
-  | 'alquiler-de-carpas-y-mobiliario';
+  | 'alquiler-de-carpas-y-mobiliario'
+  // ── Consultoria y desarrollo personal──────────────────────────────────────────────
+  | 'asesor-empresarial'
+  | 'coach-ejecutivo'
+  | 'coach-organizacional'
+  | 'coach-ontologico'
+  | 'mentoria'
+  | 'consultor-de-negocios';
 
 /** Tabs principales del cliente */
 export type ClientTabsParamList = {

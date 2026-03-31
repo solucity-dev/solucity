@@ -36,6 +36,12 @@ type Category = { id: string; name: string; slug: string };
 type CategoryGroup = { id: string; name: string; slug: string; categories: Category[] };
 type CategoriesRes = { ok: true; groups: CategoryGroup[] };
 
+function getCategoryDisplayName(slug: string, fallbackName: string) {
+  if (slug === 'plomeria') return 'Plomero';
+  if (slug === 'plomeria-gasista') return 'Gasista';
+  return fallbackName;
+}
+
 const REGISTER_DRAFT_KEY = 'register_specialist_draft_v1';
 const REGISTER_PENDING_FIELD_KEY = 'register_specialist_pending_field_v1';
 const REGISTER_CAPTURE_RESULT_KEY = 'register_specialist_capture_result_v1';
@@ -629,11 +635,13 @@ export default function RegisterSpecialist() {
     const filtered = !normalizedQuery
       ? base
       : base.filter((c) => {
+          const displayName = normalizeText(getCategoryDisplayName(c.slug, c.name ?? ''));
           const name = normalizeText(c.name ?? '');
           const slug = normalizeText(c.slug ?? '');
           const group = normalizeText(c.group ?? '');
 
           return (
+            displayName.includes(normalizedQuery) ||
             name.includes(normalizedQuery) ||
             slug.includes(normalizedQuery) ||
             group.includes(normalizedQuery)
@@ -646,14 +654,24 @@ export default function RegisterSpecialist() {
 
       if (aSelected !== bSelected) return bSelected - aSelected;
 
-      return a.name.localeCompare(b.name, 'es', { sensitivity: 'base' });
+      return getCategoryDisplayName(a.slug, a.name).localeCompare(
+        getCategoryDisplayName(b.slug, b.name),
+        'es',
+        { sensitivity: 'base' },
+      );
     });
   }, [flatCategories, normalizedQuery, selectedSlugs]);
 
   const selectedCategories = useMemo(() => {
     return flatCategories
       .filter((c) => selectedSlugs.includes(c.slug))
-      .sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
+      .sort((a, b) =>
+        getCategoryDisplayName(a.slug, a.name).localeCompare(
+          getCategoryDisplayName(b.slug, b.name),
+          'es',
+          { sensitivity: 'base' },
+        ),
+      );
   }, [flatCategories, selectedSlugs]);
 
   const toggleSlug = (slug: string) => {
@@ -1148,7 +1166,9 @@ export default function RegisterSpecialist() {
                       onPress={() => toggleSlug(c.slug)}
                       style={[s.chip, s.chipActive]}
                     >
-                      <Text style={[s.chipT, s.chipTActive]}>{c.name}</Text>
+                      <Text style={[s.chipT, s.chipTActive]}>
+                        {getCategoryDisplayName(c.slug, c.name)}
+                      </Text>
                     </Pressable>
                   ))}
                 </View>
@@ -1180,7 +1200,9 @@ export default function RegisterSpecialist() {
                             onPress={() => toggleSlug(c.slug)}
                             style={[s.chip, active && s.chipActive]}
                           >
-                            <Text style={[s.chipT, active && s.chipTActive]}>{c.name}</Text>
+                            <Text style={[s.chipT, active && s.chipTActive]}>
+                              {getCategoryDisplayName(c.slug, c.name)}
+                            </Text>
                           </Pressable>
                         );
                       })}

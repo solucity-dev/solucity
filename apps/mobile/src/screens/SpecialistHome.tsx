@@ -144,6 +144,7 @@ const SPECIALTY_OPTIONS = [
   'yeseria-durlock',
   'carpinteria',
   'herreria',
+  'plomeria',
   'plomeria-gasista',
   'pintura',
   'jardineria',
@@ -263,6 +264,7 @@ const SPECIALTY_OPTIONS = [
 const REQUIRES_CERT_FALLBACK = new Set([
   // Construcción
   'electricidad',
+  'plomeria',
   'plomeria-gasista',
   'desagote-y-banos-quimicos',
 
@@ -301,6 +303,14 @@ const REQUIRES_CERT_FALLBACK = new Set([
   'pas-productor-asesor-de-seguros',
   'mandatario-del-automotor',
 
+  // Consultoria y desarrollo personal
+  'asesor-empresarial',
+  'coach-ejecutivo',
+  'coach-organizacional',
+  'coach-ontologico',
+  'mentoria',
+  'consultor-de-negocios',
+
   // Transporte
   'fletes',
   'traslado-de-pasajeros',
@@ -309,9 +319,7 @@ const REQUIRES_CERT_FALLBACK = new Set([
 ]);
 
 // 🔒 Rubros legacy que queremos ocultar SOLO en SpecialistHome
-const HIDDEN_SPECIALTIES = new Set<string>([
-  'plomeria', // legacy: existe en DB pero usamos "plomeria-gasista"
-]);
+const HIDDEN_SPECIALTIES = new Set<string>([]);
 
 // ✅ Normaliza modos (legacy-safe): casing, espacios, duplicados y valores inválidos
 function normalizeModes(input: any): ('HOME' | 'OFFICE' | 'ONLINE')[] {
@@ -828,9 +836,7 @@ export default function SpecialistHome() {
 
     if (input.every((x) => typeof x === 'string')) {
       const slugs = input.map((s) => s.trim()).filter(Boolean);
-
-      const normalized = slugs.map((s) => (s === 'plomeria' ? 'plomeria-gasista' : s));
-      return Array.from(new Set(normalized));
+      return Array.from(new Set(slugs));
     }
 
     const slugs = input
@@ -843,8 +849,7 @@ export default function SpecialistHome() {
       })
       .filter(Boolean) as string[];
 
-    const normalized = slugs.map((s) => (s === 'plomeria' ? 'plomeria-gasista' : s));
-    return Array.from(new Set(normalized));
+    return Array.from(new Set(slugs));
   }
 
   function toSlugLike(s: string) {
@@ -864,8 +869,15 @@ export default function SpecialistHome() {
       .trim();
   }
 
+  function getCategoryDisplayName(slug: string, fallbackName: string) {
+    if (slug === 'plomeria') return 'Plomero';
+    if (slug === 'plomeria-gasista') return 'Gasista';
+    return fallbackName;
+  }
+
   function catNameBySlug(slug: string) {
-    return categoryOptions.find((c) => c.slug === slug)?.name ?? slug;
+    const found = categoryOptions.find((c) => c.slug === slug);
+    return getCategoryDisplayName(slug, found?.name ?? slug);
   }
 
   function portfolioImageSource(item: PortfolioItem) {
@@ -1661,13 +1673,7 @@ export default function SpecialistHome() {
   async function saveSpecialties() {
     try {
       setSavingKey('specialties', true);
-      const cleaned = Array.from(
-        new Set(
-          specialties
-            .map((s) => (s === 'plomeria' ? 'plomeria-gasista' : s))
-            .filter((s) => !HIDDEN_SPECIALTIES.has(s)),
-        ),
-      );
+      const cleaned = Array.from(new Set(specialties.filter((s) => !HIDDEN_SPECIALTIES.has(s))));
 
       await api.patch('/specialists/specialties', { specialties: cleaned });
 
@@ -1965,12 +1971,18 @@ export default function SpecialistHome() {
     if (categoryOptions.length) {
       return categoryOptions
         .filter((c) => !HIDDEN_SPECIALTIES.has(c.slug))
-        .map((c) => ({ slug: c.slug, name: c.name }));
+        .map((c) => ({
+          slug: c.slug,
+          name: getCategoryDisplayName(c.slug, c.name),
+        }));
     }
 
     return (SPECIALTY_OPTIONS as readonly string[])
       .filter((s) => !HIDDEN_SPECIALTIES.has(s))
-      .map((s) => ({ slug: s, name: s }));
+      .map((s) => ({
+        slug: s,
+        name: getCategoryDisplayName(s, s),
+      }));
   }, [categoryOptions]);
 
   const normalizedSpecialtyQuery = useMemo(() => normalizeText(specialtyQuery), [specialtyQuery]);
@@ -2078,13 +2090,7 @@ export default function SpecialistHome() {
   }, [price, radius, pricingLabel, maxAllowedRadiusKm]);
 
   const specialtiesDirty = useMemo(() => {
-    const cleaned = Array.from(
-      new Set(
-        specialties
-          .map((s) => (s === 'plomeria' ? 'plomeria-gasista' : s))
-          .filter((s) => !HIDDEN_SPECIALTIES.has(s)),
-      ),
-    );
+    const cleaned = Array.from(new Set(specialties.filter((s) => !HIDDEN_SPECIALTIES.has(s))));
     const base = JSON.parse(specialtiesSnapRef.current || '[]') as string[];
     return !sameStringSet(cleaned, base);
   }, [specialties]);

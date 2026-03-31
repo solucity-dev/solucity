@@ -28,6 +28,7 @@ const groups: GroupSeed[] = [
       'Yesería / Durlock',
       'Carpintería',
       'Herrería',
+      'Plomería',
       'Plomería / Gasista',
       'Pintura',
       'Jardinería',
@@ -164,6 +165,18 @@ const groups: GroupSeed[] = [
     rubros: ['Reparación de calzado', 'Arreglos de indumentaria', 'Costura / Modista'],
   },
   {
+    name: 'Consultoría y desarrollo profesional',
+    slug: 'consultoria-desarrollo-profesional',
+    rubros: [
+      'Asesor empresarial',
+      'Coach ejecutivo',
+      'Coach organizacional',
+      'Coach ontológico',
+      'Mentoría',
+      'Consultor de negocios',
+    ],
+  },
+  {
     name: 'Gastronomía',
     slug: 'gastronomia',
     isActive: false,
@@ -212,6 +225,7 @@ function slugify(name: string) {
 const REQUIRES_CERTIFICATION = new Set<string>([
   // Construcción
   'electricidad',
+  'plomeria',
   'plomeria-gasista',
   'desagote-y-banos-quimicos',
 
@@ -256,6 +270,14 @@ const REQUIRES_CERTIFICATION = new Set<string>([
   'traslado-de-pasajeros',
   'chofer-particular',
   'auxilio-vehicular',
+
+  // Consultoría
+  'asesor-empresarial',
+  'coach-ejecutivo',
+  'coach-organizacional',
+  'coach-ontologico',
+  'mentoria',
+  'consultor-de-negocios',
 ]);
 
 async function upsertCategories() {

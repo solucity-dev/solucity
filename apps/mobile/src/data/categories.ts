@@ -61,6 +61,11 @@ export const ROOT_CATEGORIES: { id: RootCategoryId; title: string; icon: IconSpe
     icon: { set: 'mdi', name: 'wrench-cog' },
   },
   {
+    id: 'consultoria-desarrollo-profesional',
+    title: 'Consultoría',
+    icon: { set: 'mdi', name: 'briefcase-outline' },
+  },
+  {
     id: 'alquiler',
     title: 'Alquiler',
     icon: { set: 'mdi', name: 'tools' },
@@ -86,10 +91,11 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
     { id: 'yeseria-durlock', title: 'Yesería / Durlock', icon: { set: 'mdi', name: 'saw-blade' } },
     { id: 'carpinteria', title: 'Carpintería', icon: { set: 'mdi', name: 'ruler-square' } },
     { id: 'herreria', title: 'Herrería', icon: { set: 'mdi', name: 'anvil' } },
+    { id: 'plomeria', title: 'Plomero', icon: { set: 'mdi', name: 'pipe-wrench' } },
     {
       id: 'plomeria-gasista',
-      title: 'Plomería / Gasista',
-      icon: { set: 'mdi', name: 'pipe-wrench' },
+      title: 'Gasista',
+      icon: { set: 'mdi', name: 'fire-circle' },
     },
     { id: 'pintura', title: 'Pintura', icon: { set: 'mdi', name: 'format-paint' } },
     { id: 'jardineria', title: 'Jardinería', icon: { set: 'mdi', name: 'shovel' } },
@@ -410,6 +416,39 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
       id: 'costura-modista',
       title: 'Costura / Modista',
       icon: { set: 'ion', name: 'shirt-outline' },
+    },
+  ],
+
+  'consultoria-desarrollo-profesional': [
+    {
+      id: 'asesor-empresarial',
+      title: 'Asesor empresarial',
+      icon: { set: 'mdi', name: 'office-building-cog-outline' },
+    },
+    {
+      id: 'coach-ejecutivo',
+      title: 'Coach ejecutivo',
+      icon: { set: 'mdi', name: 'account-tie-outline' },
+    },
+    {
+      id: 'coach-organizacional',
+      title: 'Coach organizacional',
+      icon: { set: 'mdi', name: 'account-group-outline' },
+    },
+    {
+      id: 'coach-ontologico',
+      title: 'Coach ontológico',
+      icon: { set: 'mdi', name: 'head-cog-outline' },
+    },
+    {
+      id: 'mentoria',
+      title: 'Mentoría',
+      icon: { set: 'mdi', name: 'school-outline' },
+    },
+    {
+      id: 'consultor-de-negocios',
+      title: 'Consultor de negocios',
+      icon: { set: 'mdi', name: 'chart-line' },
     },
   ],
   alquiler: [

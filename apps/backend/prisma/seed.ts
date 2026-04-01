@@ -71,6 +71,7 @@ const groups: GroupSeed[] = [
     slug: 'servicios',
     rubros: [
       'Limpieza',
+      'Lavandería',
       'Clases particulares',
       'Paseador de perros',
       'Cuidado de mascotas',

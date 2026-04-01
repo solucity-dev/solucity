@@ -182,6 +182,7 @@ const SPECIALTY_OPTIONS = [
   'organizacion-de-eventos',
   'fotografia-y-video',
   'atencion-al-cliente',
+  'lavanderia',
 
   // ── Salud ─────────────────────────────────────────────────
   'acompanante-terapeutico',
@@ -1278,6 +1279,38 @@ export default function SpecialistHome() {
       ? !!(profile as any)?.backgroundCheckApproved
       : bgStatus === 'APPROVED';
 
+  const missingSpecialties = specialties.length === 0;
+  const missingServiceModes = !serviceModesConfigured;
+
+  const profileIncomplete = !!profile && (missingSpecialties || missingServiceModes);
+
+  const incompleteBannerTitle =
+    missingSpecialties && missingServiceModes
+      ? 'Completá tu perfil profesional'
+      : missingServiceModes
+        ? 'Configurá tus modalidades'
+        : 'Seleccioná tu rubro';
+
+  const incompleteBannerText =
+    missingSpecialties && missingServiceModes
+      ? 'Te faltan rubros y modalidades para completar tu perfil y poder recibir trabajos.'
+      : missingServiceModes
+        ? 'Indicá cómo ofrecés tu servicio: a domicilio, en oficina/local u online.'
+        : 'Seleccioná al menos un rubro para completar tu perfil profesional.';
+
+  function handleOpenIncompleteProfile() {
+    if (missingServiceModes) {
+      setOpenServiceModes(true);
+      setOpenRubros(false);
+      return;
+    }
+
+    if (missingSpecialties) {
+      setOpenRubros(true);
+      setOpenServiceModes(false);
+    }
+  }
+
   // ✅ Suscripción OK: ACTIVE o TRIALING con días > 0
   const subscriptionOk = useMemo(() => {
     if (!subscription) return false;
@@ -2104,12 +2137,8 @@ export default function SpecialistHome() {
     if (loading) return;
     if (!profile) return;
 
-    if (!serviceModesConfigured) {
-      setMissingModesModalOpen(true);
-    } else {
-      setMissingModesModalOpen(false);
-    }
-  }, [loading, profile, serviceModesConfigured]);
+    setMissingModesModalOpen(false);
+  }, [loading, profile]);
 
   if (loading) {
     return (
@@ -2183,6 +2212,25 @@ export default function SpecialistHome() {
 
               <Ionicons name="chevron-forward" size={22} color="#0A5B63" />
             </Pressable>
+          </View>
+        )}
+
+        {profileIncomplete && (
+          <View style={styles.incompleteBannerWrap}>
+            <View style={styles.incompleteBanner}>
+              <View style={styles.incompleteBannerIconWrap}>
+                <Ionicons name="alert-circle-outline" size={20} color="#5A3E00" />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={styles.incompleteBannerTitle}>{incompleteBannerTitle}</Text>
+                <Text style={styles.incompleteBannerText}>{incompleteBannerText}</Text>
+              </View>
+
+              <Pressable onPress={handleOpenIncompleteProfile} style={styles.incompleteBannerBtn}>
+                <Text style={styles.incompleteBannerBtnText}>Completar</Text>
+              </Pressable>
+            </View>
           </View>
         )}
         <KeyboardAwareScrollView
@@ -3872,6 +3920,59 @@ const styles = StyleSheet.create({
   bannerCloseBtn: {
     marginLeft: 8,
     padding: 2,
+  },
+
+  incompleteBannerWrap: {
+    paddingHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+
+  incompleteBanner: {
+    backgroundColor: '#FFE29B',
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  incompleteBannerIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(90,62,0,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  incompleteBannerTitle: {
+    color: '#5A3E00',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+
+  incompleteBannerText: {
+    color: '#5A3E00',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+
+  incompleteBannerBtn: {
+    backgroundColor: '#5A3E00',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignSelf: 'center',
+  },
+
+  incompleteBannerBtnText: {
+    color: '#FFE29B',
+    fontWeight: '900',
+    fontSize: 12,
   },
 
   content: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 190 },

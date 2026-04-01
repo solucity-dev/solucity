@@ -62,6 +62,7 @@ export type CategorySlug =
   | 'organizacion-de-eventos'
   | 'fotografia-y-video'
   | 'atencion-al-cliente'
+  | 'lavanderia'
   // ── Salud ─────────────────────────────────────────────────
   | 'acompanante-terapeutico'
   | 'psicologo'

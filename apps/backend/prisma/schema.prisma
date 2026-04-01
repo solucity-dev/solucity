@@ -24,6 +24,7 @@ model User {
   chatMessages     ChatMessage[]      @relation("UserChatMessages")
   customer         CustomerProfile?
   notifications    Notification[]
+  reminderLogs     NotificationReminderLog[]
   orderEvents      OrderEvent[]       @relation("UserOrderEvents")
   passwordsReset   PasswordReset[]
   pushTokens       PushToken[]        @relation("UserPushTokens")
@@ -259,6 +260,20 @@ model Notification {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt])
+}
+
+model NotificationReminderLog {
+  id        String   @id @default(cuid())
+  userId    String
+  reason    String
+  channel   String
+  metadata  Json?
+  sentAt    DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, reason, channel, sentAt])
+  @@index([reason, sentAt])
 }
 
 model Subscription {

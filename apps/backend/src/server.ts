@@ -34,6 +34,7 @@ import specialistAvatarRoutes from './routes/specialistAvatar.routes';
 import { specialistsRoutes } from './routes/specialists.routes';
 import { subscriptionsRouter } from './routes/subscriptions';
 import { versionRouter } from './routes/version';
+import { runReminderJobs } from './services/reminderService';
 
 const app = express();
 
@@ -191,6 +192,14 @@ app.use(errorHandler);
 setInterval(() => {
   runAutoCancelExpiredPendingOrders().catch((e) => console.error('[autoCancel job] error', e));
 }, 60_000);
+
+/** ================== Reminder jobs ================== **/
+setInterval(
+  () => {
+    runReminderJobs().catch((e) => console.error('[reminder job] error', e));
+  },
+  12 * 60 * 60 * 1000,
+);
 
 /** ================== Boot ================== **/
 async function boot() {

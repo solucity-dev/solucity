@@ -188,6 +188,11 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
       title: 'Atención al cliente',
       icon: { set: 'mdi', name: 'account-voice' },
     },
+    {
+      id: 'lavanderia',
+      title: 'Lavandería',
+      icon: { set: 'mdi', name: 'washing-machine' },
+    },
   ],
 
   salud: [

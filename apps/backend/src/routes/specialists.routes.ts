@@ -22,6 +22,37 @@ import { dbg, debugUploads } from '../utils/debug';
 
 const router = Router();
 
+const KYC_ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+]);
+
+function isHeicLike(mime?: string | null) {
+  const m = String(mime ?? '').toLowerCase();
+  return m === 'image/heic' || m === 'image/heif';
+}
+
+function isStandardProcessableImage(mime?: string | null) {
+  const m = String(mime ?? '').toLowerCase();
+  return m === 'image/jpeg' || m === 'image/jpg' || m === 'image/png' || m === 'image/webp';
+}
+
+function getExtensionFromMime(mime?: string | null) {
+  const m = String(mime ?? '').toLowerCase();
+
+  if (m === 'image/jpeg' || m === 'image/jpg') return '.jpg';
+  if (m === 'image/png') return '.png';
+  if (m === 'image/webp') return '.webp';
+  if (m === 'image/heic') return '.heic';
+  if (m === 'image/heif') return '.heif';
+
+  return '';
+}
+
 const kycDir = path.join(uploadsRoot, 'kyc');
 const certsDir = path.join(uploadsRoot, 'certifications');
 const backgroundChecksDir = path.join(uploadsRoot, 'background-checks');
@@ -44,11 +75,13 @@ if (debugUploads) {
 const storageKyc = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, kycDir),
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname) || '.jpg';
-    const base = path
-      .basename(file.originalname, ext)
-      .replace(/\s+/g, '_')
-      .replace(/[^A-Za-z0-9_-]/g, '');
+    const originalExt = path.extname(file.originalname || '');
+    const mimeExt = getExtensionFromMime(file.mimetype);
+    const ext = (originalExt || mimeExt || '.jpg').toLowerCase();
+
+    const rawBase = path.basename(file.originalname || 'kyc_upload', originalExt || '');
+    const base = rawBase.replace(/\s+/g, '_').replace(/[^A-Za-z0-9_-]/g, '') || 'kyc_upload';
+
     cb(null, `${Date.now()}_${base}${ext}`);
   },
 });
@@ -94,7 +127,9 @@ const upload = multer({
   storage: storageKyc,
   limits: { fileSize: 8 * 1024 * 1024 }, // 8MB
   fileFilter: (_req, file, cb) => {
-    const ok = /^image\/(jpe?g|png|webp)$/i.test(file.mimetype);
+    const mime = String(file.mimetype ?? '').toLowerCase();
+    const ok = KYC_ALLOWED_MIME_TYPES.has(mime);
+
     if (!ok) return cb(new Error('unsupported_type'));
     cb(null, true);
   },
@@ -1026,6 +1061,39 @@ router.post('/kyc/upload', auth, (req: Request, res: Response) => {
     try {
       if (!r.file) return res.status(400).json({ ok: false, error: 'file_required' });
 
+      const mime = String(r.file.mimetype ?? '').toLowerCase();
+
+      if (debugUploads) {
+        dbg(debugUploads, '[POST /specialists/kyc/upload] file', {
+          originalname: r.file.originalname,
+          mimetype: r.file.mimetype,
+          size: r.file.size,
+          path: r.file.path,
+        });
+      }
+
+      // ✅ HEIC/HEIF: no pasar por sharp para no romper producción en Render
+      if (isHeicLike(mime)) {
+        const relative = `/uploads/kyc/${path.basename(r.file.path)}`;
+
+        return res.json({
+          ok: true,
+          url: relative,
+          format: path.extname(r.file.path).replace('.', '').toLowerCase() || 'heic',
+          width: null,
+          height: null,
+          optimized: false,
+        });
+      }
+
+      // ✅ Flujo actual intacto para Android / imágenes estándar
+      if (!isStandardProcessableImage(mime)) {
+        try {
+          fs.unlinkSync(r.file.path);
+        } catch {}
+        return res.status(415).json({ ok: false, error: 'unsupported_type' });
+      }
+
       const meta = await sharp(r.file.path).rotate().metadata();
       const minW = 800;
       const minH = 600;
@@ -1039,6 +1107,7 @@ router.post('/kyc/upload', auth, (req: Request, res: Response) => {
 
       const webpPath = r.file.path + '.webp';
       await sharp(r.file.path).rotate().webp({ quality: 82 }).toFile(webpPath);
+
       try {
         fs.unlinkSync(r.file.path);
       } catch {}
@@ -1051,6 +1120,7 @@ router.post('/kyc/upload', auth, (req: Request, res: Response) => {
         width: meta.width,
         height: meta.height,
         format: 'webp',
+        optimized: true,
       });
     } catch (e) {
       if (process.env.NODE_ENV !== 'production') console.error('POST /specialists/kyc/upload', e);

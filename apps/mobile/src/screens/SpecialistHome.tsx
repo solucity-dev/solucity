@@ -2456,7 +2456,13 @@ export default function SpecialistHome() {
 
                 <Pressable
                   onPress={() =>
-                    (navigation as any).navigate('AgendaMain', { initialSection: 'ASSIGNED' })
+                    (navigation as any).navigate('Agenda', {
+                      screen: 'AgendaMain',
+                      params: {
+                        initialSection: 'ASSIGNED',
+                        refresh: true,
+                      },
+                    })
                   }
                   style={[
                     styles.btn,

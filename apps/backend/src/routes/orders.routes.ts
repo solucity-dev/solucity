@@ -385,12 +385,7 @@ const MAX_ACTIVE_ORDERS_CUSTOMER = 5;
 
 const SPECIALIST_ACTIVE_STATUSES: OrderStatus[] = ['ASSIGNED', 'IN_PROGRESS', 'PAUSED'];
 
-const CUSTOMER_ACTIVE_STATUSES: OrderStatus[] = [
-  'ASSIGNED',
-  'IN_PROGRESS',
-  'PAUSED',
-  'IN_CLIENT_REVIEW',
-];
+const CUSTOMER_ACTIVE_STATUSES: OrderStatus[] = ['IN_CLIENT_REVIEW'];
 
 async function countActiveOrdersForSpecialist(specialistId: string) {
   return prisma.serviceOrder.count({
@@ -787,7 +782,7 @@ orders.post('/', auth, async (req, res) => {
         ok: false,
         error: 'customer_active_orders_limit_reached',
         message:
-          'Tenés 5 órdenes activas o en revisión. Confirmá la finalización de alguna para poder solicitar un nuevo servicio.',
+          'Tenés 5 trabajos pendientes de revisión. Confirmá la finalización de alguna para poder solicitar un nuevo servicio.',
         limit: MAX_ACTIVE_ORDERS_CUSTOMER,
         activeOrders: activeOrdersCustomer,
       });

@@ -435,6 +435,9 @@ async function computeSafeAvailability(opts: {
   };
 }
 
+const SPECIALIST_SATURATION_STATUSES = ['ASSIGNED', 'IN_PROGRESS', 'PAUSED'] as const;
+const MAX_ACTIVE_ORDERS_SPECIALIST = 3;
+
 /** ===== helper: stats de contrataciones ===== */
 async function getSpecialistStatsById(specialistId: string) {
   const [done, canceled] = await Promise.all([
@@ -688,6 +691,21 @@ router.get('/search', async (req, res) => {
       return gate;
     };
 
+    const activeOrdersGrouped = await prisma.serviceOrder.groupBy({
+      by: ['specialistId'],
+      where: {
+        specialistId: { in: withDist.map((x) => x.specialistId) },
+        status: { in: [...SPECIALIST_SATURATION_STATUSES] as any },
+      },
+      _count: {
+        specialistId: true,
+      },
+    });
+
+    const activeOrdersBySpecialistId = new Map(
+      activeOrdersGrouped.map((row) => [row.specialistId as string, row._count.specialistId]),
+    );
+
     // 4) construir lista final + disponibilidad REAL (toggle + horario)
     let enriched = await Promise.all(
       withDist.map(async (x) => {
@@ -709,7 +727,10 @@ router.get('/search', async (req, res) => {
         const gate = await gateFor(prof?.userId ?? '');
         const subOk = gate.ok;
 
-        const visible = userOk && kycOk && bgOk && subOk && toggleAvailable; // ⬅️ NO incluye horario
+        const activeJobsCount = activeOrdersBySpecialistId.get(x.specialistId) ?? 0;
+        const underCapacity = activeJobsCount < MAX_ACTIVE_ORDERS_SPECIALIST;
+
+        const visible = userOk && kycOk && bgOk && subOk && toggleAvailable && underCapacity; // ⬅️ NO incluye horario
         const availableNow = visible && scheduleOk; // ⬅️ SOLO para la pill
 
         const personalName = `${user?.name ?? 'Especialista'} ${user?.surname ?? ''}`.trim();
@@ -776,6 +797,8 @@ router.get('/search', async (req, res) => {
           officeAddressId: (prof as any)?.officeAddressId ?? null,
           visible,
           availableNow, // pill (incluye horario)
+          activeJobsCount,
+          atCapacity: !underCapacity,
           pricingLabel: prof?.pricingLabel ?? null,
           specialtyHeadline: (prof as any)?.specialtyHeadline ?? null,
         };

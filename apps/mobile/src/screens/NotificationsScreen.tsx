@@ -222,6 +222,49 @@ export default function NotificationsScreen() {
       else navigation.navigate('Subscription');
       return;
     }
+
+    // ✅ Límites de órdenes → Agenda
+    if (type === 'CUSTOMER_ORDER_LIMIT_REACHED') {
+      if (parent?.navigate) {
+        parent.navigate('Agenda', {
+          screen: 'AgendaMain',
+          params: {
+            initialSection: 'IN_CLIENT_REVIEW',
+            refresh: true,
+          },
+        });
+      } else {
+        navigation.navigate('Agenda', {
+          screen: 'AgendaMain',
+          params: {
+            initialSection: 'IN_CLIENT_REVIEW',
+            refresh: true,
+          },
+        });
+      }
+      return;
+    }
+
+    if (type === 'SPECIALIST_ORDER_LIMIT_REACHED') {
+      if (parent?.navigate) {
+        parent.navigate('Agenda', {
+          screen: 'AgendaMain',
+          params: {
+            initialSection: 'ASSIGNED',
+            refresh: true,
+          },
+        });
+      } else {
+        navigation.navigate('Agenda', {
+          screen: 'AgendaMain',
+          params: {
+            initialSection: 'ASSIGNED',
+            refresh: true,
+          },
+        });
+      }
+      return;
+    }
     // Extraemos posibles IDs
     const orderId: string | null = data.orderId ?? data.order_id ?? data.order?.id ?? null;
 

@@ -606,9 +606,12 @@ export default function CreateOrderScreen() {
             {
               text: 'Ir a Agenda',
               onPress: () => {
-                nav.navigate('AgendaMain' as any, {
-                  initialSection: 'IN_CLIENT_REVIEW',
-                  refresh: true,
+                nav.navigate('Agenda' as any, {
+                  screen: 'AgendaMain',
+                  params: {
+                    initialSection: 'IN_CLIENT_REVIEW',
+                    refresh: true,
+                  },
                 });
               },
             },

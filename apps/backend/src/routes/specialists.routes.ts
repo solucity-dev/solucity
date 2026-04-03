@@ -1092,8 +1092,8 @@ router.post('/kyc/upload', auth, (req: Request, res: Response) => {
         return res.status(415).json({ ok: false, error: 'unsupported_type' });
       }
 
-      const minW = 800;
-      const minH = 600;
+      const minW = 400;
+      const minH = 500;
 
       const meta = await sharp(r.file.path).rotate().metadata();
 

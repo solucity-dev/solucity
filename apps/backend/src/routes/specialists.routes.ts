@@ -1063,14 +1063,12 @@ router.post('/kyc/upload', auth, (req: Request, res: Response) => {
 
       const mime = String(r.file.mimetype ?? '').toLowerCase();
 
-      if (debugUploads) {
-        dbg(debugUploads, '[POST /specialists/kyc/upload] file', {
-          originalname: r.file.originalname,
-          mimetype: r.file.mimetype,
-          size: r.file.size,
-          path: r.file.path,
-        });
-      }
+      console.log('[POST /specialists/kyc/upload]', {
+        hasFile: !!r.file,
+        originalname: r.file?.originalname ?? null,
+        mimetype: r.file?.mimetype ?? null,
+        size: r.file?.size ?? null,
+      });
 
       // ✅ HEIC/HEIF: no pasar por sharp para no romper producción en Render
       if (isHeicLike(mime)) {

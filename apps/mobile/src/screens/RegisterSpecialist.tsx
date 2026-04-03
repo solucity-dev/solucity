@@ -103,9 +103,17 @@ export default function RegisterSpecialist() {
         if (draft.password2) setPassword2(draft.password2);
         if (draft.pendingToken) setPendingToken(draft.pendingToken);
         if (draft.step) setStep(draft.step);
-        if (draft.dniFront) setDniFront(draft.dniFront);
-        if (draft.dniBack) setDniBack(draft.dniBack);
-        if (draft.selfie) setSelfie(draft.selfie);
+        if (draft.dniFront) {
+          setDniFront(
+            typeof draft.dniFront === 'string' ? { uri: draft.dniFront } : draft.dniFront,
+          );
+        }
+        if (draft.dniBack) {
+          setDniBack(typeof draft.dniBack === 'string' ? { uri: draft.dniBack } : draft.dniBack);
+        }
+        if (draft.selfie) {
+          setSelfie(typeof draft.selfie === 'string' ? { uri: draft.selfie } : draft.selfie);
+        }
         if (draft.kycUrls) setKycUrls(draft.kycUrls);
       } catch (e) {
         console.log('[register-specialist][draft][restore-error]', e);
@@ -276,9 +284,16 @@ export default function RegisterSpecialist() {
   };
 
   // ===== PASO 2: KYC (dni frente/dorso/selfie) =============================
-  const [dniFront, setDniFront] = useState<string | null>(null);
-  const [dniBack, setDniBack] = useState<string | null>(null);
-  const [selfie, setSelfie] = useState<string | null>(null);
+  type KycAsset = {
+    uri: string;
+    file?: File | null;
+    mimeType?: string | null;
+    fileName?: string | null;
+  };
+
+  const [dniFront, setDniFront] = useState<KycAsset | null>(null);
+  const [dniBack, setDniBack] = useState<KycAsset | null>(null);
+  const [selfie, setSelfie] = useState<KycAsset | null>(null);
   const [loadingUpload, setLoadingUpload] = useState(false);
   const [, setPendingKycField] = useState<'dniFront' | 'dniBack' | 'selfie' | null>(null);
 
@@ -310,11 +325,11 @@ export default function RegisterSpecialist() {
             console.log('[register-specialist] capture result restaurado', result);
 
             if (result?.field === 'selfie' && result?.uri) {
-              setSelfie(result.uri);
+              setSelfie({ uri: result.uri });
             } else if (result?.field === 'dniFront' && result?.uri) {
-              setDniFront(result.uri);
+              setDniFront({ uri: result.uri });
             } else if (result?.field === 'dniBack' && result?.uri) {
-              setDniBack(result.uri);
+              setDniBack({ uri: result.uri });
             }
 
             await AsyncStorage.removeItem(REGISTER_CAPTURE_RESULT_KEY);
@@ -408,9 +423,9 @@ export default function RegisterSpecialist() {
           storedField,
         });
 
-        if (storedField === 'dniFront') setDniFront(uri);
-        else if (storedField === 'dniBack') setDniBack(uri);
-        else if (storedField === 'selfie') setSelfie(uri);
+        if (storedField === 'dniFront') setDniFront({ uri });
+        else if (storedField === 'dniBack') setDniBack({ uri });
+        else if (storedField === 'selfie') setSelfie({ uri });
         else console.log('[ImagePicker] campo pendiente desconocido:', storedField);
 
         await AsyncStorage.removeItem(REGISTER_PENDING_FIELD_KEY);
@@ -425,7 +440,7 @@ export default function RegisterSpecialist() {
 
   const pickFrom = async (
     from: 'camera' | 'gallery',
-    setter: (uri: string) => void,
+    setter: (asset: KycAsset) => void,
     field: 'dniFront' | 'dniBack' | 'selfie',
     opts?: { cameraType?: ImagePicker.CameraType },
   ) => {
@@ -474,11 +489,24 @@ export default function RegisterSpecialist() {
         console.log('[register-specialist][pickFrom] respuesta inesperada', res);
         return;
       }
-
       if (!res.canceled && res.assets?.[0]?.uri) {
-        const pickedUri = res.assets[0].uri;
-        console.log('[register-specialist][pickFrom] uri seleccionada', pickedUri);
-        setter(pickedUri);
+        const asset: any = res.assets[0];
+        const picked = {
+          uri: asset.uri,
+          file: asset.file ?? null,
+          mimeType: asset.mimeType ?? asset.type ?? null,
+          fileName: asset.fileName ?? asset.file?.name ?? null,
+        };
+
+        console.log('[register-specialist][pickFrom] asset seleccionado', {
+          uri: picked.uri,
+          mimeType: picked.mimeType,
+          fileName: picked.fileName,
+          hasFile: !!picked.file,
+          field,
+        });
+
+        setter(picked);
       }
 
       await AsyncStorage.removeItem(REGISTER_PENDING_FIELD_KEY);
@@ -492,17 +520,23 @@ export default function RegisterSpecialist() {
   };
 
   // Compresión previa (ayuda en Android) - SOLO imágenes
-  const compress = async (uri: string) => {
-    if (Platform.OS === 'web') return uri;
+  const compress = async (asset: KycAsset): Promise<KycAsset> => {
+    if (Platform.OS === 'web') return asset;
 
     try {
-      const r = await ImageManipulator.manipulateAsync(uri, [{ resize: { width: 1400 } }], {
+      const r = await ImageManipulator.manipulateAsync(asset.uri, [{ resize: { width: 1400 } }], {
         compress: 0.85,
         format: ImageManipulator.SaveFormat.JPEG,
       });
-      return r.uri;
+
+      return {
+        ...asset,
+        uri: r.uri,
+        mimeType: 'image/jpeg',
+        fileName: asset.fileName ?? 'kyc.jpg',
+      };
     } catch {
-      return uri;
+      return asset;
     }
   };
 
@@ -510,17 +544,50 @@ export default function RegisterSpecialist() {
   const tempAuthHeaders = () => (pendingToken ? { Authorization: `Bearer ${pendingToken}` } : {});
 
   // Upload genérico KYC (solo imágenes)
-  const upload = async (uri: string): Promise<string> => {
+  const upload = async (asset: KycAsset): Promise<string> => {
     if (!pendingToken) throw new Error('missing_temp_token');
 
-    const src = await compress(uri);
+    const prepared = await compress(asset);
     const fd = new FormData();
-    fd.append('file', { uri: src, name: 'kyc.jpg', type: 'image/jpeg' } as any);
+
+    if (Platform.OS === 'web') {
+      if (prepared.file instanceof File) {
+        fd.append('file', prepared.file, prepared.file.name || prepared.fileName || 'kyc-upload');
+      } else {
+        const resp = await fetch(prepared.uri);
+        const blob = await resp.blob();
+        const mimeType = prepared.mimeType || blob.type || 'image/jpeg';
+        const ext =
+          mimeType === 'image/png'
+            ? 'png'
+            : mimeType === 'image/webp'
+              ? 'webp'
+              : mimeType === 'image/heic'
+                ? 'heic'
+                : mimeType === 'image/heif'
+                  ? 'heif'
+                  : 'jpg';
+
+        fd.append('file', blob, prepared.fileName || `kyc-upload.${ext}`);
+      }
+    } else {
+      fd.append('file', {
+        uri: prepared.uri,
+        name: prepared.fileName || 'kyc.jpg',
+        type: prepared.mimeType || 'image/jpeg',
+      } as any);
+    }
 
     const r = await api.post<KycUploadRes>('/specialists/kyc/upload', fd, {
-      headers: { 'Content-Type': 'multipart/form-data', ...tempAuthHeaders() },
+      headers: {
+        ...tempAuthHeaders(),
+      },
       timeout: 60000,
     });
+
+    if (!r?.data?.ok || !r?.data?.url) {
+      throw new Error('invalid_upload_response');
+    }
 
     return r.data.url;
   };
@@ -1008,7 +1075,7 @@ export default function RegisterSpecialist() {
             <PickBoxKyc
               label="DNI frente"
               mode="dni"
-              uri={dniFront}
+              uri={dniFront?.uri ?? null}
               onPickCamera={() =>
                 pickFrom('camera', setDniFront, 'dniFront', {
                   cameraType: ImagePicker.CameraType.back,
@@ -1021,7 +1088,7 @@ export default function RegisterSpecialist() {
             <PickBoxKyc
               label="DNI dorso"
               mode="dni"
-              uri={dniBack}
+              uri={dniBack?.uri ?? null}
               onPickCamera={() =>
                 pickFrom('camera', setDniBack, 'dniBack', {
                   cameraType: ImagePicker.CameraType.back,
@@ -1034,7 +1101,7 @@ export default function RegisterSpecialist() {
             <PickBoxKyc
               label="Selfie"
               mode="selfie"
-              uri={selfie}
+              uri={selfie?.uri ?? null}
               onPickCamera={() => navigation.navigate('SelfieCapture')}
               onPickGallery={() => pickFrom('gallery', setSelfie, 'selfie')}
               onClear={() => setSelfie(null)}

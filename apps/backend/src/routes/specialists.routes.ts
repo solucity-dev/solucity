@@ -1092,19 +1092,56 @@ router.post('/kyc/upload', auth, (req: Request, res: Response) => {
         return res.status(415).json({ ok: false, error: 'unsupported_type' });
       }
 
-      const meta = await sharp(r.file.path).rotate().metadata();
       const minW = 800;
       const minH = 600;
 
+      const meta = await sharp(r.file.path).rotate().metadata();
+
+      console.log('[POST /specialists/kyc/upload][meta]', {
+        originalname: r.file.originalname,
+        mimetype: r.file.mimetype,
+        width: meta.width ?? null,
+        height: meta.height ?? null,
+        format: meta.format ?? null,
+      });
+
       if (!meta.width || !meta.height || meta.width < minW || meta.height < minH) {
+        console.log('[POST /specialists/kyc/upload][low_quality]', {
+          originalname: r.file.originalname,
+          width: meta.width ?? null,
+          height: meta.height ?? null,
+          minW,
+          minH,
+        });
+
         try {
           fs.unlinkSync(r.file.path);
         } catch {}
-        return res.status(400).json({ ok: false, error: 'low_quality', minW, minH });
+
+        return res.status(400).json({
+          ok: false,
+          error: 'low_quality',
+          minW,
+          minH,
+          width: meta.width ?? null,
+          height: meta.height ?? null,
+        });
       }
 
       const webpPath = r.file.path + '.webp';
+
+      console.log('[POST /specialists/kyc/upload][convert_start]', {
+        originalname: r.file.originalname,
+        inputPath: r.file.path,
+        outputPath: webpPath,
+      });
+
       await sharp(r.file.path).rotate().webp({ quality: 82 }).toFile(webpPath);
+
+      console.log('[POST /specialists/kyc/upload][convert_ok]', {
+        originalname: r.file.originalname,
+        outputPath: webpPath,
+      });
 
       try {
         fs.unlinkSync(r.file.path);
@@ -1120,9 +1157,21 @@ router.post('/kyc/upload', auth, (req: Request, res: Response) => {
         format: 'webp',
         optimized: true,
       });
-    } catch (e) {
-      if (process.env.NODE_ENV !== 'production') console.error('POST /specialists/kyc/upload', e);
-      return res.status(500).json({ ok: false, error: 'server_error' });
+    } catch (e: any) {
+      console.error('[POST /specialists/kyc/upload][catch]', {
+        message: e?.message ?? 'unknown_error',
+        stack: e?.stack ?? null,
+        originalname: r.file?.originalname ?? null,
+        mimetype: r.file?.mimetype ?? null,
+        size: r.file?.size ?? null,
+        path: r.file?.path ?? null,
+      });
+
+      return res.status(500).json({
+        ok: false,
+        error: 'server_error',
+        message: e?.message ?? 'unknown_error',
+      });
     }
   });
 });

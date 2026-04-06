@@ -1,3 +1,4 @@
+//apps/mobile/src/screens/ClientHome.tsx
 import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -70,7 +71,35 @@ export default function ClientHome() {
     nav.navigate('Notifications' as never);
   };
 
+  const performSwitchToSpecialistMode = async () => {
+    try {
+      setSwitchingMode('specialist');
+      await new Promise((resolve) => setTimeout(resolve, 220));
+      await setAuthMode?.('specialist');
+    } catch (e) {
+      if (__DEV__) console.log('[ClientHome] switch to specialist mode error', e);
+      setSwitchingMode(null);
+
+      if (Platform.OS === 'web') {
+        window.alert('No pudimos cambiar de modo. Intentá nuevamente.');
+      } else {
+        Alert.alert('Ups', 'No pudimos cambiar de modo. Intentá nuevamente.');
+      }
+    }
+  };
+
   const handleSwitchToSpecialistMode = () => {
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(
+        'Vas a volver al modo especialista para gestionar tus trabajos, disponibilidad y perfil profesional.',
+      );
+
+      if (!confirmed) return;
+
+      performSwitchToSpecialistMode().catch(() => undefined);
+      return;
+    }
+
     Alert.alert(
       'Cambiar a modo especialista',
       'Vas a volver al modo especialista para gestionar tus trabajos, disponibilidad y perfil profesional.',
@@ -78,24 +107,8 @@ export default function ClientHome() {
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Cambiar',
-          onPress: async () => {
-            try {
-              setSwitchingMode('specialist');
-
-              setTimeout(async () => {
-                try {
-                  await setAuthMode?.('specialist');
-                } catch (e) {
-                  if (__DEV__) console.log('[ClientHome] switch to specialist mode error', e);
-                  setSwitchingMode(null);
-                  Alert.alert('Ups', 'No pudimos cambiar de modo. Intentá nuevamente.');
-                }
-              }, 420);
-            } catch (e) {
-              if (__DEV__) console.log('[ClientHome] switch to specialist mode error', e);
-              setSwitchingMode(null);
-              Alert.alert('Ups', 'No pudimos cambiar de modo. Intentá nuevamente.');
-            }
+          onPress: () => {
+            performSwitchToSpecialistMode().catch(() => undefined);
           },
         },
       ],
@@ -113,15 +126,19 @@ export default function ClientHome() {
           </View>
 
           <Pressable
-            style={[styles.bellWrap, { top: insets.top + 12 }]}
-            onPress={() => nav.navigate('Notifications' as never)}
+            style={[styles.bellWrap, { top: insets.top + 6 }]}
+            onPress={handleOpenNotifications}
+            hitSlop={12}
+            pressRetentionOffset={12}
           >
-            <Ionicons name="notifications-outline" size={28} color="#E9FEFF" />
-            {unread > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text>
-              </View>
-            )}
+            <View style={styles.bellHitArea}>
+              <Ionicons name="notifications-outline" size={28} color="#E9FEFF" />
+              {unread > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text>
+                </View>
+              )}
+            </View>
           </Pressable>
         </View>
 
@@ -137,13 +154,14 @@ export default function ClientHome() {
                 </Text>
               </View>
 
-              <Pressable onPress={dismissWebBanner} hitSlop={10} style={styles.bannerCloseBtn}>
-                <Ionicons name="close" size={18} color="#015A69" />
-              </Pressable>
+              <View style={styles.bannerCloseBtnWrap}>
+                <Pressable onPress={dismissWebBanner} hitSlop={10} style={styles.bannerCloseBtn}>
+                  <Ionicons name="close" size={18} color="#015A69" />
+                </Pressable>
+              </View>
             </Pressable>
           </View>
         )}
-
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <Text style={styles.title}>¡Bienvenido!</Text>
           <Text style={styles.subtitle}>Elegí una categoría para empezar</Text>
@@ -235,7 +253,17 @@ const styles = StyleSheet.create({
   logo: { width: 30, height: 30 },
   brandText: { color: '#E9FEFF', fontWeight: '900', fontSize: 26, letterSpacing: 0.5 },
 
-  bellWrap: { position: 'absolute', right: 18 },
+  bellWrap: {
+    position: 'absolute',
+    right: 12,
+    zIndex: 20,
+  },
+  bellHitArea: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   badge: {
     position: 'absolute',
     top: -6,
@@ -280,6 +308,10 @@ const styles = StyleSheet.create({
   bannerCloseBtn: {
     marginLeft: 8,
     padding: 2,
+  },
+  bannerCloseBtnWrap: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 120 },

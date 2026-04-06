@@ -465,6 +465,23 @@ export default function SpecialistHome() {
   const currentMode: 'client' | 'specialist' = auth?.mode ?? 'specialist';
   const setAuthMode: ((mode: 'client' | 'specialist') => Promise<void>) | undefined = auth?.setMode;
 
+  const performSwitchToClientMode = useCallback(async () => {
+    try {
+      setSwitchingMode('client');
+      await new Promise((resolve) => setTimeout(resolve, 220));
+      await setAuthMode?.('client');
+    } catch (e) {
+      if (__DEV__) console.log('[SpecialistHome] switch to client mode error', e);
+      setSwitchingMode(null);
+
+      if (Platform.OS === 'web') {
+        window.alert('No pudimos cambiar de modo. Intentá nuevamente.');
+      } else {
+        Alert.alert('Ups', 'No pudimos cambiar de modo. Intentá nuevamente.');
+      }
+    }
+  }, [setAuthMode]);
+
   const [switchingMode, setSwitchingMode] = useState<'client' | 'specialist' | null>(null);
   const switchFade = useRef(new Animated.Value(0)).current;
   const switchScale = useRef(new Animated.Value(0.96)).current;
@@ -493,6 +510,17 @@ export default function SpecialistHome() {
   }, [switchingMode, switchFade, switchScale]);
 
   const handleSwitchToClientMode = useCallback(() => {
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(
+        'Vas a pasar al modo cliente para buscar y contratar especialistas. Después vas a poder volver al modo especialista.',
+      );
+
+      if (!confirmed) return;
+
+      performSwitchToClientMode().catch(() => undefined);
+      return;
+    }
+
     Alert.alert(
       'Cambiar a modo cliente',
       'Vas a pasar al modo cliente para buscar y contratar especialistas. Después vas a poder volver al modo especialista.',
@@ -500,29 +528,13 @@ export default function SpecialistHome() {
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Cambiar',
-          onPress: async () => {
-            try {
-              setSwitchingMode('client');
-
-              setTimeout(async () => {
-                try {
-                  await setAuthMode?.('client');
-                } catch (e) {
-                  if (__DEV__) console.log('[SpecialistHome] switch to client mode error', e);
-                  setSwitchingMode(null);
-                  Alert.alert('Ups', 'No pudimos cambiar de modo. Intentá nuevamente.');
-                }
-              }, 420);
-            } catch (e) {
-              if (__DEV__) console.log('[SpecialistHome] switch to client mode error', e);
-              setSwitchingMode(null);
-              Alert.alert('Ups', 'No pudimos cambiar de modo. Intentá nuevamente.');
-            }
+          onPress: () => {
+            performSwitchToClientMode().catch(() => undefined);
           },
         },
       ],
     );
-  }, [setAuthMode]);
+  }, [performSwitchToClientMode]);
   // ✅ Loading real
   const [loading, setLoading] = useState(true);
 
@@ -2166,13 +2178,20 @@ export default function SpecialistHome() {
             <AppLogo style={styles.logo} resizeMode="contain" />
             <Text style={styles.brandText}>Solucity</Text>
           </View>
-          <Pressable style={styles.bellBtn} onPress={handleOpenNotifications}>
-            <Ionicons name="notifications-outline" size={26} color="#E9FEFF" />
-            {unread > 0 && (
-              <View style={styles.notifBadge}>
-                <Text style={styles.notifBadgeText}>{unread > 9 ? '9+' : unread}</Text>
-              </View>
-            )}
+          <Pressable
+            style={styles.bellBtn}
+            onPress={handleOpenNotifications}
+            hitSlop={12}
+            pressRetentionOffset={12}
+          >
+            <View style={styles.bellHitArea}>
+              <Ionicons name="notifications-outline" size={26} color="#E9FEFF" />
+              {unread > 0 && (
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>{unread > 9 ? '9+' : unread}</Text>
+                </View>
+              )}
+            </View>
           </Pressable>
         </View>
 
@@ -2188,9 +2207,11 @@ export default function SpecialistHome() {
                 </Text>
               </View>
 
-              <Pressable onPress={dismissWebBanner} hitSlop={10} style={styles.bannerCloseBtn}>
-                <Ionicons name="close" size={18} color="#015A69" />
-              </Pressable>
+              <View style={styles.bannerCloseBtnWrap}>
+                <Pressable onPress={dismissWebBanner} hitSlop={10} style={styles.bannerCloseBtn}>
+                  <Ionicons name="close" size={18} color="#015A69" />
+                </Pressable>
+              </View>
             </Pressable>
           </View>
         )}
@@ -3881,7 +3902,16 @@ const styles = StyleSheet.create({
   logo: { width: 28, height: 28 },
   brandText: { color: '#E9FEFF', fontWeight: '900', fontSize: 24, letterSpacing: 0.5 },
 
-  bellBtn: { position: 'relative', padding: 4 },
+  bellBtn: {
+    position: 'relative',
+    zIndex: 20,
+  },
+  bellHitArea: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   notifBadge: {
     position: 'absolute',
     top: -2,
@@ -3926,6 +3956,10 @@ const styles = StyleSheet.create({
   bannerCloseBtn: {
     marginLeft: 8,
     padding: 2,
+  },
+  bannerCloseBtnWrap: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   incompleteBannerWrap: {

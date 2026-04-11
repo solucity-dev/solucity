@@ -19,6 +19,11 @@ export type AdminMetrics = {
     finished: number;
     cancelled: number;
   };
+  inquiries: {
+    total: number;
+    withMessages: number;
+    withoutMessages: number;
+  };
   specialists: {
     total: number;
     subscriptions: {
@@ -604,6 +609,52 @@ export async function setAdminSpecialistStatus(userId: string, status: UserStatu
     },
   );
 }
+
+/* ─────────────────────────────────────────────────────────────
+ * Inquiries (consultas previas)
+ * ───────────────────────────────────────────────────────────── */
+
+export type AdminInquiryUser = {
+  userId: string;
+  name: string | null;
+  email: string | null;
+};
+
+export type AdminInquirySpecialist = {
+  userId: string;
+  specialistId: string | null;
+  name: string | null;
+  email: string | null;
+  businessName: string | null;
+};
+
+export type AdminInquiryLastMessage = {
+  id: string;
+  body: string;
+  createdAt: string;
+  senderId: string;
+  senderName: string | null;
+};
+
+export type AdminInquiryRow = {
+  id: string;
+  type: 'INQUIRY';
+  createdAt: string;
+  categorySlug: string | null;
+
+  customer: AdminInquiryUser | null;
+  specialist: AdminInquirySpecialist | null;
+
+  messagesCount: number;
+
+  lastMessage: AdminInquiryLastMessage | null;
+};
+
+export type AdminInquiriesResponse = {
+  ok: true;
+  count: number;
+  items: AdminInquiryRow[];
+};
 
 /* ─────────────────────────────────────────────────────────────
  * Orders (admin)

@@ -516,6 +516,23 @@ adminRouter.get('/metrics', async (_req, res) => {
       prisma.kycSubmission.count({ where: { status: 'PENDING' } }),
       prisma.specialistCertification.count({ where: { status: 'PENDING' } }),
       prisma.specialistBackgroundCheck.count({ where: { status: 'PENDING' } }),
+
+      // ✅ Consultas previas
+      prisma.chatThread.count({
+        where: { type: 'INQUIRY' },
+      }),
+      prisma.chatThread.count({
+        where: {
+          type: 'INQUIRY',
+          messages: { some: {} },
+        },
+      }),
+      prisma.chatThread.count({
+        where: {
+          type: 'INQUIRY',
+          messages: { none: {} },
+        },
+      }),
     ]);
 
     const getValue = <T>(index: number, fallback: T): T =>
@@ -545,6 +562,10 @@ adminRouter.get('/metrics', async (_req, res) => {
     const kycPending = getValue(10, 0);
     const certificationsPending = getValue(11, 0);
     const backgroundPending = getValue(12, 0);
+
+    const inquiriesTotal = getValue(13, 0);
+    const inquiriesWithMessages = getValue(14, 0);
+    const inquiriesWithoutMessages = getValue(15, 0);
 
     const now = new Date();
     const subs = { TRIALING: 0, ACTIVE: 0, PAST_DUE: 0, CANCELLED: 0 };
@@ -596,6 +617,11 @@ adminRouter.get('/metrics', async (_req, res) => {
         finished: ordersFinished,
         cancelled: ordersCancelled,
       },
+      inquiries: {
+        total: inquiriesTotal,
+        withMessages: inquiriesWithMessages,
+        withoutMessages: inquiriesWithoutMessages,
+      },
       specialists: {
         total: specialistsTotal,
         subscriptions: subs,
@@ -611,6 +637,261 @@ adminRouter.get('/metrics', async (_req, res) => {
       error: 'metrics_unavailable',
     });
   }
+});
+
+/**
+ * GET /admin/inquiries?q=
+ * Listado de consultas previas (chat threads tipo INQUIRY)
+ */
+adminRouter.get('/inquiries', async (req, res) => {
+  const q = String(req.query.q ?? '').trim();
+
+  const rows = await prisma.chatThread.findMany({
+    where: {
+      type: 'INQUIRY',
+      ...(q
+        ? {
+            OR: [
+              { customerUser: { email: { contains: q, mode: 'insensitive' } } },
+              { customerUser: { name: { contains: q, mode: 'insensitive' } } },
+              { customerUser: { surname: { contains: q, mode: 'insensitive' } } },
+              { specialistUser: { email: { contains: q, mode: 'insensitive' } } },
+              { specialistUser: { name: { contains: q, mode: 'insensitive' } } },
+              { specialistUser: { surname: { contains: q, mode: 'insensitive' } } },
+              { categorySlug: { contains: q, mode: 'insensitive' } },
+              { id: { contains: q, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 500,
+    select: {
+      id: true,
+      createdAt: true,
+      categorySlug: true,
+      customerUserId: true,
+      specialistUserId: true,
+
+      customerUser: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          surname: true,
+        },
+      },
+
+      specialistUser: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          surname: true,
+          specialist: {
+            select: {
+              id: true,
+              businessName: true,
+            },
+          },
+        },
+      },
+
+      _count: {
+        select: {
+          messages: true,
+        },
+      },
+
+      messages: {
+        take: 1,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          body: true,
+          createdAt: true,
+          senderId: true,
+          sender: {
+            select: {
+              name: true,
+              surname: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  return res.json({
+    ok: true,
+    count: rows.length,
+    items: rows.map((t) => {
+      const last = t.messages[0] ?? null;
+
+      return {
+        id: t.id,
+        type: 'INQUIRY',
+        createdAt: t.createdAt.toISOString(),
+        categorySlug: t.categorySlug ?? null,
+
+        customer: t.customerUser
+          ? {
+              userId: t.customerUser.id,
+              name: `${t.customerUser.name ?? ''} ${t.customerUser.surname ?? ''}`.trim() || null,
+              email: t.customerUser.email ?? null,
+            }
+          : null,
+
+        specialist: t.specialistUser
+          ? {
+              userId: t.specialistUser.id,
+              specialistId: t.specialistUser.specialist?.id ?? null,
+              name:
+                `${t.specialistUser.name ?? ''} ${t.specialistUser.surname ?? ''}`.trim() || null,
+              email: t.specialistUser.email ?? null,
+              businessName: t.specialistUser.specialist?.businessName ?? null,
+            }
+          : null,
+
+        messagesCount: t._count.messages ?? 0,
+
+        lastMessage: last
+          ? {
+              id: last.id,
+              body: last.body ?? '',
+              createdAt: last.createdAt.toISOString(),
+              senderId: last.senderId,
+              senderName: `${last.sender?.name ?? ''} ${last.sender?.surname ?? ''}`.trim() || null,
+            }
+          : null,
+      };
+    }),
+  });
+});
+
+/**
+ * GET /admin/inquiries/:id
+ * Detalle de una consulta previa (chat thread tipo INQUIRY)
+ */
+adminRouter.get('/inquiries/:id', async (req, res) => {
+  const id = String(req.params.id ?? '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'id_required' });
+
+  const thread = await prisma.chatThread.findFirst({
+    where: {
+      id,
+      type: 'INQUIRY',
+    },
+    select: {
+      id: true,
+      type: true,
+      createdAt: true,
+      categorySlug: true,
+      customerUserId: true,
+      specialistUserId: true,
+
+      customerUser: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          surname: true,
+        },
+      },
+
+      specialistUser: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          surname: true,
+          specialist: {
+            select: {
+              id: true,
+              businessName: true,
+            },
+          },
+        },
+      },
+
+      messages: {
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          body: true,
+          createdAt: true,
+          readAt: true,
+          senderId: true,
+          sender: {
+            select: {
+              id: true,
+              email: true,
+              name: true,
+              surname: true,
+            },
+          },
+        },
+      },
+
+      _count: {
+        select: {
+          messages: true,
+        },
+      },
+    },
+  });
+
+  if (!thread) {
+    return res.status(404).json({ ok: false, error: 'not_found' });
+  }
+
+  return res.json({
+    ok: true,
+    inquiry: {
+      id: thread.id,
+      type: thread.type,
+      createdAt: thread.createdAt.toISOString(),
+      categorySlug: thread.categorySlug ?? null,
+      messagesCount: thread._count.messages ?? 0,
+
+      customer: thread.customerUser
+        ? {
+            userId: thread.customerUser.id,
+            name:
+              `${thread.customerUser.name ?? ''} ${thread.customerUser.surname ?? ''}`.trim() ||
+              null,
+            email: thread.customerUser.email ?? null,
+          }
+        : null,
+
+      specialist: thread.specialistUser
+        ? {
+            userId: thread.specialistUser.id,
+            specialistId: thread.specialistUser.specialist?.id ?? null,
+            name:
+              `${thread.specialistUser.name ?? ''} ${thread.specialistUser.surname ?? ''}`.trim() ||
+              null,
+            email: thread.specialistUser.email ?? null,
+            businessName: thread.specialistUser.specialist?.businessName ?? null,
+          }
+        : null,
+
+      messages: thread.messages.map((m) => ({
+        id: m.id,
+        body: m.body ?? '',
+        createdAt: m.createdAt.toISOString(),
+        readAt: m.readAt ? m.readAt.toISOString() : null,
+        senderId: m.senderId,
+        sender: m.sender
+          ? {
+              userId: m.sender.id,
+              name: `${m.sender.name ?? ''} ${m.sender.surname ?? ''}`.trim() || null,
+              email: m.sender.email ?? null,
+            }
+          : null,
+      })),
+    },
+  });
 });
 
 /**

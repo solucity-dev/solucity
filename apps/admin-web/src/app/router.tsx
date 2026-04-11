@@ -11,6 +11,7 @@ import CertificationsPage from "../pages/CertificationsPage";
 import CustomerDetail from "../pages/CustomerDetail";
 import Customers from "../pages/Customers";
 import Dashboard from "../pages/Dashboard";
+import InquiriesPage from "../pages/InquiriesPage";
 import Login from "../pages/Login";
 import NotFound from "../pages/NotFound";
 import OrderDetail from "../pages/OrderDetail";
@@ -44,16 +45,19 @@ export const router = createBrowserRouter([
 
           { path: "orders", element: <Orders /> },
           {
-  path: "orders/:id",
-  element: <OrderDetail />,
-  loader: async ({ params }) => {
-    const id = String(params.id ?? "").trim();
-    if (!id) throw new Response("Falta ID", { status: 400 });
-    return getAdminOrderDetail(id);
-  },
-},
-{ path: "certifications", element: <CertificationsPage /> },
-  { path: "background-checks", element: <BackgroundChecksPage /> },
+            path: "orders/:id",
+            element: <OrderDetail />,
+            loader: async ({ params }) => {
+              const id = String(params.id ?? "").trim();
+              if (!id) throw new Response("Falta ID", { status: 400 });
+              return getAdminOrderDetail(id);
+            },
+          },
+
+          { path: "inquiries", element: <InquiriesPage /> },
+
+          { path: "certifications", element: <CertificationsPage /> },
+          { path: "background-checks", element: <BackgroundChecksPage /> },
 
 
         ],

@@ -116,13 +116,15 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
     // Snapshot anterior para detectar incrementos
-    const prevRef = React.useRef<{
+  const prevRef = React.useRef<{
     usersTotal: number;
     ordersTotal: number;
     ordersPending: number;
     kycPending: number;
     certificationsPending: number;
     backgroundPending: number;
+    inquiriesTotal: number;
+    inquiriesWithMessages: number;
   } | null>(null);
 
   React.useEffect(() => {
@@ -146,13 +148,15 @@ export default function Dashboard() {
   React.useEffect(() => {
     if (!data) return;
 
-        const current = {
+    const current = {
       usersTotal: Number(data.users?.total || 0),
       ordersTotal: Number(data.orders?.total || 0),
       ordersPending: Number(data.orders?.pending || 0),
       kycPending: Number(data.specialists?.kycPending || 0),
       certificationsPending: Number(data.specialists?.certificationsPending || 0),
       backgroundPending: Number(data.specialists?.backgroundPending || 0),
+      inquiriesTotal: Number(data.inquiries?.total || 0),
+      inquiriesWithMessages: Number(data.inquiries?.withMessages || 0),
     };
 
     const prev = prevRef.current;
@@ -178,17 +182,27 @@ export default function Dashboard() {
         );
       }
 
-      if (current.backgroundPending > prev.backgroundPending) {
+            if (current.backgroundPending > prev.backgroundPending) {
         alerts.push(
           `Antecedentes pendientes: ${prev.backgroundPending} → ${current.backgroundPending}`
         );
       }
 
+      if (current.inquiriesTotal > prev.inquiriesTotal) {
+        alerts.push(`Consultas totales: ${prev.inquiriesTotal} → ${current.inquiriesTotal}`);
+      }
+
+      if (current.inquiriesWithMessages > prev.inquiriesWithMessages) {
+        alerts.push(
+          `Consultas con mensajes: ${prev.inquiriesWithMessages} → ${current.inquiriesWithMessages}`
+        );
+      }
+
       // Si hubo al menos un incremento, sonar + notificar
-if (alerts.length > 0) {
-  playAlarm(30000); // 🔔 30 segundos de alarma
-    notify('Solucity · Nueva actividad', alerts.join('\n'));
-}
+      if (alerts.length > 0) {
+        playAlarm(30000); // 🔔 30 segundos de alarma
+        notify('Solucity · Nueva actividad', alerts.join('\n'));
+      }
 
     }
 
@@ -362,6 +376,33 @@ if (alerts.length > 0) {
               hint="Baja"
               tone={data.specialists.subscriptions.CANCELLED > 0 ? 'bad' : 'neutral'}
               onClick={() => navigate('/app/specialists?sub=CANCELLED')}
+            />
+          </Section>
+
+                    {/* 💬 Consultas */}
+          <Section title="Consultas" subtitle="Interacciones previas a la contratación">
+            <MetricCard
+              label="Consultas totales"
+              value={data.inquiries.total}
+              tone="neutral"
+              hint="Ver listado"
+              onClick={() => navigate('/app/inquiries')}
+            />
+
+            <MetricCard
+              label="Con mensajes"
+              value={data.inquiries.withMessages}
+              hint="Conversaciones iniciadas"
+              tone={data.inquiries.withMessages > 0 ? 'good' : 'neutral'}
+              onClick={() => navigate('/app/inquiries?filter=withMessages')}
+            />
+
+            <MetricCard
+              label="Sin mensajes"
+              value={data.inquiries.withoutMessages}
+              hint="Abiertas pero sin interacción"
+              tone={data.inquiries.withoutMessages > 0 ? 'warn' : 'neutral'}
+              onClick={() => navigate('/app/inquiries?filter=withoutMessages')}
             />
           </Section>
         </div>

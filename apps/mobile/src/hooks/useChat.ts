@@ -3,29 +3,39 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 
 import type { ChatMessage, ChatThread } from '@/types/chat';
 
-import { ensureOrderChat, getMessages, sendMessage } from '@/api/chat';
+import { ensureInquiryChat, ensureOrderChat, getMessages, sendMessage } from '@/api/chat';
 
-type UseChatArgs = { orderId: string; threadId?: never } | { orderId?: never; threadId: string };
+type UseChatArgs =
+  | { orderId: string; threadId?: never; specialistId?: never; categorySlug?: never }
+  | { orderId?: never; threadId: string; specialistId?: never; categorySlug?: never }
+  | { orderId?: never; threadId?: never; specialistId: string; categorySlug?: string | null };
 
-export function useChat({ orderId, threadId }: UseChatArgs) {
+export function useChat({ orderId, threadId, specialistId, categorySlug }: UseChatArgs) {
   const hasOrder = !!orderId;
   const hasThread = !!threadId;
+  const hasInquiryTarget = !!specialistId;
 
   // 1) Resolver / asegurar thread
   const threadQuery = useQuery<ChatThread>({
-    queryKey: ['chat', 'thread', orderId ?? threadId],
-    enabled: !!orderId || !!threadId,
+    queryKey: ['chat', 'thread', orderId ?? threadId ?? specialistId],
+    enabled: !!orderId || !!threadId || !!specialistId,
     queryFn: async () => {
       // Si me pasan solo threadId (desde ChatList), no necesito crear nada
-      if (hasThread && !hasOrder) {
+      if (hasThread && !hasOrder && !hasInquiryTarget) {
         return {
           id: threadId!,
-          orderId: '',
+          orderId: null,
           createdAt: new Date().toISOString(),
         } as ChatThread;
       }
-      // Si viene desde una orden, aseguro que exista el chat
-      return ensureOrderChat(orderId!);
+
+      // Si viene desde una orden, aseguro chat ORDER
+      if (hasOrder) {
+        return ensureOrderChat(orderId!);
+      }
+
+      // Si viene desde perfil especialista, aseguro chat INQUIRY
+      return ensureInquiryChat(specialistId!, categorySlug ?? null);
     },
   });
 

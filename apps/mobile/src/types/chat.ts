@@ -1,9 +1,14 @@
 // apps/mobile/src/types/chat.ts
 
+export type ChatThreadType = 'ORDER' | 'INQUIRY';
+
 export type ChatThread = {
   id: string;
-  orderId: string;
+  orderId: string | null;
   createdAt: string;
+  type?: ChatThreadType;
+  specialistId?: string | null;
+  businessName?: string | null;
 };
 
 export type ChatMessage = {
@@ -28,9 +33,11 @@ export type ChatThreadCounterpart = {
 // 👇 Debe coincidir con lo que armás en chat.routes.ts (items = rows.map(...))
 export type ChatThreadListItem = {
   id: string;
+  type: ChatThreadType;
   orderId: string | null;
   serviceName: string;
   address: string | null;
+  categorySlug?: string | null;
   counterpart: ChatThreadCounterpart;
   lastMessage: {
     id: string;
@@ -40,7 +47,6 @@ export type ChatThreadListItem = {
   } | null;
   createdAt: string;
 };
-
 // Alias por compatibilidad
 export type ChatThreadSummary = ChatThreadListItem;
 
@@ -51,5 +57,8 @@ export type ChatStackParamList = {
     threadId?: string;
     title?: string;
     businessName?: string | null;
+    threadType?: ChatThreadType;
+    specialistId?: string;
+    categorySlug?: string | null;
   };
 };

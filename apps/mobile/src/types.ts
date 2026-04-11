@@ -42,6 +42,7 @@ export type CategorySlug =
   | 'tapizado'
   // ── Informática & Electrónica ─────────────────────────────
   | 'climatizacion'
+  | 'refrigeracion'
   | 'carteleria'
   | 'servicio-tecnico-electronica'
   | 'reparacion-de-celulares'

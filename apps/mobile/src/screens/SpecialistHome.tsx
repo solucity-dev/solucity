@@ -58,7 +58,14 @@ type SpecProfile = {
 
   pricingLabel?: string | null;
 
-  availability: { days: number[]; start: string; end: string; enabled?: boolean };
+  availability: {
+    days: number[];
+    start?: string;
+    end?: string;
+    ranges?: { start: string; end: string }[];
+    mode?: 'single' | 'split' | 'allday';
+    enabled?: boolean;
+  };
   ratingAvg: number | null;
   ratingCount: number | null;
   badge: 'BRONZE' | 'SILVER' | 'GOLD' | null;
@@ -160,6 +167,7 @@ const SPECIALTY_OPTIONS = [
 
   // ── Informática & Electrónica ─────────────────────────────
   'climatizacion',
+  'refrigeracion',
   'carteleria',
   'servicio-tecnico-electronica',
   'reparacion-de-celulares',
@@ -271,6 +279,7 @@ const REQUIRES_CERT_FALLBACK = new Set([
 
   // Informática y electrónica
   'climatizacion',
+  'refrigeracion',
   'servicio-tecnico-electronica',
   'servicio-tecnico-electrodomesticos',
   'servicio-tecnico-informatica',
@@ -395,30 +404,52 @@ function serviceModesSnapshot(modes: any, officeAddr: string, locality: string):
   });
 }
 
-function isWithinAvailability(av?: { days?: number[]; start?: string; end?: string }) {
+function isWithinAvailability(av?: {
+  days?: number[];
+  start?: string;
+  end?: string;
+  ranges?: { start: string; end: string }[];
+}) {
   if (!av) return true;
 
   const days = Array.isArray(av.days) ? av.days : [1, 2, 3, 4, 5];
-  const start = av.start || '09:00';
-  const end = av.end || '18:00';
+
+  const ranges =
+    Array.isArray(av.ranges) && av.ranges.length > 0
+      ? av.ranges
+      : av.start && av.end
+        ? [{ start: av.start, end: av.end }]
+        : [];
 
   const now = new Date();
   const day = now.getDay(); // 0..6 (D..S)
   if (!days.includes(day)) return false;
 
-  const [sh, sm] = start.split(':').map((n) => Number(n));
-  const [eh, em] = end.split(':').map((n) => Number(n));
-
-  const startMin = (sh || 0) * 60 + (sm || 0);
-  const endMin = (eh || 0) * 60 + (em || 0);
+  if (!ranges.length) return true;
 
   const nowMin = now.getHours() * 60 + now.getMinutes();
 
-  // rango normal
-  if (endMin >= startMin) return nowMin >= startMin && nowMin <= endMin;
+  for (const range of ranges) {
+    const [sh, sm] = String(range.start)
+      .split(':')
+      .map((n) => Number(n));
+    const [eh, em] = String(range.end)
+      .split(':')
+      .map((n) => Number(n));
 
-  // rango que cruza medianoche (ej 22:00–02:00)
-  return nowMin >= startMin || nowMin <= endMin;
+    const startMin = (sh || 0) * 60 + (sm || 0);
+    const endMin = (eh || 0) * 60 + (em || 0);
+
+    if (startMin === endMin) return true;
+
+    if (endMin >= startMin) {
+      if (nowMin >= startMin && nowMin <= endMin) return true;
+    } else {
+      if (nowMin >= startMin || nowMin <= endMin) return true;
+    }
+  }
+
+  return false;
 }
 
 const DAY_LABELS = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
@@ -695,12 +726,26 @@ export default function SpecialistHome() {
   const [availableNow, setAvailableNow] = useState(true); // switch (intención)
   const [start, setStart] = useState('09:00');
   const [end, setEnd] = useState('18:00');
+
+  const [splitStart, setSplitStart] = useState('09:00');
+  const [splitEnd, setSplitEnd] = useState('13:00');
+  const [splitStart2, setSplitStart2] = useState('16:00');
+  const [splitEnd2, setSplitEnd2] = useState('20:00');
+
+  const [availabilityMode, setAvailabilityMode] = useState<'single' | 'split' | 'allday'>('single');
+  const [allDay, setAllDay] = useState(false);
+
   const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [specialties, setSpecialties] = useState<string[]>([]);
 
   // ✅ pickers hora
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
+
+  const [showSplitStartPicker, setShowSplitStartPicker] = useState(false);
+  const [showSplitEndPicker, setShowSplitEndPicker] = useState(false);
+  const [showSplitStart2Picker, setShowSplitStart2Picker] = useState(false);
+  const [showSplitEnd2Picker, setShowSplitEnd2Picker] = useState(false);
 
   function timeStringToDate(t: string) {
     const [h, m] = t.split(':').map(Number);
@@ -1035,9 +1080,35 @@ export default function SpecialistHome() {
           start: '09:00',
           end: '18:00',
         };
+
+        const ranges =
+          Array.isArray(avail.ranges) && avail.ranges.length > 0
+            ? avail.ranges
+            : avail.start && avail.end
+              ? [{ start: avail.start, end: avail.end }]
+              : [{ start: '09:00', end: '18:00' }];
+
+        const firstRange = ranges[0] ?? { start: '09:00', end: '18:00' };
+        const secondRange = ranges[1] ?? { start: '16:00', end: '20:00' };
+
+        const isAllDay =
+          ranges.length === 1 && firstRange.start === '00:00' && firstRange.end === '00:00';
+
+        const mode: 'single' | 'split' | 'allday' = isAllDay
+          ? 'allday'
+          : ranges.length > 1
+            ? 'split'
+            : 'single';
+
         setDays(avail.days ?? [1, 2, 3, 4, 5]);
-        setStart(avail.start ?? '09:00');
-        setEnd(avail.end ?? '18:00');
+        setStart(firstRange.start ?? '09:00');
+        setEnd(firstRange.end ?? '18:00');
+        setSplitStart(firstRange.start ?? '09:00');
+        setSplitEnd(firstRange.end ?? '13:00');
+        setSplitStart2(secondRange.start ?? '16:00');
+        setSplitEnd2(secondRange.end ?? '20:00');
+        setAvailabilityMode(mode);
+        setAllDay(isAllDay);
 
         setSpecialties(normalizeSpecialties((p as any).specialties));
         setAvatar(p.avatarUrl ?? null);
@@ -1052,11 +1123,38 @@ export default function SpecialistHome() {
         headlineSnapRef.current = (p.specialtyHeadline ?? '').trim();
         businessNameSnapRef.current = (p.businessName ?? '').trim();
 
+        const baseRanges =
+          Array.isArray(p.availability?.ranges) && p.availability.ranges.length > 0
+            ? p.availability.ranges
+            : p.availability?.start && p.availability?.end
+              ? [{ start: p.availability.start, end: p.availability.end }]
+              : [{ start: '09:00', end: '18:00' }];
+
+        const firstBaseRange = baseRanges[0] ?? { start: '09:00', end: '18:00' };
+        const secondBaseRange = baseRanges[1] ?? { start: '16:00', end: '20:00' };
+
         const availBase = {
           days: p.availability?.days ?? [1, 2, 3, 4, 5],
-          start: p.availability?.start ?? '09:00',
-          end: p.availability?.end ?? '18:00',
+          mode:
+            baseRanges.length === 1 &&
+            firstBaseRange.start === '00:00' &&
+            firstBaseRange.end === '00:00'
+              ? 'allday'
+              : baseRanges.length > 1
+                ? 'split'
+                : 'single',
+          allDay:
+            baseRanges.length === 1 &&
+            firstBaseRange.start === '00:00' &&
+            firstBaseRange.end === '00:00',
+          start: firstBaseRange.start,
+          end: firstBaseRange.end,
+          splitStart: firstBaseRange.start,
+          splitEnd: firstBaseRange.end,
+          splitStart2: secondBaseRange.start,
+          splitEnd2: secondBaseRange.end,
         };
+
         availabilitySnapRef.current = JSON.stringify(availBase);
 
         const priceBase = {
@@ -1342,11 +1440,25 @@ export default function SpecialistHome() {
   const visibleEffective = canToggleAvailability && availableNow;
 
   // 2) "availableNow" = visible + dentro del horario (CON horario)
-  const scheduleOk = isWithinAvailability({
-    days,
-    start,
-    end,
-  });
+  const scheduleOk = isWithinAvailability(
+    availabilityMode === 'allday'
+      ? {
+          days,
+          ranges: [{ start: '00:00', end: '00:00' }],
+        }
+      : availabilityMode === 'split'
+        ? {
+            days,
+            ranges: [
+              { start: splitStart, end: splitEnd },
+              { start: splitStart2, end: splitEnd2 },
+            ],
+          }
+        : {
+            days,
+            ranges: [{ start, end }],
+          },
+  );
 
   const availableNowEffective = visibleEffective && scheduleOk;
 
@@ -1692,17 +1804,66 @@ export default function SpecialistHome() {
   async function saveAvailability() {
     try {
       setSavingKey('availability', true);
+
+      let availabilityPayload:
+        | {
+            days: number[];
+            start: string;
+            end: string;
+            mode: 'single' | 'allday';
+          }
+        | {
+            days: number[];
+            ranges: { start: string; end: string }[];
+            mode: 'split';
+          };
+
+      if (availabilityMode === 'allday') {
+        availabilityPayload = {
+          days,
+          start: '00:00',
+          end: '00:00',
+          mode: 'allday',
+        };
+      } else if (availabilityMode === 'split') {
+        availabilityPayload = {
+          days,
+          ranges: [
+            { start: splitStart, end: splitEnd },
+            { start: splitStart2, end: splitEnd2 },
+          ],
+          mode: 'split',
+        };
+      } else {
+        availabilityPayload = {
+          days,
+          start,
+          end,
+          mode: 'single',
+        };
+      }
+
       await api.patch('/specialists/me', {
-        availability: { days, start, end },
+        availability: availabilityPayload,
       });
 
-      availabilitySnapRef.current = JSON.stringify({ days, start, end });
+      availabilitySnapRef.current = JSON.stringify({
+        days,
+        mode: availabilityMode,
+        allDay,
+        start,
+        end,
+        splitStart,
+        splitEnd,
+        splitStart2,
+        splitEnd2,
+      });
 
       setProfile((prev) =>
         prev
           ? {
               ...prev,
-              availability: { ...(prev.availability ?? {}), days, start, end },
+              availability: availabilityPayload,
             }
           : prev,
       );
@@ -2115,9 +2276,20 @@ export default function SpecialistHome() {
   }, [businessName]);
 
   const availabilityDirty = useMemo(() => {
-    const current = JSON.stringify({ days, start, end });
+    const current = JSON.stringify({
+      days,
+      mode: availabilityMode,
+      allDay,
+      start,
+      end,
+      splitStart,
+      splitEnd,
+      splitStart2,
+      splitEnd2,
+    });
+
     return current !== availabilitySnapRef.current;
-  }, [days, start, end]);
+  }, [days, availabilityMode, allDay, start, end, splitStart, splitEnd, splitStart2, splitEnd2]);
 
   const priceRadiusDirty = useMemo(() => {
     const visitPrice = Math.max(0, Math.floor(Number(price) || 0));
@@ -2786,27 +2958,155 @@ export default function SpecialistHome() {
             </View>
 
             <Text style={[styles.subTitle, { marginTop: 10 }]}>Horario</Text>
-            <View style={styles.timeRow}>
+
+            <View style={styles.chipsWrap}>
               <Pressable
-                style={[styles.input, styles.timeInput]}
-                onPress={() => setShowStartPicker(true)}
+                onPress={() => {
+                  setAvailabilityMode('single');
+                  setAllDay(false);
+                }}
+                style={[
+                  styles.chip,
+                  availabilityMode === 'single' ? styles.chipOn : styles.chipOff,
+                ]}
               >
-                <Text style={{ color: '#E9FEFF', textAlign: 'center', fontWeight: '800' }}>
-                  {start || '09:00'}
+                <Text
+                  style={[
+                    styles.chipT,
+                    { color: availabilityMode === 'single' ? '#063A40' : '#9ec9cd' },
+                  ]}
+                >
+                  Corrido
                 </Text>
               </Pressable>
 
-              <Text style={[styles.muted, { marginHorizontal: 6 }]}>a</Text>
+              <Pressable
+                onPress={() => {
+                  setAvailabilityMode('split');
+                  setAllDay(false);
+                }}
+                style={[styles.chip, availabilityMode === 'split' ? styles.chipOn : styles.chipOff]}
+              >
+                <Text
+                  style={[
+                    styles.chipT,
+                    { color: availabilityMode === 'split' ? '#063A40' : '#9ec9cd' },
+                  ]}
+                >
+                  Cortado
+                </Text>
+              </Pressable>
 
               <Pressable
-                style={[styles.input, styles.timeInput]}
-                onPress={() => setShowEndPicker(true)}
+                onPress={() => {
+                  setAvailabilityMode('allday');
+                  setAllDay(true);
+                }}
+                style={[
+                  styles.chip,
+                  availabilityMode === 'allday' ? styles.chipOn : styles.chipOff,
+                ]}
               >
-                <Text style={{ color: '#E9FEFF', textAlign: 'center', fontWeight: '800' }}>
-                  {end || '18:00'}
+                <Text
+                  style={[
+                    styles.chipT,
+                    { color: availabilityMode === 'allday' ? '#063A40' : '#9ec9cd' },
+                  ]}
+                >
+                  24 horas
                 </Text>
               </Pressable>
             </View>
+
+            {availabilityMode === 'single' ? (
+              <View style={styles.timeRow}>
+                <Pressable
+                  style={[styles.input, styles.timeInput]}
+                  onPress={() => setShowStartPicker(true)}
+                >
+                  <Text style={{ color: '#E9FEFF', textAlign: 'center', fontWeight: '800' }}>
+                    {start || '09:00'}
+                  </Text>
+                </Pressable>
+
+                <Text style={[styles.muted, { marginHorizontal: 6 }]}>a</Text>
+
+                <Pressable
+                  style={[styles.input, styles.timeInput]}
+                  onPress={() => setShowEndPicker(true)}
+                >
+                  <Text style={{ color: '#E9FEFF', textAlign: 'center', fontWeight: '800' }}>
+                    {end || '18:00'}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : availabilityMode === 'split' ? (
+              <View style={{ marginTop: 6, gap: 10 }}>
+                <View>
+                  <Text style={[styles.muted, { marginBottom: 6 }]}>Primer turno</Text>
+                  <View style={styles.timeRow}>
+                    <Pressable
+                      style={[styles.input, styles.timeInput]}
+                      onPress={() => setShowSplitStartPicker(true)}
+                    >
+                      <Text style={{ color: '#E9FEFF', textAlign: 'center', fontWeight: '800' }}>
+                        {splitStart || '09:00'}
+                      </Text>
+                    </Pressable>
+
+                    <Text style={[styles.muted, { marginHorizontal: 6 }]}>a</Text>
+
+                    <Pressable
+                      style={[styles.input, styles.timeInput]}
+                      onPress={() => setShowSplitEndPicker(true)}
+                    >
+                      <Text style={{ color: '#E9FEFF', textAlign: 'center', fontWeight: '800' }}>
+                        {splitEnd || '13:00'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+
+                <View>
+                  <Text style={[styles.muted, { marginBottom: 6 }]}>Segundo turno</Text>
+                  <View style={styles.timeRow}>
+                    <Pressable
+                      style={[styles.input, styles.timeInput]}
+                      onPress={() => setShowSplitStart2Picker(true)}
+                    >
+                      <Text style={{ color: '#E9FEFF', textAlign: 'center', fontWeight: '800' }}>
+                        {splitStart2 || '16:00'}
+                      </Text>
+                    </Pressable>
+
+                    <Text style={[styles.muted, { marginHorizontal: 6 }]}>a</Text>
+
+                    <Pressable
+                      style={[styles.input, styles.timeInput]}
+                      onPress={() => setShowSplitEnd2Picker(true)}
+                    >
+                      <Text style={{ color: '#E9FEFF', textAlign: 'center', fontWeight: '800' }}>
+                        {splitEnd2 || '20:00'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            ) : (
+              <View
+                style={{
+                  marginTop: 8,
+                  paddingVertical: 12,
+                  paddingHorizontal: 14,
+                  borderRadius: 14,
+                  backgroundColor: 'rgba(255,255,255,0.08)',
+                }}
+              >
+                <Text style={{ color: '#E9FEFF', fontWeight: '800', textAlign: 'center' }}>
+                  Disponible todo el día
+                </Text>
+              </View>
+            )}
 
             <Pressable
               onPress={saveAvailability}
@@ -3480,6 +3780,53 @@ export default function SpecialistHome() {
           onChange={(_, d) => {
             setShowEndPicker(false);
             if (d) setEnd(dateToTimeString(d));
+          }}
+        />
+      )}
+      {showSplitStartPicker && (
+        <DateTimePicker
+          value={timeStringToDate(splitStart)}
+          mode="time"
+          is24Hour
+          onChange={(_, d) => {
+            setShowSplitStartPicker(false);
+            if (d) setSplitStart(dateToTimeString(d));
+          }}
+        />
+      )}
+
+      {showSplitEndPicker && (
+        <DateTimePicker
+          value={timeStringToDate(splitEnd)}
+          mode="time"
+          is24Hour
+          onChange={(_, d) => {
+            setShowSplitEndPicker(false);
+            if (d) setSplitEnd(dateToTimeString(d));
+          }}
+        />
+      )}
+
+      {showSplitStart2Picker && (
+        <DateTimePicker
+          value={timeStringToDate(splitStart2)}
+          mode="time"
+          is24Hour
+          onChange={(_, d) => {
+            setShowSplitStart2Picker(false);
+            if (d) setSplitStart2(dateToTimeString(d));
+          }}
+        />
+      )}
+
+      {showSplitEnd2Picker && (
+        <DateTimePicker
+          value={timeStringToDate(splitEnd2)}
+          mode="time"
+          is24Hour
+          onChange={(_, d) => {
+            setShowSplitEnd2Picker(false);
+            if (d) setSplitEnd2(dateToTimeString(d));
           }}
         />
       )}

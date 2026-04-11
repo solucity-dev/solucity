@@ -22,6 +22,8 @@ model User {
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   chatMessages     ChatMessage[]      @relation("UserChatMessages")
+  inquiryThreadsAsCustomer   ChatThread[] @relation("InquiryCustomerThreads")
+  inquiryThreadsAsSpecialist ChatThread[] @relation("InquirySpecialistThreads")
   customer         CustomerProfile?
   notifications    Notification[]
   reminderLogs     NotificationReminderLog[]
@@ -226,11 +228,31 @@ model Rating {
 }
 
 model ChatThread {
-  id        String        @id @default(cuid())
-  orderId   String        @unique
-  createdAt DateTime      @default(now())
-  messages  ChatMessage[]
-  order     ServiceOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id               String         @id @default(cuid())
+  type             ChatThreadType @default(ORDER)
+
+  // ORDER thread
+  orderId          String?        @unique
+  order            ServiceOrder?  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // INQUIRY thread
+  customerUserId   String?
+  specialistUserId String?
+  categorySlug     String?
+
+  customerUser     User?          @relation("InquiryCustomerThreads", fields: [customerUserId], references: [id], onDelete: Cascade)
+  specialistUser   User?          @relation("InquirySpecialistThreads", fields: [specialistUserId], references: [id], onDelete: Cascade)
+
+  createdAt        DateTime       @default(now())
+  messages         ChatMessage[]
+
+  @@index([type])
+  @@index([customerUserId])
+  @@index([specialistUserId])
+  @@index([createdAt])
+
+  // evita duplicar consultas entre el mismo cliente y especialista
+  @@unique([type, customerUserId, specialistUserId], map: "uq_inquiry_thread_pair")
 }
 
 model ChatMessage {
@@ -515,4 +537,9 @@ enum ServiceMode {
   HOME
   OFFICE
   ONLINE
+}
+
+enum ChatThreadType {
+  ORDER
+  INQUIRY
 }

@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ChatMessage, ChatStackParamList } from '@/types/chat';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
+import { useAuth } from '@/auth/AuthProvider';
 import { useChat } from '@/hooks/useChat';
 
 type RouteT = RouteProp<ChatStackParamList, 'ChatThread'>;
@@ -28,13 +29,24 @@ export default function ChatThreadScreen() {
   const insets = useSafeAreaInsets();
   const { params } = useRoute<RouteT>();
   const nav = useNavigation<Nav>();
+  const { mode } = useAuth();
 
   const [text, setText] = useState('');
 
-  const { messages, messagesQuery, sendMessage, sending } = useChat({
-    orderId: params.orderId,
-    threadId: params.threadId,
-  } as any);
+  const { messages, messagesQuery, sendMessage, sending } = useChat(
+    params.orderId
+      ? {
+          orderId: params.orderId,
+        }
+      : params.threadId
+        ? {
+            threadId: params.threadId,
+          }
+        : {
+            specialistId: params.specialistId!,
+            categorySlug: params.categorySlug ?? null,
+          },
+  );
 
   const flatListRef = useRef<FlatList<ChatMessage> | null>(null);
 
@@ -55,9 +67,12 @@ export default function ChatThreadScreen() {
       ? params.businessName.trim()
       : null;
 
+  const threadType = params.threadType ?? (params.orderId ? 'ORDER' : 'INQUIRY');
+  const isInquiryThread = threadType === 'INQUIRY';
+  const canCreateOrderFromChat = isInquiryThread && mode === 'client';
+
   const title = businessName ?? params.title ?? 'Chat';
   const hasMessages = (messages ?? []).length > 0;
-
   // 👉 función centralizada para "volver al listado de chats"
   const goBackToChatList = useCallback(() => {
     const parent = (nav as any).getParent?.(); // Tabs
@@ -97,6 +112,30 @@ export default function ChatThreadScreen() {
       params: { id: params.orderId },
     });
   }, [nav, params.orderId]);
+
+  const handleGoToCreateOrder = useCallback(() => {
+    if (!params.specialistId) return;
+
+    const parent = (nav as any).getParent?.();
+
+    if (parent?.navigate) {
+      parent.navigate('Home', {
+        screen: 'CreateOrder',
+        params: {
+          specialistId: params.specialistId,
+          specialistName: businessName ?? params.title ?? 'Especialista',
+          categorySlug: params.categorySlug ?? null,
+        },
+      });
+      return;
+    }
+
+    (nav as any).navigate('CreateOrder', {
+      specialistId: params.specialistId,
+      specialistName: businessName ?? params.title ?? 'Especialista',
+      categorySlug: params.categorySlug ?? null,
+    });
+  }, [nav, params.specialistId, params.categorySlug, businessName, params.title]);
 
   // ✅ Interceptamos el botón físico de "back" en Android
   useFocusEffect(
@@ -162,6 +201,58 @@ export default function ChatThreadScreen() {
 
         {/* Lista de mensajes */}
         <View style={{ flex: 1, paddingHorizontal: 12 }}>
+          {canCreateOrderFromChat && (
+            <View
+              style={{
+                marginBottom: 10,
+                padding: 12,
+                borderRadius: 14,
+                backgroundColor: 'rgba(255,255,255,0.10)',
+                borderWidth: 1,
+                borderColor: 'rgba(233,254,255,0.18)',
+              }}
+            >
+              <Text
+                style={{
+                  color: '#E9FEFF',
+                  fontWeight: '800',
+                  marginBottom: 8,
+                }}
+              >
+                Esta es una consulta previa sin compromiso.
+              </Text>
+
+              <Text
+                style={{
+                  color: 'rgba(233,254,255,0.88)',
+                  marginBottom: 10,
+                }}
+              >
+                Si ya te cerró el precio o querés avanzar, podés formalizar la contratación desde
+                acá.
+              </Text>
+
+              <Pressable
+                onPress={handleGoToCreateOrder}
+                style={{
+                  alignSelf: 'flex-start',
+                  backgroundColor: '#E9FEFF',
+                  borderRadius: 12,
+                  paddingHorizontal: 14,
+                  paddingVertical: 10,
+                }}
+              >
+                <Text
+                  style={{
+                    color: '#06494F',
+                    fontWeight: '900',
+                  }}
+                >
+                  Solicitar contratación
+                </Text>
+              </Pressable>
+            </View>
+          )}
           {messagesQuery.isLoading && (
             <View
               style={{

@@ -48,6 +48,7 @@ const groups: GroupSeed[] = [
     slug: 'informatica-electronica',
     rubros: [
       'Climatizacion',
+      'Refrigeración',
       'Cartelería',
       'Servicio técnico electrónica',
       'Reparación de celulares',
@@ -232,6 +233,7 @@ const REQUIRES_CERTIFICATION = new Set<string>([
 
   // Informática y electrónica
   'climatizacion',
+  'Refrigeración',
   'servicio-tecnico-electronica',
   'servicio-tecnico-electrodomesticos',
   'servicio-tecnico-informatica',

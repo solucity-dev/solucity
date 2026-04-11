@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ensureInquiryChat } from '../api/chat';
 import { API_URL, api } from '../lib/api';
 import { resolveUploadUrl } from '../lib/resolveUploadUrl';
 
@@ -81,6 +82,7 @@ export default function SpecialistProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [spec, setSpec] = useState<SpecialistDetails | null>(null);
+  const [startingInquiry, setStartingInquiry] = useState(false);
 
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
   const [portfolioLoading, setPortfolioLoading] = useState(false);
@@ -251,6 +253,45 @@ export default function SpecialistProfileScreen() {
 
   const showPrice = spec?.visitPrice != null;
   const pricingLabel = (spec?.pricingLabel ?? '').trim() || 'Tarifa';
+
+  async function handleStartInquiry() {
+    if (!spec?.id) return;
+
+    try {
+      setStartingInquiry(true);
+
+      const thread = await ensureInquiryChat(spec.id, routeCategorySlug ?? null);
+
+      const parent = (nav as any).getParent?.();
+
+      if (parent?.navigate) {
+        parent.navigate('Chat', {
+          screen: 'ChatThread',
+          params: {
+            threadId: thread.id,
+            title: spec.businessName?.trim() || spec.name,
+            businessName: spec.businessName?.trim() || null,
+            threadType: 'INQUIRY',
+            specialistId: spec.id,
+            categorySlug: routeCategorySlug ?? null,
+          },
+        });
+      } else {
+        (nav as any).navigate('ChatThread', {
+          threadId: thread.id,
+          title: spec.businessName?.trim() || spec.name,
+          businessName: spec.businessName?.trim() || null,
+          threadType: 'INQUIRY',
+          specialistId: spec.id,
+          categorySlug: routeCategorySlug ?? null,
+        });
+      }
+    } catch (e) {
+      if (__DEV__) console.log('[SpecialistProfile] inquiry error', e);
+    } finally {
+      setStartingInquiry(false);
+    }
+  }
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
@@ -533,10 +574,29 @@ export default function SpecialistProfileScreen() {
               </View>
             </ScrollView>
 
-            {/* Botón fijo inferior */}
+            {/* Botones fijos inferiores */}
             <View
               style={[styles.fixedCtaContainer, { bottom: Platform.OS === 'web' ? 20 : ctaBottom }]}
             >
+              <Pressable
+                style={({ pressed }) => [
+                  styles.secondaryCta,
+                  pressed && { opacity: 0.95, transform: [{ scale: 0.99 }] },
+                  startingInquiry && { opacity: 0.7 },
+                ]}
+                disabled={startingInquiry}
+                onPress={handleStartInquiry}
+              >
+                {startingInquiry ? (
+                  <ActivityIndicator color="#E9FEFF" />
+                ) : (
+                  <>
+                    <Ionicons name="chatbubble-ellipses-outline" size={18} color="#E9FEFF" />
+                    <Text style={styles.secondaryCtaText}>Consultar presupuesto</Text>
+                  </>
+                )}
+              </Pressable>
+
               <Pressable
                 style={({ pressed }) => [
                   styles.mainCta,
@@ -749,6 +809,23 @@ const styles = StyleSheet.create({
     right: 0,
     paddingHorizontal: 20,
     paddingBottom: 24,
+    gap: 10,
+  },
+  secondaryCta: {
+    backgroundColor: 'rgba(233,254,255,0.12)',
+    borderRadius: 18,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(233,254,255,0.32)',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  secondaryCtaText: {
+    color: '#E9FEFF',
+    fontWeight: '900',
+    fontSize: 15,
   },
   mainCta: {
     backgroundColor: '#E9FEFF',

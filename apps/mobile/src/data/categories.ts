@@ -120,6 +120,7 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
 
   'informatica-electronica': [
     { id: 'climatizacion', title: 'Climatización', icon: { set: 'mdi', name: 'air-conditioner' } },
+    { id: 'refrigeracion', title: 'Refrigeración', icon: { set: 'mdi', name: 'snowflake' } },
     {
       id: 'servicio-tecnico-electronica',
       title: 'Servicio técnico (electrónica)',

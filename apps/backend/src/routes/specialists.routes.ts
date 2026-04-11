@@ -174,6 +174,10 @@ type MulterReq = Request & { file?: Express.Multer.File };
 type AuthReq = Request & { user?: { id: string; role: string } };
 const debugSpecialists = process.env.DEBUG_SPECIALISTS === '1';
 
+const KYC_MAX_OUTPUT_WIDTH = 1600;
+const KYC_MAX_OUTPUT_HEIGHT = 1600;
+const SHARP_LIMIT_INPUT_PIXELS = 12000 * 12000;
+
 /** Util: normalizar URL absoluta a partir de /uploads/... */
 function toAbsoluteUrl(u: string): string {
   if (!u) return u;
@@ -217,11 +221,24 @@ function isWithinAvailability(
   if (!availability) return true;
 
   const days: number[] = Array.isArray(availability.days) ? availability.days : [];
-  const start: string | undefined = availability.start;
-  const end: string | undefined = availability.end;
+
+  const ranges: { start: string; end: string }[] = Array.isArray(availability.ranges)
+    ? availability.ranges
+        .filter(
+          (r: any) =>
+            r &&
+            typeof r.start === 'string' &&
+            /^\d{2}:\d{2}$/.test(r.start) &&
+            typeof r.end === 'string' &&
+            /^\d{2}:\d{2}$/.test(r.end),
+        )
+        .map((r: any) => ({ start: r.start, end: r.end }))
+    : availability.start && availability.end
+      ? [{ start: availability.start, end: availability.end }]
+      : [];
 
   // si falta algo => no bloquea
-  if (!days.length || !start || !end) return true;
+  if (!days.length || !ranges.length) return true;
 
   // fecha local en timezone
   const dateParts = new Intl.DateTimeFormat('en-CA', {
@@ -253,22 +270,31 @@ function isWithinAvailability(
   const minute = Number(timeParts.find((p) => p.type === 'minute')?.value ?? '0');
   const currentMins = hour * 60 + minute;
 
-  const [sh, sm] = start.split(':').map(Number);
-  const [eh, em] = end.split(':').map(Number);
+  for (const range of ranges) {
+    const [sh, sm] = range.start.split(':').map(Number);
+    const [eh, em] = range.end.split(':').map(Number);
 
-  if (Number.isNaN(sh) || Number.isNaN(sm) || Number.isNaN(eh) || Number.isNaN(em)) return true;
+    if (Number.isNaN(sh) || Number.isNaN(sm) || Number.isNaN(eh) || Number.isNaN(em)) {
+      continue;
+    }
 
-  const startMins = sh * 60 + sm;
-  const endMins = eh * 60 + em;
+    const startMins = sh * 60 + sm;
+    const endMins = eh * 60 + em;
 
-  // ✅ 24hs: si start === end, se considera abierto todo el día
-  if (startMins === endMins) return true;
+    // 24hs: si start === end, se considera abierto todo el día
+    if (startMins === endMins) return true;
 
-  // soporta cruce de medianoche
-  if (endMins > startMins) {
-    return currentMins >= startMins && currentMins <= endMins;
+    // rango normal
+    if (endMins > startMins) {
+      if (currentMins >= startMins && currentMins <= endMins) return true;
+      continue;
+    }
+
+    // cruce de medianoche
+    if (currentMins >= startMins || currentMins <= endMins) return true;
   }
-  return currentMins >= startMins || currentMins <= endMins;
+
+  return false;
 }
 
 /** ===== helper: sync search index ===== */
@@ -1095,7 +1121,11 @@ router.post('/kyc/upload', auth, (req: Request, res: Response) => {
       const minW = 400;
       const minH = 500;
 
-      const meta = await sharp(r.file.path).rotate().metadata();
+      const meta = await sharp(r.file.path, {
+        limitInputPixels: SHARP_LIMIT_INPUT_PIXELS,
+      })
+        .rotate()
+        .metadata();
 
       console.log('[POST /specialists/kyc/upload][meta]', {
         originalname: r.file.originalname,
@@ -1136,7 +1166,18 @@ router.post('/kyc/upload', auth, (req: Request, res: Response) => {
         outputPath: webpPath,
       });
 
-      await sharp(r.file.path).rotate().webp({ quality: 82 }).toFile(webpPath);
+      await sharp(r.file.path, {
+        limitInputPixels: SHARP_LIMIT_INPUT_PIXELS,
+      })
+        .rotate()
+        .resize({
+          width: KYC_MAX_OUTPUT_WIDTH,
+          height: KYC_MAX_OUTPUT_HEIGHT,
+          fit: 'inside',
+          withoutEnlargement: true,
+        })
+        .webp({ quality: 82 })
+        .toFile(webpPath);
 
       console.log('[POST /specialists/kyc/upload][convert_ok]', {
         originalname: r.file.originalname,
@@ -1736,10 +1777,23 @@ async function geocodeOfficeAddressWithFallback(params: {
   };
 }
 
-const AvailabilitySchema = z.object({
-  days: z.array(z.number().int().min(0).max(6)).min(1),
+const AvailabilityRangeSchema = z.object({
   start: z.string().regex(/^\d{2}:\d{2}$/),
   end: z.string().regex(/^\d{2}:\d{2}$/),
+});
+
+const AvailabilitySchema = z.object({
+  days: z.array(z.number().int().min(0).max(6)).min(1),
+  start: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .optional(),
+  end: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .optional(),
+  ranges: z.array(AvailabilityRangeSchema).min(1).max(2).optional(),
+  mode: z.enum(['single', 'split', 'allday']).optional(),
   enabled: z.boolean().optional(),
 });
 
@@ -2230,7 +2284,27 @@ router.patch('/me', auth, async (req: AuthReq, res: Response) => {
       }
     }
 
-    if (data.availability) nextAvail = { ...currentAvail, ...data.availability };
+    if (data.availability) {
+      nextAvail = { ...currentAvail, ...data.availability };
+
+      // ✅ Si viene formato nuevo con ranges, limpiamos start/end viejos
+      if (Array.isArray(data.availability.ranges) && data.availability.ranges.length > 0) {
+        delete (nextAvail as Record<string, unknown>).start;
+        delete (nextAvail as Record<string, unknown>).end;
+
+        const rangeCount = data.availability.ranges.length;
+        (nextAvail as Record<string, unknown>).mode =
+          rangeCount === 1 ? 'single' : rangeCount === 2 ? 'split' : 'single';
+      }
+
+      // ✅ Si viene formato viejo start/end, limpiamos ranges viejos
+      if (data.availability.start && data.availability.end) {
+        delete (nextAvail as Record<string, unknown>).ranges;
+
+        (nextAvail as Record<string, unknown>).mode =
+          data.availability.start === data.availability.end ? 'allday' : 'single';
+      }
+    }
 
     // ✅ NO guardar enabled dentro de availability (evita inconsistencias)
     if (nextAvail && typeof nextAvail === 'object') {

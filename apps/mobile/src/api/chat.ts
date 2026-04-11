@@ -9,8 +9,24 @@ type EnsureOrderChatResp = {
   thread: ChatThread;
 };
 
+type EnsureInquiryChatResp = {
+  ok: boolean;
+  thread: ChatThread;
+};
+
 export async function ensureOrderChat(orderId: string): Promise<ChatThread> {
   const res = await api.post<EnsureOrderChatResp>('/chat/ensure', { orderId });
+  return res.data.thread;
+}
+
+export async function ensureInquiryChat(
+  specialistId: string,
+  categorySlug?: string | null,
+): Promise<ChatThread> {
+  const res = await api.post<EnsureInquiryChatResp>('/chat/inquiries/ensure', {
+    specialistId,
+    categorySlug: categorySlug ?? undefined,
+  });
   return res.data.thread;
 }
 

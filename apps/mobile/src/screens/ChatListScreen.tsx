@@ -107,8 +107,6 @@ export default function ChatListScreen() {
           const rawAvatar = (item as any).counterpart?.avatarUrl ?? null;
           const avatarUrl = rawAvatar ? absoluteUrl(rawAvatar) : undefined;
 
-          const rubro = ''; // si en algún momento querés volver a mostrar el rubro, lo podés usar acá
-
           const lastText = item.lastMessage?.text ?? '';
           const lastFrom = item.lastMessage?.senderName ?? '';
 
@@ -121,6 +119,11 @@ export default function ChatListScreen() {
           const initial = counterpartName.trim().charAt(0).toUpperCase() || '?';
 
           const orderId = (item as any).orderId ?? (item as any).order?.id ?? undefined;
+          const threadType = (item as any).type ?? 'ORDER';
+          const categorySlug = (item as any).categorySlug ?? null;
+          const specialistId = (item as any).specialistId ?? undefined;
+
+          const rubro = threadType === 'INQUIRY' ? 'Consulta previa' : '';
 
           return (
             <View
@@ -136,7 +139,10 @@ export default function ChatListScreen() {
                   nav.navigate('ChatThread', {
                     threadId: item.id,
                     orderId,
-                    title: item.counterpart?.name ?? 'Contacto', // nombre personal
+                    threadType,
+                    categorySlug,
+                    specialistId,
+                    title: item.counterpart?.name ?? 'Contacto',
                     businessName:
                       typeof businessName === 'string' && businessName.trim()
                         ? businessName.trim()

@@ -656,6 +656,54 @@ export type AdminInquiriesResponse = {
   items: AdminInquiryRow[];
 };
 
+export async function getAdminInquiries(params?: { q?: string }) {
+  const qs = new URLSearchParams();
+
+  if (params?.q?.trim()) qs.set('q', params.q.trim());
+
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+
+  return apiFetch<AdminInquiriesResponse>(`/admin/inquiries${suffix}`);
+}
+
+export type AdminInquiryMessage = {
+  id: string;
+  body: string;
+  createdAt: string;
+  readAt: string | null;
+  senderId: string;
+  sender: {
+    userId: string;
+    name: string | null;
+    email: string | null;
+  } | null;
+};
+
+export type AdminInquiryDetail = {
+  id: string;
+  type: 'INQUIRY';
+  createdAt: string;
+  categorySlug: string | null;
+
+  messagesCount: number;
+
+  customer: AdminInquiryUser | null;
+  specialist: AdminInquirySpecialist | null;
+
+  messages: AdminInquiryMessage[];
+};
+
+export type AdminInquiryDetailResponse = {
+  ok: true;
+  inquiry: AdminInquiryDetail;
+};
+
+export async function getAdminInquiryDetail(id: string) {
+  return apiFetch<AdminInquiryDetailResponse>(
+    `/admin/inquiries/${encodeURIComponent(id)}`
+  );
+}
+
 /* ─────────────────────────────────────────────────────────────
  * Orders (admin)
  * ───────────────────────────────────────────────────────────── */

@@ -694,9 +694,11 @@ router.get('/search', async (req, res) => {
       return res.json([]);
     }
 
+    const specialistIds = withDist.map((x) => x.specialistId);
+
     // 3) enriquecer con datos reales del profile (incluye availability)
     const profiles = await prisma.specialistProfile.findMany({
-      where: { id: { in: withDist.map((x) => x.specialistId) } },
+      where: { id: { in: specialistIds } },
       select: {
         id: true,
         userId: true,
@@ -729,8 +731,8 @@ router.get('/search', async (req, res) => {
     logSearchStep(searchStartedAt, 'after_profiles_and_users', {
       profilesCount: profiles.length,
       usersCount: profiles.length,
+      specialistIdsCount: specialistIds.length,
     });
-
     // 3.5) Habilitación por rubro (certificación) + info para UI
     const enabledBySpecialistId = new Map<string, boolean>();
     const certStatusBySpecialistId = new Map<string, 'PENDING' | 'APPROVED' | 'REJECTED' | null>();
@@ -755,7 +757,7 @@ router.get('/search', async (req, res) => {
         // Traer el estado de cert (no solo APPROVED) para cada especialista de ese rubro
         const certs = await prisma.specialistCertification.findMany({
           where: {
-            specialistId: { in: withDist.map((x) => x.specialistId) },
+            specialistId: { in: specialistIds },
             categoryId: cat.id,
           },
           select: { specialistId: true, status: true },
@@ -798,7 +800,7 @@ router.get('/search', async (req, res) => {
     const activeOrdersGrouped = await prisma.serviceOrder.groupBy({
       by: ['specialistId'],
       where: {
-        specialistId: { in: withDist.map((x) => x.specialistId) },
+        specialistId: { in: specialistIds },
         status: { in: [...SPECIALIST_SATURATION_STATUSES] as any },
       },
       _count: {

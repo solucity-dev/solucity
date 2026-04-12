@@ -712,23 +712,23 @@ router.get('/search', async (req, res) => {
         ratingCount: true,
         badge: true,
         backgroundCheck: { select: { status: true } },
-        user: { select: { status: true } },
+        user: {
+          select: {
+            status: true,
+            name: true,
+            surname: true,
+          },
+        },
         serviceModes: true,
         officeAddressId: true,
       },
     });
 
-    const users = await prisma.user.findMany({
-      where: { id: { in: profiles.map((p) => p.userId) } },
-      select: { id: true, name: true, surname: true },
-    });
-
     const profById = new Map(profiles.map((p) => [p.id, p]));
-    const userById = new Map(users.map((u) => [u.id, u]));
 
     logSearchStep(searchStartedAt, 'after_profiles_and_users', {
       profilesCount: profiles.length,
-      usersCount: users.length,
+      usersCount: profiles.length,
     });
 
     // 3.5) Habilitación por rubro (certificación) + info para UI
@@ -818,7 +818,7 @@ router.get('/search', async (req, res) => {
     let enriched = await Promise.all(
       withDist.map(async (x) => {
         const prof = profById.get(x.specialistId);
-        const user = prof ? userById.get(prof.userId) : undefined;
+        const user = prof?.user;
 
         // ✅ 1) userOk viene del profile.user.status (ya lo traés en select)
         const userOk = prof?.user?.status !== 'BLOCKED';

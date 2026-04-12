@@ -172,7 +172,18 @@ const uploadPortfolio = multer({
 
 type MulterReq = Request & { file?: Express.Multer.File };
 type AuthReq = Request & { user?: { id: string; role: string } };
+
 const debugSpecialists = process.env.DEBUG_SPECIALISTS === '1';
+
+function logSearchStep(startMs: number, label: string, extra?: Record<string, unknown>) {
+  if (!debugSpecialists) return;
+
+  const elapsedMs = Date.now() - startMs;
+  dbg(debugSpecialists, `[GET /specialists/search][timing] ${label}`, {
+    elapsedMs,
+    ...(extra ?? {}),
+  });
+}
 
 const KYC_MAX_OUTPUT_WIDTH = 1600;
 const KYC_MAX_OUTPUT_HEIGHT = 1600;
@@ -528,6 +539,7 @@ async function getSpecialistStatsById(specialistId: string) {
  *       [&priceMin=] [&priceMax=] [&sort=distance|rating|price]
  */
 router.get('/search', async (req, res) => {
+  const searchStartedAt = Date.now();
   // ✅ evita caches (proxy, cdn, etc)
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
@@ -625,6 +637,15 @@ router.get('/search', async (req, res) => {
         ? { gte: priceMin ?? undefined, lte: priceMax ?? undefined }
         : undefined;
 
+    logSearchStep(searchStartedAt, 'parsed_input', {
+      category,
+      verifiedFilter,
+      onlyEnabled,
+      onlyAvailable,
+      radiusKm,
+      preselectRadiusKm,
+    });
+
     // 1) preselección rápida
     const pre = await prisma.specialistSearchIndex.findMany({
       where: {
@@ -634,12 +655,16 @@ router.get('/search', async (req, res) => {
         ...(verifiedFilter !== undefined ? { verified: verifiedFilter } : {}),
         ...(visitPriceFilter ? { visitPrice: visitPriceFilter } : {}),
       },
-      take: 120,
+      take: 80,
     });
 
     console.log('[GET /specialists/search][pre-count]', {
       category,
       preselectRadiusKm,
+      preCount: pre.length,
+    });
+
+    logSearchStep(searchStartedAt, 'after_preselect', {
       preCount: pre.length,
     });
 
@@ -660,7 +685,14 @@ router.get('/search', async (req, res) => {
       })
       .filter((x) => x.distanceKm <= (x.radiusKm ?? radiusKm));
 
-    if (withDist.length === 0) return res.json([]);
+    logSearchStep(searchStartedAt, 'after_distance_filter', {
+      withDistCount: withDist.length,
+    });
+
+    if (withDist.length === 0) {
+      logSearchStep(searchStartedAt, 'return_empty_after_distance');
+      return res.json([]);
+    }
 
     // 3) enriquecer con datos reales del profile (incluye availability)
     const profiles = await prisma.specialistProfile.findMany({
@@ -693,6 +725,11 @@ router.get('/search', async (req, res) => {
 
     const profById = new Map(profiles.map((p) => [p.id, p]));
     const userById = new Map(users.map((u) => [u.id, u]));
+
+    logSearchStep(searchStartedAt, 'after_profiles_and_users', {
+      profilesCount: profiles.length,
+      usersCount: users.length,
+    });
 
     // 3.5) Habilitación por rubro (certificación) + info para UI
     const enabledBySpecialistId = new Map<string, boolean>();
@@ -738,6 +775,12 @@ router.get('/search', async (req, res) => {
             enabledBySpecialistId.set(x.specialistId, false);
         }
       }
+
+      logSearchStep(searchStartedAt, 'after_category_certifications', {
+        requiresCertificationForCategory,
+        specialistsConsidered: withDist.length,
+        certStatusesLoaded: certStatusBySpecialistId.size,
+      });
     }
 
     // ✅ cache por request para evitar N llamadas repetidas a canSpecialistBeVisible
@@ -766,6 +809,10 @@ router.get('/search', async (req, res) => {
     const activeOrdersBySpecialistId = new Map(
       activeOrdersGrouped.map((row) => [row.specialistId as string, row._count.specialistId]),
     );
+
+    logSearchStep(searchStartedAt, 'after_active_orders_group', {
+      activeOrdersGroupedCount: activeOrdersGrouped.length,
+    });
 
     // 4) construir lista final + disponibilidad REAL (toggle + horario)
     let enriched = await Promise.all(
@@ -866,10 +913,24 @@ router.get('/search', async (req, res) => {
       }),
     );
 
+    logSearchStep(searchStartedAt, 'after_enrichment', {
+      enrichedCountBeforeVisibleFilter: enriched.length,
+    });
+
     enriched = enriched.filter((x) => x.userOk !== false && x.visible === true);
+
+    logSearchStep(searchStartedAt, 'after_visible_filter', {
+      enrichedCountAfterVisibleFilter: enriched.length,
+    });
 
     if (onlyAvailable) enriched = enriched.filter((x) => x.availableNow === true);
     if (onlyEnabled) enriched = enriched.filter((x) => x.enabled === true);
+
+    logSearchStep(searchStartedAt, 'after_final_filters', {
+      onlyAvailable,
+      onlyEnabled,
+      finalCountBeforeSort: enriched.length,
+    });
 
     if (sort === 'rating') {
       enriched.sort(
@@ -884,8 +945,15 @@ router.get('/search', async (req, res) => {
       enriched.sort((a, b) => a.distanceKm - b.distanceKm);
     }
 
-    return res.json(enriched.slice(0, 50));
+    const finalItems = enriched.slice(0, 50);
+
+    logSearchStep(searchStartedAt, 'response_ready', {
+      finalCount: finalItems.length,
+    });
+
+    return res.json(finalItems);
   } catch (e) {
+    logSearchStep(searchStartedAt, 'error');
     if (process.env.NODE_ENV !== 'production') console.error('GET /specialists/search', e);
     return res.status(500).json({ ok: false, error: 'server_error' });
   }

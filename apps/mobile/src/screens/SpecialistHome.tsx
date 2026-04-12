@@ -143,6 +143,13 @@ function maskedCertRowText(c?: CertItem | null) {
   return name ? `Archivo subido: ${name}` : 'Archivo subido';
 }
 
+async function buildWebFileFromUri(uri: string, filename: string, fallbackType = 'image/jpeg') {
+  const response = await fetch(uri);
+  const blob = await response.blob();
+  const type = blob.type || fallbackType;
+  return new File([blob], filename, { type });
+}
+
 // ✅ Fallback: si /categories falla, no te quedás sin rubros
 const SPECIALTY_OPTIONS = [
   // ── Construcción & Mantenimiento ──────────────────────────
@@ -1515,8 +1522,10 @@ export default function SpecialistHome() {
   }
   async function confirmAvatar() {
     if (!localUri) return;
+
     try {
       setSavingKey('avatar', true);
+
       const manipulated =
         Platform.OS === 'web'
           ? { uri: localUri }
@@ -1526,15 +1535,19 @@ export default function SpecialistHome() {
             });
 
       const form = new FormData();
-      form.append('file', {
-        uri: manipulated.uri,
-        name: 'avatar.jpg',
-        type: 'image/jpeg',
-      } as any);
 
-      const up = await api.post('/specialists/kyc/upload', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      if (Platform.OS === 'web') {
+        const file = await buildWebFileFromUri(manipulated.uri, 'avatar.jpg', 'image/jpeg');
+        form.append('file', file);
+      } else {
+        form.append('file', {
+          uri: manipulated.uri,
+          name: 'avatar.jpg',
+          type: 'image/jpeg',
+        } as any);
+      }
+
+      const up = await api.post('/specialists/kyc/upload', form);
       const urlRel: string | undefined = up?.data?.url;
       if (!urlRel) throw new Error('upload_failed');
 
@@ -1601,15 +1614,19 @@ export default function SpecialistHome() {
             );
 
       const form = new FormData();
-      form.append('file', {
-        uri: manipulated.uri,
-        name: 'portfolio.jpg',
-        type: 'image/jpeg',
-      } as any);
 
-      const uploadRes = await api.post('/specialists/portfolio/upload', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      if (Platform.OS === 'web') {
+        const file = await buildWebFileFromUri(manipulated.uri, 'portfolio.jpg', 'image/jpeg');
+        form.append('file', file);
+      } else {
+        form.append('file', {
+          uri: manipulated.uri,
+          name: 'portfolio.jpg',
+          type: 'image/jpeg',
+        } as any);
+      }
+
+      const uploadRes = await api.post('/specialists/portfolio/upload', form);
 
       const relativeUrl: string | undefined = uploadRes?.data?.url;
       if (!relativeUrl) throw new Error('upload_failed');
@@ -2449,7 +2466,17 @@ export default function SpecialistHome() {
               <View style={styles.avatarBox}>
                 <View style={styles.avatarWrap}>
                   <Image source={avatarSrc} style={styles.avatar} />
-                  <Pressable style={styles.camFab} onPress={() => setPickerOpen(true)}>
+                  <Pressable
+                    style={styles.camFab}
+                    onPress={() => {
+                      if (Platform.OS === 'web') {
+                        openGallery().catch(() => undefined);
+                        return;
+                      }
+
+                      setPickerOpen(true);
+                    }}
+                  >
                     <Ionicons name="camera" size={18} color="#0A5B63" />
                   </Pressable>
                 </View>

@@ -812,15 +812,20 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   secondaryCta: {
-    backgroundColor: 'rgba(233,254,255,0.12)',
+    backgroundColor: '#0E7490',
     borderRadius: 18,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(233,254,255,0.32)',
     flexDirection: 'row',
     gap: 8,
+
+    // sombra (detalle pro)
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
   },
   secondaryCtaText: {
     color: '#E9FEFF',

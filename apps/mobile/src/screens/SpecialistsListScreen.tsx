@@ -72,6 +72,10 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos
 // umbral movimiento
 const MOVED_THRESHOLD_KM = 0.2; // 200m
 
+function isCacheEntryFresh(entry?: { at: number; items: SpecialistRow[] }) {
+  return !!entry && Date.now() - entry.at < CACHE_TTL_MS;
+}
+
 function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
   const R = 6371;
   const dLat = ((b.lat - a.lat) * Math.PI) / 180;
@@ -171,6 +175,9 @@ export default function SpecialistsListScreen() {
   // para saber si estamos consultando “lo mismo”
   const lastKeyRef = useRef<string | null>(null);
 
+  const hasFetchedOnceRef = useRef(false);
+  const lastFetchAtRef = useRef(0);
+
   /**
    * Pide permiso solo si hace falta, devuelve coords.
    * Si forceFresh=false y no se movió, reutiliza coords previas.
@@ -235,7 +242,8 @@ export default function SpecialistsListScreen() {
     async (isRefresh = false) => {
       try {
         if (isRefresh) setRefreshing(true);
-        else setLoading(true);
+        else if (!hasFetchedOnceRef.current) setLoading(true);
+
         setError(null);
 
         if (!qaResolved) {
@@ -250,9 +258,9 @@ export default function SpecialistsListScreen() {
         const key = buildCacheKey(lat, lng);
 
         const hit = resultsCache.get(key);
-        const cacheFresh = hit && Date.now() - hit.at < CACHE_TTL_MS;
+        const cacheFresh = isCacheEntryFresh(hit);
 
-        // 1) si no es refresh, no se movió, misma key, cache fresco -> no backend
+        // 1) misma búsqueda + no refresh + poco movimiento + cache fresco
         if (
           !isRefresh &&
           movedKm < MOVED_THRESHOLD_KM &&
@@ -260,17 +268,19 @@ export default function SpecialistsListScreen() {
           cacheFresh
         ) {
           setItems(hit!.items);
+          hasFetchedOnceRef.current = true;
           return;
         }
 
-        // 2) si hay cache fresco -> usarlo
-        if (cacheFresh) {
+        // 2) cache fresco de la misma categoría/zona
+        if (!isRefresh && cacheFresh) {
           setItems(hit!.items);
           lastKeyRef.current = key;
+          hasFetchedOnceRef.current = true;
           return;
         }
 
-        // 3) backend (USANDO api.ts ✅)
+        // 3) backend
         const requestRadiusKm =
           dbCategorySlug === 'auxilio-vehicular' ? AUXILIO_VEHICULAR_RADIUS_KM : RADIUS_KM_DEFAULT;
 
@@ -284,7 +294,7 @@ export default function SpecialistsListScreen() {
         if (effectiveOnlyEnabled) paramsQ.enabled = true;
 
         // ✅ SIEMPRE filtrar por disponibilidad actual
-        paramsQ.visible = true; // o el nombre que uses server-side
+        paramsQ.visible = true;
 
         if (priceMax != null) paramsQ.priceMax = priceMax;
 
@@ -304,9 +314,14 @@ export default function SpecialistsListScreen() {
             first: res.data?.[0],
           });
         }
-        setItems(res.data ?? []);
-        resultsCache.set(key, { at: Date.now(), items: res.data ?? [] });
+
+        const nextItems = res.data ?? [];
+
+        setItems(nextItems);
+        resultsCache.set(key, { at: Date.now(), items: nextItems });
         lastKeyRef.current = key;
+        lastFetchAtRef.current = Date.now();
+        hasFetchedOnceRef.current = true;
       } catch (e: any) {
         if (__DEV__) console.log('[SPECIALISTS][ERR]', e?.code, e?.response?.status, e?.message);
         setError(errToMsg(e));
@@ -318,30 +333,36 @@ export default function SpecialistsListScreen() {
     [buildCacheKey, dbCategorySlug, getCoordsSmart, effectiveOnlyEnabled, priceMax, qaResolved],
   );
 
-  // ✅ Refetch al volver a foco y cuando la app vuelve al frente
+  // ✅ Refetch controlado al volver a foco y cuando la app vuelve al frente
   useFocusEffect(
     useCallback(() => {
       let alive = true;
 
       const sub = AppState.addEventListener('change', (state) => {
         if (state === 'active') {
-          resultsCache.clear();
-          lastKeyRef.current = null;
-          fetchData(true);
+          // solo refrescamos si pasaron al menos 60s desde el último fetch real
+          const now = Date.now();
+          const enoughTimePassed = now - lastFetchAtRef.current > 60_000;
+
+          if (enoughTimePassed) {
+            fetchData(false);
+          }
         }
       });
 
       (async () => {
         try {
           if (!qaResolved) return;
-
-          await getCoordsSmart(false);
           if (!alive) return;
 
-          resultsCache.clear();
-          lastKeyRef.current = null;
+          // primer ingreso real a la pantalla
+          if (!hasFetchedOnceRef.current) {
+            await fetchData(false);
+            return;
+          }
 
-          await fetchData(true);
+          // al volver al foco, intentamos usar cache primero
+          await fetchData(false);
         } catch (e: any) {
           if (!alive) return;
           setError(errToMsg(e));
@@ -354,9 +375,8 @@ export default function SpecialistsListScreen() {
         alive = false;
         sub.remove();
       };
-    }, [fetchData, getCoordsSmart, qaResolved]),
+    }, [fetchData, qaResolved]),
   );
-
   const list = useMemo(() => {
     // ✅ Se muestran disponibles y no disponibles; el estado se comunica visualmente en el pill
     const arr = items.slice(); // NO filtramos por horario
@@ -652,8 +672,7 @@ export default function SpecialistsListScreen() {
             ListEmptyComponent={
               <View style={[styles.center, { paddingTop: 24 }]}>
                 <Text style={{ color: '#E9FEFF' }}>
-                  {' '}
-                  No encontramos especialistas disponibles en tu zona.
+                  No encontramos especialistas para esta búsqueda en tu zona.
                 </Text>
               </View>
             }

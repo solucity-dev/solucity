@@ -328,6 +328,50 @@ export default function ProfileScreen() {
     };
   }, [loadProfile]);
 
+  const pickAvatarFromGallery = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (status !== 'granted') {
+      return Alert.alert(
+        'Permiso requerido',
+        'Necesitamos acceso a tu galería para cambiar la foto de perfil.',
+      );
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+    });
+
+    if (!('canceled' in result) || result.canceled) return;
+    const asset = result.assets?.[0];
+    if (!asset) return;
+
+    await uploadAvatarFromAsset(asset);
+  };
+
+  const pickAvatarFromCamera = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+
+    if (status !== 'granted') {
+      return Alert.alert(
+        'Permiso requerido',
+        'Necesitamos acceso a la cámara para tomar una foto.',
+      );
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+    });
+
+    if (!('canceled' in result) || result.canceled) return;
+    const asset = result.assets?.[0];
+    if (!asset) return;
+
+    await uploadAvatarFromAsset(asset);
+  };
+
   const onSave = async () => {
     try {
       setSaving(true);
@@ -400,21 +444,32 @@ export default function ProfileScreen() {
 
     try {
       const uri = asset.uri;
-      const nameFile = uri.split('/').pop() ?? 'avatar.jpg';
+      const nameFile = (asset as any).fileName ?? uri.split('/').pop() ?? 'avatar.jpg';
       const type = (asset as any).mimeType ?? 'image/jpeg';
 
       const form = new FormData();
-      form.append('avatar', {
-        uri,
-        name: nameFile,
-        type,
-      } as any);
+
+      if (Platform.OS === 'web') {
+        const webFile = (asset as any).file;
+
+        if (webFile instanceof File) {
+          form.append('avatar', webFile, webFile.name || nameFile);
+        } else {
+          const response = await fetch(uri);
+          const blob = await response.blob();
+          form.append('avatar', blob, nameFile);
+        }
+      } else {
+        form.append('avatar', {
+          uri,
+          name: nameFile,
+          type,
+        } as any);
+      }
 
       const endpoint = isSpecialist ? '/specialists/me/avatar' : '/customers/me/avatar';
 
-      const res = await api.post(endpoint, form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const res = await api.post(endpoint, form);
 
       const newUrl = isSpecialist
         ? (res.data?.avatarUrl as string | undefined)
@@ -441,6 +496,11 @@ export default function ProfileScreen() {
       );
     }
 
+    if (Platform.OS === 'web') {
+      await pickAvatarFromGallery();
+      return;
+    }
+
     Alert.alert(
       'Cambiar foto de perfil',
       'Elegí una opción',
@@ -448,46 +508,14 @@ export default function ProfileScreen() {
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Tomar foto',
-          onPress: async () => {
-            const { status } = await ImagePicker.requestCameraPermissionsAsync();
-            if (status !== 'granted') {
-              return Alert.alert(
-                'Permiso requerido',
-                'Necesitamos acceso a la cámara para tomar una foto.',
-              );
-            }
-
-            const result = await ImagePicker.launchCameraAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
-              quality: 0.8,
-            });
-
-            if (!('canceled' in result) || result.canceled) return;
-            const asset = result.assets?.[0];
-            if (!asset) return;
-            await uploadAvatarFromAsset(asset);
+          onPress: () => {
+            pickAvatarFromCamera().catch(() => undefined);
           },
         },
         {
           text: 'Elegir de la galería',
-          onPress: async () => {
-            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (status !== 'granted') {
-              return Alert.alert(
-                'Permiso requerido',
-                'Necesitamos acceso a tu galería para cambiar la foto de perfil.',
-              );
-            }
-
-            const result = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
-              quality: 0.8,
-            });
-
-            if (!('canceled' in result) || result.canceled) return;
-            const asset = result.assets?.[0];
-            if (!asset) return;
-            await uploadAvatarFromAsset(asset);
+          onPress: () => {
+            pickAvatarFromGallery().catch(() => undefined);
           },
         },
       ],

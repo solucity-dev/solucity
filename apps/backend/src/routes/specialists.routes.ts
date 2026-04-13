@@ -740,7 +740,6 @@ router.get('/search', async (req, res) => {
         visitPrice: true,
         ratingAvg: true,
         ratingCount: true,
-        badge: true,
         backgroundCheck: { select: { status: true } },
         user: {
           select: {
@@ -750,7 +749,6 @@ router.get('/search', async (req, res) => {
           },
         },
         serviceModes: true,
-        officeAddressId: true,
       },
     });
 
@@ -955,7 +953,7 @@ router.get('/search', async (req, res) => {
           ratingAvg: prof?.ratingAvg ?? 0,
           ratingCount: prof?.ratingCount ?? 0,
           visitPrice: prof?.visitPrice ?? x.visitPrice ?? null,
-          badge: prof?.badge ?? x.badge ?? null,
+          badge: x.badge ?? null,
 
           // 👇 compat (hasta que el mobile use categoryEnabled)
           enabled: categoryEnabled,
@@ -974,7 +972,7 @@ router.get('/search', async (req, res) => {
           serviceModesConfigured: hasExplicitServiceModes(prof?.serviceModes),
           requiresBackgroundCheck,
           backgroundCheckApproved: !!bgApproved,
-          officeAddressId: (prof as any)?.officeAddressId ?? null,
+          officeAddressId: null,
           visible,
           availableNow, // pill (incluye horario)
           activeJobsCount,

@@ -145,6 +145,8 @@ export default function BackgroundCheckScreen() {
       const file = pick.assets?.[0];
       if (!file) return;
 
+      if (__DEV__) console.log('[BackgroundCheck] checkpoint 1: archivo seleccionado');
+
       if (__DEV__) {
         console.log('[BackgroundCheck] picked asset =', file);
         if (Platform.OS === 'web') {
@@ -155,29 +157,51 @@ export default function BackgroundCheckScreen() {
       // ✅ ANDROID FIX: DocumentPicker a veces devuelve content:// y FormData/axios falla intermitente
       // Lo copiamos a cache y usamos file://
       let uploadUri = file.uri;
+      let sizeBytes = 0;
+      let webFile: File | null = null;
 
-      if (uploadUri.startsWith('content://')) {
-        const ext =
-          (file.name?.includes('.') ? file.name.split('.').pop() : null) ||
-          (file.mimeType === 'application/pdf' ? 'pdf' : 'jpg');
+      if (Platform.OS === 'web') {
+        webFile = (file as any).file ?? null;
 
-        const baseDir = (FileSystem as any).cacheDirectory || (FileSystem as any).documentDirectory;
-        if (!baseDir) throw new Error('no_cache_dir');
+        if (!webFile) {
+          throw new Error('No se pudo obtener el archivo en web');
+        }
 
-        const target = `${baseDir}bg_${Date.now()}.${ext}`;
+        sizeBytes = typeof webFile.size === 'number' ? webFile.size : 0;
 
-        await FileSystem.copyAsync({ from: uploadUri, to: target });
-        uploadUri = target;
+        if (__DEV__) {
+          console.log('[BackgroundCheck] web file name =', webFile.name);
+          console.log('[BackgroundCheck] web file size =', sizeBytes);
+          console.log('[BackgroundCheck] web file type =', webFile.type);
+        }
+      } else {
+        // ✅ ANDROID FIX: DocumentPicker a veces devuelve content:// y FormData/axios falla intermitente
+        // Lo copiamos a cache y usamos file://
+        if (uploadUri.startsWith('content://')) {
+          const ext =
+            (file.name?.includes('.') ? file.name.split('.').pop() : null) ||
+            (file.mimeType === 'application/pdf' ? 'pdf' : 'jpg');
+
+          const baseDir =
+            (FileSystem as any).cacheDirectory || (FileSystem as any).documentDirectory;
+          if (!baseDir) throw new Error('no_cache_dir');
+
+          const target = `${baseDir}bg_${Date.now()}.${ext}`;
+
+          await FileSystem.copyAsync({ from: uploadUri, to: target });
+          uploadUri = target;
+        }
+
+        if (__DEV__) console.log('[BackgroundCheck] uri =', uploadUri);
+
+        const info: any = await FileSystem.getInfoAsync(uploadUri);
+        sizeBytes = typeof info?.size === 'number' ? info.size : 0;
       }
 
-      // Logs útiles
-      if (__DEV__) console.log('[BackgroundCheck] uri =', uploadUri);
-
-      // Tamaño (si no lo soporta el runtime, cae a 0 y no corta)
-      const info: any = await FileSystem.getInfoAsync(uploadUri);
-      const sizeBytes = typeof info?.size === 'number' ? info.size : 0;
       const sizeMb = sizeBytes / (1024 * 1024);
       if (__DEV__) console.log('[BackgroundCheck] sizeMB =', sizeMb.toFixed(2));
+
+      if (__DEV__) console.log('[BackgroundCheck] checkpoint 2: tamaño validado');
 
       // (Opcional) corte por peso
       if (sizeMb > 12) {
@@ -195,13 +219,11 @@ export default function BackgroundCheckScreen() {
         (uploadUri.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
 
       if (Platform.OS === 'web') {
-        const webFile = (file as any).file;
-
         if (!webFile) {
           throw new Error('No se pudo obtener el archivo en web');
         }
 
-        form.append('file', webFile);
+        form.append('file', webFile, webFile.name);
       } else {
         form.append('file', {
           uri: uploadUri,
@@ -220,11 +242,18 @@ export default function BackgroundCheckScreen() {
               timeout: 60_000,
             };
 
+      if (__DEV__) console.log('[BackgroundCheck] checkpoint 3: enviando upload al backend');
+
       // 2.a subir archivo (axios)
       const uploadRes = await api.post('/specialists/background-check/upload', form, uploadConfig);
 
+      if (__DEV__)
+        console.log('[BackgroundCheck] checkpoint 4: upload completado', uploadRes?.data);
+
       const url = uploadRes.data?.url;
       if (!url) throw new Error('upload_failed_no_url');
+
+      if (__DEV__) console.log('[BackgroundCheck] checkpoint 5: guardando background check');
 
       // 2.b guardar antecedente
       await api.post('/specialists/background-check', { fileUrl: url });

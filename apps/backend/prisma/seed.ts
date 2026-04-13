@@ -233,7 +233,7 @@ const REQUIRES_CERTIFICATION = new Set<string>([
 
   // Informática y electrónica
   'climatizacion',
-  'Refrigeración',
+  'refrigeracion',
   'servicio-tecnico-electronica',
   'servicio-tecnico-electrodomesticos',
   'servicio-tecnico-informatica',

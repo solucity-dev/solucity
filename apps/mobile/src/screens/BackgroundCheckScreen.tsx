@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -144,6 +145,13 @@ export default function BackgroundCheckScreen() {
       const file = pick.assets?.[0];
       if (!file) return;
 
+      if (__DEV__) {
+        console.log('[BackgroundCheck] picked asset =', file);
+        if (Platform.OS === 'web') {
+          console.log('[BackgroundCheck] web file exists =', !!(file as any).file);
+        }
+      }
+
       // ✅ ANDROID FIX: DocumentPicker a veces devuelve content:// y FormData/axios falla intermitente
       // Lo copiamos a cache y usamos file://
       let uploadUri = file.uri;
@@ -186,17 +194,34 @@ export default function BackgroundCheckScreen() {
         file.mimeType ??
         (uploadUri.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
 
-      form.append('file', {
-        uri: uploadUri,
-        name: file.name ?? `certificado_buena_conducta_${Date.now()}`,
-        type: fallbackType,
-      } as any);
+      if (Platform.OS === 'web') {
+        const webFile = (file as any).file;
+
+        if (!webFile) {
+          throw new Error('No se pudo obtener el archivo en web');
+        }
+
+        form.append('file', webFile);
+      } else {
+        form.append('file', {
+          uri: uploadUri,
+          name: file.name ?? `certificado_buena_conducta_${Date.now()}`,
+          type: fallbackType,
+        } as any);
+      }
+
+      const uploadConfig =
+        Platform.OS === 'web'
+          ? {
+              timeout: 60_000,
+            }
+          : {
+              headers: { 'Content-Type': 'multipart/form-data' },
+              timeout: 60_000,
+            };
 
       // 2.a subir archivo (axios)
-      const uploadRes = await api.post('/specialists/background-check/upload', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 60_000, // si Render está lento, evitamos cortar muy rápido
-      });
+      const uploadRes = await api.post('/specialists/background-check/upload', form, uploadConfig);
 
       const url = uploadRes.data?.url;
       if (!url) throw new Error('upload_failed_no_url');

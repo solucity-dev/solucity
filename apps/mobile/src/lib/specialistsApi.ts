@@ -1,4 +1,6 @@
 // apps/mobile/src/lib/specialistsApi.ts
+import { Platform } from 'react-native';
+
 import { api } from './api';
 
 export type CertItem = {
@@ -16,21 +18,6 @@ export async function listCertifications() {
   return data.items ?? [];
 }
 
-// ✅ Se mantiene igual (para imágenes)
-export async function uploadCertificationFile(localUri: string) {
-  const form = new FormData();
-  form.append('file', { uri: localUri, name: 'cert.jpg', type: 'image/jpeg' } as any);
-
-  const { data } = await api.post<{ ok: boolean; url: string }>(
-    '/specialists/certifications/upload',
-    form,
-    { headers: { 'Content-Type': 'multipart/form-data' } },
-  );
-
-  return data.url; // relativo (/uploads/...)
-}
-
-// ✅ NUEVO: permite PDF u otros (sin romper lo anterior)
 function guessMimeType(filename: string) {
   const ext = (filename.split('.').pop() || '').toLowerCase();
 
@@ -40,24 +27,127 @@ function guessMimeType(filename: string) {
   if (ext === 'webp') return 'image/webp';
   if (ext === 'heic') return 'image/heic';
 
-  // fallback seguro
   return 'application/octet-stream';
 }
 
-// Export que te faltaba (esto resuelve tu error 2724)
-export async function uploadCertificationAnyFile(localUri: string, filename: string) {
+export async function uploadCertificationFile(input: {
+  uri: string;
+  name?: string;
+  mimeType?: string;
+  webFile?: File | null;
+}) {
   const form = new FormData();
-  form.append('file', {
-    uri: localUri,
-    name: filename || 'cert',
-    type: guessMimeType(filename || 'cert'),
-  } as any);
+
+  if (__DEV__) {
+    console.log('[uploadCertificationFile] input', {
+      uri: input.uri,
+      name: input.name,
+      mimeType: input.mimeType,
+      hasWebFile: !!input.webFile,
+      platform: Platform.OS,
+    });
+  }
+
+  if (Platform.OS === 'web') {
+    if (!input.webFile) {
+      throw new Error('No se pudo obtener el archivo en web');
+    }
+
+    form.append('file', input.webFile, input.webFile.name);
+  } else {
+    form.append('file', {
+      uri: input.uri,
+      name: input.name ?? 'cert.jpg',
+      type: input.mimeType ?? 'image/jpeg',
+    } as any);
+  }
+
+  if (__DEV__) {
+    console.log('[uploadCertificationFile] checkpoint 2: enviando upload');
+  }
+
+  const uploadConfig =
+    Platform.OS === 'web'
+      ? { timeout: 60000 }
+      : {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 60000,
+        };
 
   const { data } = await api.post<{ ok: boolean; url: string }>(
     '/specialists/certifications/upload',
     form,
-    { headers: { 'Content-Type': 'multipart/form-data' } },
+    uploadConfig,
   );
+
+  if (__DEV__) {
+    console.log('[uploadCertificationFile] checkpoint 3: upload completado', data);
+  }
+
+  if (!data?.url) {
+    throw new Error('upload_failed_no_url');
+  }
+
+  return data.url;
+}
+
+export async function uploadCertificationAnyFile(input: {
+  uri: string;
+  name: string;
+  mimeType?: string;
+  webFile?: File | null;
+}) {
+  const form = new FormData();
+
+  if (__DEV__) {
+    console.log('[uploadCertificationAnyFile] input', {
+      uri: input.uri,
+      name: input.name,
+      mimeType: input.mimeType,
+      hasWebFile: !!input.webFile,
+      platform: Platform.OS,
+    });
+  }
+
+  if (Platform.OS === 'web') {
+    if (!input.webFile) {
+      throw new Error('No se pudo obtener el archivo en web');
+    }
+
+    form.append('file', input.webFile, input.webFile.name);
+  } else {
+    form.append('file', {
+      uri: input.uri,
+      name: input.name || 'cert',
+      type: input.mimeType ?? guessMimeType(input.name || 'cert'),
+    } as any);
+  }
+
+  if (__DEV__) {
+    console.log('[uploadCertificationAnyFile] checkpoint 2: enviando upload');
+  }
+
+  const uploadConfig =
+    Platform.OS === 'web'
+      ? { timeout: 60000 }
+      : {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 60000,
+        };
+
+  const { data } = await api.post<{ ok: boolean; url: string }>(
+    '/specialists/certifications/upload',
+    form,
+    uploadConfig,
+  );
+
+  if (__DEV__) {
+    console.log('[uploadCertificationAnyFile] checkpoint 3: upload completado', data);
+  }
+
+  if (!data?.url) {
+    throw new Error('upload_failed_no_url');
+  }
 
   return data.url;
 }
@@ -67,7 +157,7 @@ export async function upsertCertification(params: {
   fileUrl: string;
   number?: string;
   issuer?: string;
-  expiresAt?: string; // ISO opcional
+  expiresAt?: string;
 }) {
   const { data } = await api.post('/specialists/certifications', params);
   return data;

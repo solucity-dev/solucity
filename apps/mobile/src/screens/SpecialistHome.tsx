@@ -2136,7 +2136,24 @@ export default function SpecialistHome() {
               });
               if (res.canceled || !res.assets?.[0]?.uri) return;
 
-              const relativeUrl = await uploadCertificationFile(res.assets[0].uri);
+              if (__DEV__) {
+                console.log('[CertUpload:image] checkpoint 1: imagen seleccionada');
+                if (Platform.OS === 'web') {
+                  console.log(
+                    '[CertUpload:image] web file exists =',
+                    !!(res.assets[0] as any).file,
+                  );
+                }
+              }
+
+              const pickedImage = res.assets[0];
+
+              const relativeUrl = await uploadCertificationFile({
+                uri: pickedImage.uri,
+                name: pickedImage.fileName ?? 'matricula.jpg',
+                mimeType: pickedImage.mimeType ?? 'image/jpeg',
+                webFile: Platform.OS === 'web' ? ((pickedImage as any).file ?? null) : null,
+              });
               await upsertCertification({ categorySlug, fileUrl: relativeUrl });
 
               const items = await listCertifications();
@@ -2166,10 +2183,19 @@ export default function SpecialistHome() {
               const asset = doc.assets?.[0];
               if (!asset?.uri) return;
 
-              const relativeUrl = await uploadCertificationAnyFile(
-                asset.uri,
-                asset.name ?? 'cert.pdf',
-              );
+              if (__DEV__) {
+                console.log('[CertUpload:pdf] checkpoint 1: pdf seleccionado');
+                if (Platform.OS === 'web') {
+                  console.log('[CertUpload:pdf] web file exists =', !!(asset as any).file);
+                }
+              }
+
+              const relativeUrl = await uploadCertificationAnyFile({
+                uri: asset.uri,
+                name: asset.name ?? 'cert.pdf',
+                mimeType: asset.mimeType ?? 'application/pdf',
+                webFile: Platform.OS === 'web' ? ((asset as any).file ?? null) : null,
+              });
 
               await upsertCertification({ categorySlug, fileUrl: relativeUrl });
 

@@ -723,6 +723,8 @@ router.get('/search', async (req, res) => {
     }
 
     // 3) enriquecer con datos reales del profile (incluye availability)
+    const profilesQueryStartedAt = Date.now();
+
     const profiles = await prisma.specialistProfile.findMany({
       where: { id: { in: withDist.map((x) => x.specialistId) } },
       select: {
@@ -752,17 +754,21 @@ router.get('/search', async (req, res) => {
       },
     });
 
+    const profilesQueryMs = Date.now() - profilesQueryStartedAt;
+
     const profById = new Map(profiles.map((p) => [p.id, p]));
 
     logSearchStep(searchStartedAt, 'after_profiles_and_users', {
       profilesCount: profiles.length,
       usersCount: profiles.length,
+      profilesQueryMs,
     });
     // 3.5) Habilitación por rubro (certificación) + info para UI
     const enabledBySpecialistId = new Map<string, boolean>();
     const certStatusBySpecialistId = new Map<string, 'PENDING' | 'APPROVED' | 'REJECTED' | null>();
 
     let requiresCertificationForCategory = false;
+    let certsQueryMs = 0;
 
     if (category) {
       const cat = await prisma.serviceCategory.findUnique({
@@ -780,6 +786,8 @@ router.get('/search', async (req, res) => {
         }
       } else if (cat?.id) {
         // Traer el estado de cert (no solo APPROVED) para cada especialista de ese rubro
+        const certsQueryStartedAt = Date.now();
+
         const certs = await prisma.specialistCertification.findMany({
           where: {
             specialistId: { in: withDist.map((x) => x.specialistId) },
@@ -787,6 +795,8 @@ router.get('/search', async (req, res) => {
           },
           select: { specialistId: true, status: true },
         });
+
+        certsQueryMs = Date.now() - certsQueryStartedAt;
 
         for (const c of certs) {
           const st = c.status as any as 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -807,11 +817,13 @@ router.get('/search', async (req, res) => {
         requiresCertificationForCategory,
         specialistsConsidered: withDist.length,
         certStatusesLoaded: certStatusBySpecialistId.size,
+        certsQueryMs: typeof certsQueryMs === 'number' ? certsQueryMs : 0,
       });
     }
 
     // ✅ cache por request para evitar N llamadas repetidas a canSpecialistBeVisible
     const gateStartedAt = Date.now();
+    const subscriptionsQueryStartedAt = Date.now();
 
     const subscriptions = await prisma.subscription.findMany({
       where: {
@@ -824,6 +836,8 @@ router.get('/search', async (req, res) => {
         currentPeriodEnd: true,
       },
     });
+
+    const subscriptionsQueryMs = Date.now() - subscriptionsQueryStartedAt;
 
     const subscriptionBySpecialistId = new Map(subscriptions.map((s) => [s.specialistId, s]));
 
@@ -846,6 +860,8 @@ router.get('/search', async (req, res) => {
     const gateDbCalls = subscriptions.length;
     const gateTotalMs = Date.now() - gateStartedAt;
 
+    const activeOrdersQueryStartedAt = Date.now();
+
     const activeOrdersGrouped = await prisma.serviceOrder.groupBy({
       by: ['specialistId'],
       where: {
@@ -857,12 +873,15 @@ router.get('/search', async (req, res) => {
       },
     });
 
+    const activeOrdersQueryMs = Date.now() - activeOrdersQueryStartedAt;
+
     const activeOrdersBySpecialistId = new Map(
       activeOrdersGrouped.map((row) => [row.specialistId as string, row._count.specialistId]),
     );
 
     logSearchStep(searchStartedAt, 'after_active_orders_group', {
       activeOrdersGroupedCount: activeOrdersGrouped.length,
+      activeOrdersQueryMs,
     });
 
     // 4) construir lista final + disponibilidad REAL (toggle + horario)
@@ -987,9 +1006,9 @@ router.get('/search', async (req, res) => {
       gateDbCalls,
       gateTotalMs,
       gateAvgMs: gateDbCalls > 0 ? Math.round(gateTotalMs / gateDbCalls) : 0,
+      subscriptionsQueryMs,
       mode: 'batched_by_specialistId',
     });
-
     if (onlyAvailable) enriched = enriched.filter((x) => x.availableNow === true);
     if (onlyEnabled) enriched = enriched.filter((x) => x.enabled === true);
 

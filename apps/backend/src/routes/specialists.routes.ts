@@ -694,11 +694,9 @@ router.get('/search', async (req, res) => {
       return res.json([]);
     }
 
-    const specialistIds = withDist.map((x) => x.specialistId);
-
     // 3) enriquecer con datos reales del profile (incluye availability)
     const profiles = await prisma.specialistProfile.findMany({
-      where: { id: { in: specialistIds } },
+      where: { id: { in: withDist.map((x) => x.specialistId) } },
       select: {
         id: true,
         userId: true,
@@ -731,7 +729,6 @@ router.get('/search', async (req, res) => {
     logSearchStep(searchStartedAt, 'after_profiles_and_users', {
       profilesCount: profiles.length,
       usersCount: profiles.length,
-      specialistIdsCount: specialistIds.length,
     });
     // 3.5) Habilitación por rubro (certificación) + info para UI
     const enabledBySpecialistId = new Map<string, boolean>();
@@ -757,7 +754,7 @@ router.get('/search', async (req, res) => {
         // Traer el estado de cert (no solo APPROVED) para cada especialista de ese rubro
         const certs = await prisma.specialistCertification.findMany({
           where: {
-            specialistId: { in: specialistIds },
+            specialistId: { in: withDist.map((x) => x.specialistId) },
             categoryId: cat.id,
           },
           select: { specialistId: true, status: true },
@@ -787,20 +784,37 @@ router.get('/search', async (req, res) => {
 
     // ✅ cache por request para evitar N llamadas repetidas a canSpecialistBeVisible
     const gateCache = new Map<string, { ok: boolean; status?: string | null }>();
+    let gateCalls = 0;
+    let gateCacheHits = 0;
+    let gateDbCalls = 0;
+    let gateTotalMs = 0;
 
     const gateFor = async (userId: string) => {
+      gateCalls += 1;
+
       if (!userId) return { ok: false, status: null };
+
       const hit = gateCache.get(userId);
-      if (hit) return hit;
+      if (hit) {
+        gateCacheHits += 1;
+        return hit;
+      }
+
+      gateDbCalls += 1;
+      const gateStartedAt = Date.now();
+
       const gate = await canSpecialistBeVisible(userId);
+
+      gateTotalMs += Date.now() - gateStartedAt;
       gateCache.set(userId, gate);
+
       return gate;
     };
 
     const activeOrdersGrouped = await prisma.serviceOrder.groupBy({
       by: ['specialistId'],
       where: {
-        specialistId: { in: specialistIds },
+        specialistId: { in: withDist.map((x) => x.specialistId) },
         status: { in: [...SPECIALIST_SATURATION_STATUSES] as any },
       },
       _count: {
@@ -917,12 +931,25 @@ router.get('/search', async (req, res) => {
 
     logSearchStep(searchStartedAt, 'after_enrichment', {
       enrichedCountBeforeVisibleFilter: enriched.length,
+      gateCalls,
+      gateCacheHits,
+      gateDbCalls,
+      gateTotalMs,
+      gateAvgMs: gateDbCalls > 0 ? Math.round(gateTotalMs / gateDbCalls) : 0,
     });
 
     enriched = enriched.filter((x) => x.userOk !== false && x.visible === true);
 
     logSearchStep(searchStartedAt, 'after_visible_filter', {
       enrichedCountAfterVisibleFilter: enriched.length,
+    });
+
+    logSearchStep(searchStartedAt, 'gate_summary', {
+      gateCalls,
+      gateCacheHits,
+      gateDbCalls,
+      gateTotalMs,
+      gateAvgMs: gateDbCalls > 0 ? Math.round(gateTotalMs / gateDbCalls) : 0,
     });
 
     if (onlyAvailable) enriched = enriched.filter((x) => x.availableNow === true);

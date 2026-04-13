@@ -14,7 +14,7 @@ import { auth } from '../middlewares/auth';
 import { geocodeAddress } from '../services/geocode';
 import { notifyBackgroundCheckStatus } from '../services/notifyBackgroundCheck';
 import { notifyKycStatus } from '../services/notifyKyc';
-import { canSpecialistBeVisible } from '../services/subscriptionGate';
+import { canSpecialistBeVisible, type SubscriptionGate } from '../services/subscriptionGate';
 import { getOrCreateSubscriptionForSpecialist } from '../services/subscriptionService';
 import { dbg, debugUploads } from '../utils/debug';
 
@@ -510,6 +510,34 @@ async function computeSafeAvailability(opts: {
 const SPECIALIST_SATURATION_STATUSES = ['ASSIGNED', 'IN_PROGRESS', 'PAUSED'] as const;
 const MAX_ACTIVE_ORDERS_SPECIALIST = 3;
 
+function resolveSubscriptionGateFromData(
+  sub?: {
+    status: string | null;
+    trialEnd: Date | null;
+    currentPeriodEnd: Date | null;
+  } | null,
+): SubscriptionGate {
+  if (!sub) return { ok: false, reason: 'SUBSCRIPTION_REQUIRED', status: null };
+
+  const now = new Date();
+
+  if (sub.status === 'TRIALING') {
+    if (sub.trialEnd && sub.trialEnd > now) {
+      return { ok: true, status: 'TRIALING' };
+    }
+    return { ok: false, reason: 'SUBSCRIPTION_REQUIRED', status: 'PAST_DUE' };
+  }
+
+  if (sub.status === 'ACTIVE') {
+    if (sub.currentPeriodEnd && sub.currentPeriodEnd > now) {
+      return { ok: true, status: 'ACTIVE' };
+    }
+    return { ok: false, reason: 'SUBSCRIPTION_REQUIRED', status: 'PAST_DUE' };
+  }
+
+  return { ok: false, reason: 'SUBSCRIPTION_REQUIRED', status: sub.status };
+}
+
 /** ===== helper: stats de contrataciones ===== */
 async function getSpecialistStatsById(specialistId: string) {
   const [done, canceled] = await Promise.all([
@@ -783,33 +811,40 @@ router.get('/search', async (req, res) => {
     }
 
     // ✅ cache por request para evitar N llamadas repetidas a canSpecialistBeVisible
-    const gateCache = new Map<string, { ok: boolean; status?: string | null }>();
-    let gateCalls = 0;
-    let gateCacheHits = 0;
-    let gateDbCalls = 0;
-    let gateTotalMs = 0;
+    const gateStartedAt = Date.now();
 
-    const gateFor = async (userId: string) => {
-      gateCalls += 1;
+    const subscriptions = await prisma.subscription.findMany({
+      where: {
+        specialistId: { in: profiles.map((p) => p.id) },
+      },
+      select: {
+        specialistId: true,
+        status: true,
+        trialEnd: true,
+        currentPeriodEnd: true,
+      },
+    });
 
-      if (!userId) return { ok: false, status: null };
+    const subscriptionBySpecialistId = new Map(subscriptions.map((s) => [s.specialistId, s]));
 
-      const hit = gateCache.get(userId);
-      if (hit) {
-        gateCacheHits += 1;
-        return hit;
+    const gateBySpecialistId = new Map<
+      string,
+      {
+        ok: boolean;
+        status?: string | null;
+        reason?: 'NO_SPECIALIST_PROFILE' | 'SUBSCRIPTION_REQUIRED';
       }
+    >();
 
-      gateDbCalls += 1;
-      const gateStartedAt = Date.now();
+    for (const profile of profiles) {
+      const sub = subscriptionBySpecialistId.get(profile.id);
+      gateBySpecialistId.set(profile.id, resolveSubscriptionGateFromData(sub));
+    }
 
-      const gate = await canSpecialistBeVisible(userId);
-
-      gateTotalMs += Date.now() - gateStartedAt;
-      gateCache.set(userId, gate);
-
-      return gate;
-    };
+    const gateCalls = withDist.length;
+    const gateCacheHits = 0;
+    const gateDbCalls = subscriptions.length;
+    const gateTotalMs = Date.now() - gateStartedAt;
 
     const activeOrdersGrouped = await prisma.serviceOrder.groupBy({
       by: ['specialistId'],
@@ -848,7 +883,9 @@ router.get('/search', async (req, res) => {
         const toggleAvailable = userOk && kycOk && bgOk ? !!prof?.availableNow : false;
         const scheduleOk = isWithinAvailability(prof?.availability);
 
-        const gate = await gateFor(prof?.userId ?? '');
+        const gate = prof
+          ? (gateBySpecialistId.get(prof.id) ?? { ok: false, status: null })
+          : { ok: false, status: null };
         const subOk = gate.ok;
 
         const activeJobsCount = activeOrdersBySpecialistId.get(x.specialistId) ?? 0;
@@ -950,6 +987,7 @@ router.get('/search', async (req, res) => {
       gateDbCalls,
       gateTotalMs,
       gateAvgMs: gateDbCalls > 0 ? Math.round(gateTotalMs / gateDbCalls) : 0,
+      mode: 'batched_by_specialistId',
     });
 
     if (onlyAvailable) enriched = enriched.filter((x) => x.availableNow === true);

@@ -2,7 +2,7 @@
 import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -12,13 +12,14 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../auth/AuthProvider';
 import AppLogo from '../components/AppLogo';
-import { ROOT_CATEGORIES } from '../data/categories';
+import { ROOT_CATEGORIES, ROOT_CATEGORY_MAP, SUBCATEGORIES } from '../data/categories';
 import { useSyncCustomerLocationOnMount } from '../hooks/useSyncCustomerLocationOnMount';
 import { useNotifications } from '../notifications/NotificationsProvider';
 
@@ -26,6 +27,58 @@ import type { HomeStackParamList } from '../types';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 const IS_WEB = Platform.OS === 'web';
+
+type SearchItem = {
+  categoryId: keyof typeof SUBCATEGORIES;
+  categoryName: string;
+  subId: string;
+  subTitle: string;
+  searchText: string;
+};
+
+function normalizeSearchText(value: string) {
+  return String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+const SEARCH_KEYWORDS: Record<string, string[]> = {
+  plomeria: ['plomero', 'caños', 'canos', 'agua', 'griferia', 'grifería'],
+  'plomeria-gasista': [
+    'gas',
+    'gasista',
+    'instalacion de gas',
+    'instalación de gas',
+    'calefon',
+    'calefón',
+  ],
+  climatizacion: ['aire', 'aire acondicionado', 'split', 'clima'],
+  refrigeracion: ['heladera', 'freezer', 'refrigerador', 'frio', 'frío'],
+  electricidad: ['electricista', 'luz', 'cortocircuito', 'cableado'],
+  'reparacion-de-celulares': ['celular', 'telefono', 'teléfono', 'pantalla', 'iphone', 'android'],
+  'servicio-tecnico-informatica': ['pc', 'computadora', 'notebook', 'laptop'],
+  cerrajeria: ['cerradura', 'llave', 'puerta'],
+  limpieza: ['limpiar', 'limpieza hogar', 'limpieza oficina'],
+  lavanderia: ['lavado', 'ropa', 'lavarropa'],
+  'clases-particulares': ['profesor', 'apoyo escolar', 'clases'],
+  'paseador-de-perros': ['perro', 'paseo mascota'],
+  'cuidado-de-mascotas': ['mascota', 'petsitter', 'cuidado animal'],
+  abogado: ['legal', 'juicio', 'abogada'],
+  contador: ['impuestos', 'afip', 'monotributo', 'contadora'],
+  arquitecto: ['planos', 'obra', 'arquitectura'],
+  ingeniero: ['ingenieria', 'ingeniería', 'calculo', 'cálculo'],
+  peluqueria: ['peluquero', 'corte de pelo', 'cabello'],
+  barberia: ['barbero', 'barba'],
+  maquillaje: ['makeup', 'maquilladora'],
+  depilacion: ['depilar', 'depiladora'],
+  gomeria: ['goma', 'neumatico', 'neumático', 'cubierta'],
+  'auxilio-vehicular': ['grua', 'grúa', 'remolque', 'auxilio auto'],
+  fletes: ['mudanza', 'camion', 'camión', 'traslado muebles'],
+  'mecanico-automotor': ['mecanico', 'mecánico', 'motor', 'auto'],
+  'electricidad-del-automotor': ['electrico auto', 'eléctrico auto', 'bateria', 'batería'],
+};
 
 export default function ClientHome() {
   const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
@@ -40,6 +93,9 @@ export default function ClientHome() {
   const [switchingMode, setSwitchingMode] = useState<'client' | 'specialist' | null>(null);
   const switchFade = useRef(new Animated.Value(0)).current;
   const switchScale = useRef(new Animated.Value(0.96)).current;
+
+  const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
     if (!switchingMode) {
@@ -66,9 +122,69 @@ export default function ClientHome() {
 
   useSyncCustomerLocationOnMount();
 
+  const searchableServices = useMemo<SearchItem[]>(() => {
+    return Object.entries(SUBCATEGORIES).flatMap(([categoryId, subs]) =>
+      subs.map((sub) => {
+        const keywords = SEARCH_KEYWORDS[sub.id] ?? [];
+        const searchText = normalizeSearchText([sub.title, sub.id, ...keywords].join(' '));
+
+        return {
+          categoryId: categoryId as keyof typeof SUBCATEGORIES,
+          categoryName: ROOT_CATEGORY_MAP[categoryId as keyof typeof SUBCATEGORIES].title,
+          subId: sub.id,
+          subTitle: sub.title,
+          searchText,
+        };
+      }),
+    );
+  }, []);
+
+  const searchResults = useMemo(() => {
+    const q = normalizeSearchText(query);
+
+    if (!q) return [];
+
+    const scored = searchableServices
+      .map((item) => {
+        const title = normalizeSearchText(item.subTitle);
+        const category = normalizeSearchText(item.categoryName);
+        const slug = normalizeSearchText(item.subId);
+
+        let score = 0;
+
+        if (title === q) score += 100;
+        if (title.startsWith(q)) score += 70;
+        if (title.includes(q)) score += 40;
+
+        if (slug.startsWith(q)) score += 55;
+        if (slug.includes(q)) score += 25;
+
+        if (category.includes(q)) score += 10;
+
+        if (item.searchText.includes(q)) score += 20;
+
+        return { ...item, score };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score || a.subTitle.localeCompare(b.subTitle, 'es'))
+      .slice(0, 6);
+
+    return scored;
+  }, [query, searchableServices]);
+
   const handleOpenNotifications = () => {
     dismissWebBanner();
     nav.navigate('Notifications' as never);
+  };
+
+  const handlePressSearchResult = (item: SearchItem) => {
+    setQuery('');
+    setSearchOpen(false);
+
+    nav.navigate('SpecialistsList', {
+      categorySlug: item.subId as any,
+      title: item.subTitle,
+    });
   };
 
   const performSwitchToSpecialistMode = async () => {
@@ -165,6 +281,61 @@ export default function ClientHome() {
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <Text style={styles.title}>¡Bienvenido!</Text>
           <Text style={styles.subtitle}>Elegí una categoría para empezar</Text>
+
+          <View style={styles.searchSection}>
+            <View style={styles.searchBox}>
+              <Ionicons name="search" size={18} color="#015A69" />
+              <TextInput
+                placeholder="Buscar servicio u oficio..."
+                placeholderTextColor="#6b9ca3"
+                value={query}
+                onChangeText={(text) => {
+                  setQuery(text);
+                  setSearchOpen(true);
+                }}
+                onFocus={() => setSearchOpen(true)}
+                style={styles.searchInput}
+                returnKeyType="search"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              {!!query && (
+                <Pressable
+                  onPress={() => {
+                    setQuery('');
+                    setSearchOpen(false);
+                  }}
+                  hitSlop={8}
+                >
+                  <Ionicons name="close-circle" size={18} color="#6b9ca3" />
+                </Pressable>
+              )}
+            </View>
+
+            {searchOpen && query.trim().length > 0 && (
+              <View style={styles.resultsBox}>
+                {searchResults.length > 0 ? (
+                  searchResults.map((item) => (
+                    <Pressable
+                      key={item.subId}
+                      style={styles.resultItem}
+                      onPress={() => handlePressSearchResult(item)}
+                    >
+                      <Text style={styles.resultTitle}>{item.subTitle}</Text>
+                      <Text style={styles.resultCategory}>{item.categoryName}</Text>
+                    </Pressable>
+                  ))
+                ) : (
+                  <View style={styles.resultEmpty}>
+                    <Text style={styles.resultEmptyText}>
+                      No encontramos servicios con ese nombre.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
 
           {canUseSpecialistMode && currentMode === 'client' && (
             <View style={styles.modeSwitchWrap}>
@@ -317,6 +488,65 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 120 },
   title: { color: '#fff', fontSize: 28, fontWeight: '800', marginTop: 6 },
   subtitle: { color: 'rgba(233,254,255,0.9)', marginTop: 6, marginBottom: 16 },
+
+  searchSection: {
+    marginBottom: 14,
+    position: 'relative',
+    zIndex: 10,
+  },
+
+  searchBox: {
+    backgroundColor: '#E9FEFF',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  searchInput: {
+    flex: 1,
+    color: '#015A69',
+    fontWeight: '700',
+    paddingVertical: 0,
+  },
+
+  resultsBox: {
+    marginTop: 8,
+    backgroundColor: '#E9FEFF',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+
+  resultItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(1,90,105,0.08)',
+  },
+
+  resultTitle: {
+    color: '#015A69',
+    fontWeight: '800',
+    fontSize: 14,
+  },
+
+  resultCategory: {
+    color: '#4A6C70',
+    fontSize: 12,
+    marginTop: 2,
+  },
+
+  resultEmpty: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+
+  resultEmptyText: {
+    color: '#4A6C70',
+    fontWeight: '700',
+  },
 
   grid: {
     flexDirection: 'row',

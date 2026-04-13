@@ -658,6 +658,9 @@ export default function SpecialistHome() {
   const [missingModesModalOpen, setMissingModesModalOpen] = useState(false);
   const [homeBgRequiredModalOpen, setHomeBgRequiredModalOpen] = useState(false);
 
+  const [certUploadModalOpen, setCertUploadModalOpen] = useState(false);
+  const [certUploadCategorySlug, setCertUploadCategorySlug] = useState<string | null>(null);
+
   // portfolio / trabajos realizados
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
   const [portfolioLoading, setPortfolioLoading] = useState(false);
@@ -2118,102 +2121,103 @@ export default function SpecialistHome() {
   }
 
   function handleUploadCert(categorySlug: string) {
-    Alert.alert(
-      'Subir matrícula',
-      'Elegí el tipo de archivo',
-      [
-        {
-          text: 'Imagen (Galería)',
-          onPress: async () => {
-            try {
-              setCertLoading(categorySlug, true);
+    setCertUploadCategorySlug(categorySlug);
+    setCertUploadModalOpen(true);
+  }
 
-              const res = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                quality: 1,
-                allowsEditing: true,
-                aspect: [4, 3],
-              });
-              if (res.canceled || !res.assets?.[0]?.uri) return;
+  async function handleUploadCertImage() {
+    const categorySlug = certUploadCategorySlug;
+    if (!categorySlug) return;
 
-              if (__DEV__) {
-                console.log('[CertUpload:image] checkpoint 1: imagen seleccionada');
-                if (Platform.OS === 'web') {
-                  console.log(
-                    '[CertUpload:image] web file exists =',
-                    !!(res.assets[0] as any).file,
-                  );
-                }
-              }
+    try {
+      setCertUploadModalOpen(false);
+      setCertLoading(categorySlug, true);
 
-              const pickedImage = res.assets[0];
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 1,
+        allowsEditing: true,
+        aspect: [4, 3],
+      });
 
-              const relativeUrl = await uploadCertificationFile({
-                uri: pickedImage.uri,
-                name: pickedImage.fileName ?? 'matricula.jpg',
-                mimeType: pickedImage.mimeType ?? 'image/jpeg',
-                webFile: Platform.OS === 'web' ? ((pickedImage as any).file ?? null) : null,
-              });
-              await upsertCertification({ categorySlug, fileUrl: relativeUrl });
+      if (res.canceled || !res.assets?.[0]?.uri) return;
 
-              const items = await listCertifications();
-              setCerts(items);
-              Alert.alert('Listo', 'Matrícula subida y enviada a revisión.');
-            } catch (e) {
-              if (__DEV__) console.log('[handleUploadCert:image] error', e);
-              Alert.alert('Ups', 'No se pudo subir la matrícula.');
-            } finally {
-              setCertLoading(categorySlug, false);
-            }
-          },
-        },
-        {
-          text: 'Documento (PDF)',
-          onPress: async () => {
-            try {
-              setCertLoading(categorySlug, true);
+      if (__DEV__) {
+        console.log('[CertUpload:image] checkpoint 1: imagen seleccionada');
+        if (Platform.OS === 'web') {
+          console.log('[CertUpload:image] web file exists =', !!(res.assets[0] as any).file);
+        }
+      }
 
-              const doc = await DocumentPicker.getDocumentAsync({
-                type: ['application/pdf'],
-                copyToCacheDirectory: true,
-                multiple: false,
-              });
+      const pickedImage = res.assets[0];
 
-              if (doc.canceled) return;
-              const asset = doc.assets?.[0];
-              if (!asset?.uri) return;
+      const relativeUrl = await uploadCertificationFile({
+        uri: pickedImage.uri,
+        name: pickedImage.fileName ?? 'matricula.jpg',
+        mimeType: pickedImage.mimeType ?? 'image/jpeg',
+        webFile: Platform.OS === 'web' ? ((pickedImage as any).file ?? null) : null,
+      });
 
-              if (__DEV__) {
-                console.log('[CertUpload:pdf] checkpoint 1: pdf seleccionado');
-                if (Platform.OS === 'web') {
-                  console.log('[CertUpload:pdf] web file exists =', !!(asset as any).file);
-                }
-              }
+      await upsertCertification({ categorySlug, fileUrl: relativeUrl });
 
-              const relativeUrl = await uploadCertificationAnyFile({
-                uri: asset.uri,
-                name: asset.name ?? 'cert.pdf',
-                mimeType: asset.mimeType ?? 'application/pdf',
-                webFile: Platform.OS === 'web' ? ((asset as any).file ?? null) : null,
-              });
+      const items = await listCertifications();
+      setCerts(items);
 
-              await upsertCertification({ categorySlug, fileUrl: relativeUrl });
+      Alert.alert('Listo', 'Matrícula subida y enviada a revisión.');
+    } catch (e) {
+      if (__DEV__) console.log('[handleUploadCert:image] error', e);
+      Alert.alert('Ups', 'No se pudo subir la matrícula.');
+    } finally {
+      setCertLoading(categorySlug, false);
+      setCertUploadCategorySlug(null);
+    }
+  }
+  async function handleUploadCertPdf() {
+    const categorySlug = certUploadCategorySlug;
+    if (!categorySlug) return;
 
-              const items = await listCertifications();
-              setCerts(items);
-              Alert.alert('Listo', 'Documento subido y enviado a revisión.');
-            } catch (e) {
-              if (__DEV__) console.log('[handleUploadCert:pdf] error', e);
-              Alert.alert('Ups', 'No se pudo subir el documento.');
-            } finally {
-              setCertLoading(categorySlug, false);
-            }
-          },
-        },
-        { text: 'Cancelar', style: 'cancel' },
-      ],
-      { cancelable: true },
-    );
+    try {
+      setCertUploadModalOpen(false);
+      setCertLoading(categorySlug, true);
+
+      const doc = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf'],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+
+      if (doc.canceled) return;
+
+      const asset = doc.assets?.[0];
+      if (!asset?.uri) return;
+
+      if (__DEV__) {
+        console.log('[CertUpload:pdf] checkpoint 1: pdf seleccionado');
+        if (Platform.OS === 'web') {
+          console.log('[CertUpload:pdf] web file exists =', !!(asset as any).file);
+        }
+      }
+
+      const relativeUrl = await uploadCertificationAnyFile({
+        uri: asset.uri,
+        name: asset.name ?? 'cert.pdf',
+        mimeType: asset.mimeType ?? 'application/pdf',
+        webFile: Platform.OS === 'web' ? ((asset as any).file ?? null) : null,
+      });
+
+      await upsertCertification({ categorySlug, fileUrl: relativeUrl });
+
+      const items = await listCertifications();
+      setCerts(items);
+
+      Alert.alert('Listo', 'Documento subido y enviado a revisión.');
+    } catch (e) {
+      if (__DEV__) console.log('[handleUploadCert:pdf] error', e);
+      Alert.alert('Ups', 'No se pudo subir el documento.');
+    } finally {
+      setCertLoading(categorySlug, false);
+      setCertUploadCategorySlug(null);
+    }
   }
 
   const chipSource: { slug: string; name: string }[] = useMemo(() => {
@@ -4191,6 +4195,62 @@ export default function SpecialistHome() {
                 <Text style={styles.btnT}>Configurar</Text>
               </Pressable>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal: subir matrícula / título */}
+      <Modal
+        transparent
+        visible={certUploadModalOpen}
+        animationType="fade"
+        onRequestClose={() => {
+          setCertUploadModalOpen(false);
+          setCertUploadCategorySlug(null);
+        }}
+      >
+        <View style={styles.previewBG}>
+          <View style={styles.previewCard}>
+            <Text
+              style={{
+                color: '#0A5B63',
+                fontWeight: '900',
+                fontSize: 18,
+                textAlign: 'center',
+              }}
+            >
+              Subir matrícula
+            </Text>
+
+            <Text
+              style={{
+                color: '#4A6C70',
+                fontWeight: '700',
+                textAlign: 'center',
+                marginTop: 10,
+                lineHeight: 20,
+              }}
+            >
+              Elegí el tipo de archivo que querés subir.
+            </Text>
+
+            <Pressable style={styles.btn} onPress={handleUploadCertImage}>
+              <Text style={styles.btnT}>Imagen (Galería)</Text>
+            </Pressable>
+
+            <Pressable style={styles.btn} onPress={handleUploadCertPdf}>
+              <Text style={styles.btnT}>Documento (PDF)</Text>
+            </Pressable>
+
+            <Pressable
+              style={[styles.btn, { backgroundColor: 'rgba(10,91,99,0.12)' }]}
+              onPress={() => {
+                setCertUploadModalOpen(false);
+                setCertUploadCategorySlug(null);
+              }}
+            >
+              <Text style={[styles.btnT, { color: '#0A5B63' }]}>Cancelar</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>

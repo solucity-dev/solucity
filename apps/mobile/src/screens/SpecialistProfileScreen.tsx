@@ -7,6 +7,7 @@ import * as Location from 'expo-location';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Modal,
   Platform,
@@ -19,6 +20,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ensureInquiryChat } from '../api/chat';
+import { useAuth } from '../auth/AuthProvider';
 import { API_URL, api } from '../lib/api';
 import { resolveUploadUrl } from '../lib/resolveUploadUrl';
 
@@ -73,6 +75,9 @@ const DAY_LABELS = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
 export default function SpecialistProfileScreen() {
   const { params } = useRoute<Route>();
   const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
+
+  const auth = useAuth() as any;
+  const isGuest = !auth?.user;
 
   const insets = useSafeAreaInsets();
   const tabBarHeightRaw = useBottomTabBarHeight();
@@ -254,7 +259,42 @@ export default function SpecialistProfileScreen() {
   const showPrice = spec?.visitPrice != null;
   const pricingLabel = (spec?.pricingLabel ?? '').trim() || 'Tarifa';
 
+  function handleGuestBlockedAction() {
+    const rootNav = nav.getParent?.() as any;
+
+    if (Platform.OS === 'web') {
+      const goLogin = window.confirm(
+        'Necesitás iniciar sesión para continuar.\n\nPodés explorar especialistas libremente. Para contratar o consultar presupuesto, iniciá sesión o creá una cuenta.',
+      );
+
+      if (goLogin) {
+        rootNav?.navigate?.('Login');
+      }
+      return;
+    }
+
+    Alert.alert(
+      'Necesitás una cuenta',
+      'Podés explorar especialistas libremente. Para contratar o consultar presupuesto, necesitás iniciar sesión o crear una cuenta.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Iniciar sesión',
+          onPress: () => rootNav?.navigate?.('Login'),
+        },
+        {
+          text: 'Crear cuenta',
+          onPress: () => rootNav?.navigate?.('ChooseRole'),
+        },
+      ],
+    );
+  }
+
   async function handleStartInquiry() {
+    if (isGuest) {
+      handleGuestBlockedAction();
+      return;
+    }
     if (!spec?.id) return;
 
     try {
@@ -603,6 +643,11 @@ export default function SpecialistProfileScreen() {
                   pressed && { opacity: 0.95, transform: [{ scale: 0.99 }] },
                 ]}
                 onPress={() => {
+                  if (isGuest) {
+                    handleGuestBlockedAction();
+                    return;
+                  }
+
                   const categorySlug = routeCategorySlug;
 
                   nav.navigate('CreateOrder', {

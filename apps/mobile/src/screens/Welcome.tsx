@@ -8,19 +8,24 @@ import AppLogo from '../components/AppLogo';
 type Props = {
   onCreateAccount: () => void;
   onLogin: () => void;
+  onExplore: () => void;
   onOpenTerms: () => void;
   onOpenPrivacy: () => void;
 };
 
-export default function Welcome({ onCreateAccount, onLogin, onOpenTerms, onOpenPrivacy }: Props) {
+export default function Welcome({
+  onCreateAccount,
+  onLogin,
+  onExplore,
+  onOpenTerms,
+  onOpenPrivacy,
+}: Props) {
   const insets = useSafeAreaInsets();
-  // levantamos el footer para que no quede pegado al borde
   const bottomLift = Math.max(32, insets.bottom + 18);
 
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={styles.container}>
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        {/* Centro: logo + textos */}
         <View style={styles.content}>
           <AppLogo resizeMode="contain" style={styles.logo} />
 
@@ -32,8 +37,16 @@ export default function Welcome({ onCreateAccount, onLogin, onOpenTerms, onOpenP
           </Text>
         </View>
 
-        {/* Footer: acciones */}
         <View style={[styles.footer, { marginBottom: bottomLift }]}>
+          <Pressable
+            onPress={onExplore}
+            style={({ pressed }) => [styles.exploreBtn, pressed && { opacity: 0.95 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Explorar servicios"
+          >
+            <Text style={styles.exploreText}>Explorar servicios</Text>
+          </Pressable>
+
           <Pressable
             onPress={onCreateAccount}
             style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.95 }]}
@@ -110,32 +123,50 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     gap: 12,
   },
-  primaryBtn: {
+
+  exploreBtn: {
     height: 48,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.96)',
+    backgroundColor: '#E9FEFF',
     alignItems: 'center',
     justifyContent: 'center',
-    // una leve sombra sutil (Android/iOS)
     elevation: 1,
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
   },
-  primaryText: {
+  exploreText: {
     color: '#0B6B76',
+    fontWeight: '900',
+    letterSpacing: 0.4,
+    fontSize: 16,
+  },
+
+  primaryBtn: {
+    height: 48,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.85)',
+  },
+  primaryText: {
+    color: '#fff',
     fontWeight: '800',
     letterSpacing: 0.5,
     fontSize: 16,
   },
+
   secondaryBtn: {
     height: 48,
     borderRadius: 18,
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.9)',
+    borderColor: 'rgba(255,255,255,0.65)',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
   secondaryText: {
     color: '#fff',

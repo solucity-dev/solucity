@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 
 import ClientTabs from './ClientTabs';
+import GuestNavigator from './GuestNavigator';
 import { setNavMode } from './navigationRef';
 import SpecialistTabs from './SpecialistTabs';
 import { useAuth } from '../auth/AuthProvider';
@@ -36,6 +37,7 @@ export default function RootNavigator() {
 
   const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
   const [initialRoute, setInitialRoute] = useState<string | null>(null);
+  const [isGuestExploring, setIsGuestExploring] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -112,17 +114,20 @@ export default function RootNavigator() {
     };
   }, [onboardingSeen]);
 
-  // Mientras hidrata auth + onboarding
+  useEffect(() => {
+    if (token && user) {
+      setIsGuestExploring(false);
+    }
+  }, [token, user]);
+
   if (loading || onboardingSeen === null) {
     return Platform.OS === 'web' ? <Splash /> : null;
   }
 
-  // Anti-flash: si hay token pero aún no cargó user (/auth/me)
   if (token && !user) {
     return Platform.OS === 'web' ? <Splash /> : null;
   }
 
-  // Con token → stack privado
   if (token && user) {
     const canUseSpecialistMode = !!(user as any)?.profiles?.specialistId;
     const isSpecialistMode = canUseSpecialistMode && mode === 'specialist';
@@ -146,12 +151,34 @@ export default function RootNavigator() {
     );
   }
 
-  // Sin token pero todavía resolviendo ruta inicial pública
+  if (isGuestExploring) {
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="GuestMain" component={GuestNavigator} />
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen
+          name="ChooseRole"
+          children={({ navigation }) => (
+            <ChooseRole
+              onBack={() => navigation.goBack()}
+              onPickClient={() => navigation.navigate('RegisterClient')}
+              onPickPro={() => navigation.navigate('RegisterSpecialist')}
+            />
+          )}
+        />
+        <Stack.Screen name="RegisterClient" component={RegisterClient} />
+        <Stack.Screen name="RegisterSpecialist" component={RegisterSpecialist} />
+        <Stack.Screen name="Support" component={SupportScreen} />
+        <Stack.Screen name="Terms" component={TermsScreen} />
+        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+      </Stack.Navigator>
+    );
+  }
+
   if (!initialRoute) {
     return Platform.OS === 'web' ? <Splash /> : null;
   }
 
-  // Sin token → flujo público
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={initialRoute}>
       <Stack.Screen
@@ -173,6 +200,7 @@ export default function RootNavigator() {
         name="Welcome"
         children={({ navigation }) => (
           <Welcome
+            onExplore={() => setIsGuestExploring(true)}
             onCreateAccount={() => navigation.navigate('ChooseRole')}
             onLogin={() => navigation.navigate('Login')}
             onOpenTerms={() => navigation.navigate('Terms')}
@@ -182,7 +210,6 @@ export default function RootNavigator() {
       />
 
       <Stack.Screen name="Login" component={LoginScreen} />
-
       <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
       <Stack.Screen name="ResetPassword" component={ResetPassword} />
 

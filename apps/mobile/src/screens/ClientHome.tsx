@@ -86,6 +86,7 @@ export default function ClientHome() {
   const { unread, webBannerVisible, webBannerCount, dismissWebBanner } = useNotifications();
 
   const auth = useAuth() as any;
+  const isGuest = !auth?.user;
   const currentMode: 'client' | 'specialist' = auth?.mode ?? 'client';
   const canUseSpecialistMode = !!auth?.user?.profiles?.specialistId;
   const setAuthMode: ((mode: 'client' | 'specialist') => Promise<void>) | undefined = auth?.setMode;
@@ -241,24 +242,26 @@ export default function ClientHome() {
             <Text style={styles.brandText}>Solucity</Text>
           </View>
 
-          <Pressable
-            style={[styles.bellWrap, { top: insets.top + 6 }]}
-            onPress={handleOpenNotifications}
-            hitSlop={12}
-            pressRetentionOffset={12}
-          >
-            <View style={styles.bellHitArea}>
-              <Ionicons name="notifications-outline" size={28} color="#E9FEFF" />
-              {unread > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text>
-                </View>
-              )}
-            </View>
-          </Pressable>
+          {!isGuest && (
+            <Pressable
+              style={[styles.bellWrap, { top: insets.top + 6 }]}
+              onPress={handleOpenNotifications}
+              hitSlop={12}
+              pressRetentionOffset={12}
+            >
+              <View style={styles.bellHitArea}>
+                <Ionicons name="notifications-outline" size={28} color="#E9FEFF" />
+                {unread > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text>
+                  </View>
+                )}
+              </View>
+            </Pressable>
+          )}
         </View>
 
-        {IS_WEB && webBannerVisible && (
+        {!isGuest && IS_WEB && webBannerVisible && (
           <View style={styles.bannerOuter}>
             <Pressable style={styles.banner} onPress={handleOpenNotifications}>
               <View style={styles.bannerLeft}>
@@ -337,7 +340,7 @@ export default function ClientHome() {
             )}
           </View>
 
-          {canUseSpecialistMode && currentMode === 'client' && (
+          {!isGuest && canUseSpecialistMode && currentMode === 'client' && (
             <View style={styles.modeSwitchWrap}>
               <Pressable style={styles.modeSwitchCard} onPress={handleSwitchToSpecialistMode}>
                 <View style={styles.modeSwitchIconWrap}>

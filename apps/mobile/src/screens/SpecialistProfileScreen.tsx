@@ -1,10 +1,10 @@
 // apps/mobile/src/screens/SpecialistProfileScreen.tsx
 import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { BottomTabBarHeightContext } from '@react-navigation/bottom-tabs';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
-import { useEffect, useMemo, useState } from 'react';
+import { useContext, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -80,8 +80,9 @@ export default function SpecialistProfileScreen() {
   const isGuest = !auth?.user;
 
   const insets = useSafeAreaInsets();
-  const tabBarHeightRaw = useBottomTabBarHeight();
-  const tabBarHeight = Math.max(tabBarHeightRaw, 60);
+  const bottomTabBarHeight = useContext(BottomTabBarHeightContext);
+  const tabBarHeightRaw = bottomTabBarHeight ?? 0;
+  const tabBarHeight = tabBarHeightRaw > 0 ? Math.max(tabBarHeightRaw, 60) : 0;
   const ctaBottom = Platform.OS === 'web' ? 24 : tabBarHeight + insets.bottom + 12;
 
   const [loading, setLoading] = useState(true);

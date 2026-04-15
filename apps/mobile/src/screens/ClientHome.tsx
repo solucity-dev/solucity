@@ -232,6 +232,16 @@ export default function ClientHome() {
     );
   };
 
+  const handleGuestLogin = () => {
+    const rootNav = nav.getParent?.() as any;
+    rootNav?.navigate?.('Login');
+  };
+
+  const handleGuestRegister = () => {
+    const rootNav = nav.getParent?.() as any;
+    rootNav?.navigate?.('ChooseRole');
+  };
+
   return (
     <LinearGradient colors={['#015A69', '#16A4AE']} style={{ flex: 1 }}>
       <SafeAreaView style={styles.safe} edges={['top']}>
@@ -381,6 +391,32 @@ export default function ClientHome() {
               </Pressable>
             ))}
           </View>
+
+          {isGuest && (
+            <View style={styles.guestCtaWrap}>
+              <Text style={styles.guestCtaTitle}>¿Querés continuar?</Text>
+              <Text style={styles.guestCtaText}>
+                Podés explorar servicios libremente. Para contratar o ofrecer tus servicios en
+                Solucity, iniciá sesión o creá una cuenta.
+              </Text>
+
+              <View style={styles.guestButtonsRow}>
+                <Pressable
+                  onPress={handleGuestRegister}
+                  style={({ pressed }) => [styles.guestPrimaryBtn, pressed && { opacity: 0.95 }]}
+                >
+                  <Text style={styles.guestPrimaryText}>Crear cuenta</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={handleGuestLogin}
+                  style={({ pressed }) => [styles.guestSecondaryBtn, pressed && { opacity: 0.92 }]}
+                >
+                  <Text style={styles.guestSecondaryText}>Iniciar sesión</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
         </ScrollView>
       </SafeAreaView>
 
@@ -670,5 +706,64 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
     marginTop: 6,
+  },
+  guestCtaWrap: {
+    marginTop: 22,
+    marginBottom: 8,
+    padding: 16,
+    borderRadius: 22,
+    backgroundColor: 'rgba(233,254,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(233,254,255,0.28)',
+  },
+
+  guestCtaTitle: {
+    color: '#E9FEFF',
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+
+  guestCtaText: {
+    color: 'rgba(233,254,255,0.92)',
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginTop: 8,
+  },
+
+  guestButtonsRow: {
+    marginTop: 14,
+    gap: 10,
+  },
+
+  guestPrimaryBtn: {
+    height: 46,
+    borderRadius: 16,
+    backgroundColor: '#E9FEFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  guestPrimaryText: {
+    color: '#0A5B63',
+    fontWeight: '900',
+    fontSize: 15,
+  },
+
+  guestSecondaryBtn: {
+    height: 46,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(233,254,255,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,35,40,0.14)',
+  },
+
+  guestSecondaryText: {
+    color: '#E9FEFF',
+    fontWeight: '800',
+    fontSize: 15,
   },
 });

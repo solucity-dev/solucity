@@ -1763,6 +1763,22 @@ function normalizeOfficeAddressText(input: string): string {
   return s;
 }
 
+function normalizeLooseAddress(input: string): string {
+  let s = String(input ?? '').trim();
+
+  if (!s) return s;
+
+  // normaliza formas comunes de numeración
+  s = s.replace(/\b(n[°ºo]\.?|numero)\s*/gi, ' ');
+
+  // normaliza separadores y espacios
+  s = s.replace(/\s*-\s*/g, ' ');
+  s = s.replace(/\s+/g, ' ');
+  s = s.replace(/\s*,\s*/g, ', ');
+
+  return s.trim();
+}
+
 function deaccent(input: string): string {
   return String(input ?? '')
     .normalize('NFD')
@@ -1804,7 +1820,9 @@ async function geocodeOfficeAddressWithFallback(params: {
   const normalizedOriginal = normalizeOfficeAddressText(originalFormatted);
   const normalizedStreet = normalizeOfficeAddressText(streetPart);
   const normalizedLocality = inferredLocality ? normalizeOfficeAddressText(inferredLocality) : null;
-
+  const looseOriginal = normalizeLooseAddress(normalizedOriginal || originalFormatted);
+  const looseStreet = normalizeLooseAddress(normalizedStreet || streetPart);
+  const looseLocality = normalizedLocality ? normalizeLooseAddress(normalizedLocality) : null;
   const streetWithoutPrefix = normalizedStreet.replace(
     /^(pasaje|avenida|boulevard|general|doctor)\s+/i,
     '',
@@ -1815,10 +1833,19 @@ async function geocodeOfficeAddressWithFallback(params: {
 
   // 1) exacta
   pushCandidate(originalFormatted);
+  pushCandidate(looseOriginal);
 
   // 2) normalizada completa
   if (normalizedOriginal && normalizedOriginal !== originalFormatted) {
     pushCandidate(normalizedOriginal);
+  }
+
+  if (
+    looseOriginal &&
+    looseOriginal !== normalizedOriginal &&
+    looseOriginal !== originalFormatted
+  ) {
+    pushCandidate(looseOriginal);
   }
 
   // 3) variantes con localidad
@@ -1826,6 +1853,11 @@ async function geocodeOfficeAddressWithFallback(params: {
     pushCandidate(`${streetPart}, ${inferredLocality}, Córdoba, Argentina`);
     pushCandidate(`${normalizedStreet}, ${inferredLocality}, Córdoba, Argentina`);
 
+    pushCandidate(`${looseStreet}, ${inferredLocality}, Córdoba, Argentina`);
+
+    if (looseLocality) {
+      pushCandidate(`${looseStreet}, ${looseLocality}, Córdoba, Argentina`);
+    }
     if (normalizedLocality && normalizedLocality !== inferredLocality) {
       pushCandidate(`${streetPart}, ${normalizedLocality}, Córdoba, Argentina`);
       pushCandidate(`${normalizedStreet}, ${normalizedLocality}, Córdoba, Argentina`);
@@ -1867,12 +1899,31 @@ async function geocodeOfficeAddressWithFallback(params: {
     pushCandidate(`${streetPart}, ${inferredLocality}, Argentina`);
     pushCandidate(`${normalizedStreet}, ${inferredLocality}, Argentina`);
 
+    pushCandidate(`${looseStreet}, ${inferredLocality}, Argentina`);
+
+    if (looseLocality) {
+      pushCandidate(`${looseStreet}, ${looseLocality}, Argentina`);
+    }
     if (streetWithoutPrefix && streetWithoutPrefix !== normalizedStreet) {
       pushCandidate(`${streetWithoutPrefix}, ${inferredLocality}, Argentina`);
     }
 
     pushCandidate(`${streetPart}, ${inferredLocality}, Cordoba, Argentina`);
     pushCandidate(`${normalizedStreet}, ${inferredLocality}, Cordoba, Argentina`);
+
+    // ✅ variantes sin localidad aunque exista
+    pushCandidate(`${streetPart}, Córdoba, Argentina`);
+    pushCandidate(`${normalizedStreet}, Córdoba, Argentina`);
+    pushCandidate(`${looseStreet}, Córdoba, Argentina`);
+
+    pushCandidate(`${streetPart}, Argentina`);
+    pushCandidate(`${normalizedStreet}, Argentina`);
+    pushCandidate(`${looseStreet}, Argentina`);
+
+    // ✅ último fallback: calle sola
+    pushCandidate(streetPart);
+    pushCandidate(normalizedStreet);
+    pushCandidate(looseStreet);
   }
 
   // 4) si no hubo localidad, recién ahí usamos variantes genéricas
@@ -1906,7 +1957,16 @@ async function geocodeOfficeAddressWithFallback(params: {
 
   for (const candidate of Array.from(candidates)) {
     try {
+      dbg(debugSpecialists, '[geocodeOfficeAddressWithFallback] trying candidate', {
+        candidate,
+      });
+
       const result = await geocodeAddress(candidate);
+
+      dbg(debugSpecialists, '[geocodeOfficeAddressWithFallback] candidate result', {
+        candidate,
+        result,
+      });
 
       if (
         result?.lat != null &&
@@ -1918,8 +1978,11 @@ async function geocodeOfficeAddressWithFallback(params: {
         usedFormatted = candidate;
         break;
       }
-    } catch {
-      // seguimos con el siguiente candidate
+    } catch (e) {
+      dbg(debugSpecialists, '[geocodeOfficeAddressWithFallback] candidate failed', {
+        candidate,
+        error: e instanceof Error ? { message: e.message, stack: e.stack } : e,
+      });
     }
   }
 

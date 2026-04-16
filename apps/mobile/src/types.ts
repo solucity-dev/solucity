@@ -80,6 +80,7 @@ export type CategorySlug =
   | 'meditacion-guiada'
   | 'terapias-holisticas'
   | 'masajes-holisticos'
+  | 'masoterapia'
   // ── Digital ───────────────────────────────────────────────
   | 'marketing-digital'
   | 'diseno-grafico'

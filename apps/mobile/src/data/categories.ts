@@ -262,6 +262,11 @@ export const SUBCATEGORIES: Record<RootCategoryId, Subcategory[]> = {
       title: 'Masajes holísticos',
       icon: { set: 'mdi', name: 'spa' },
     },
+    {
+      id: 'masoterapia',
+      title: 'Masoterapia',
+      icon: { set: 'mdi', name: 'hand-back-right-outline' },
+    },
   ],
 
   digital: [

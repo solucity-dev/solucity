@@ -100,7 +100,14 @@ const groups: GroupSeed[] = [
   {
     name: 'Holístico y bienestar',
     slug: 'holistico-bienestar',
-    rubros: ['Reiki', 'Yoga', 'Meditación guiada', 'Terapias holísticas', 'Masajes holísticos'],
+    rubros: [
+      'Reiki',
+      'Yoga',
+      'Meditación guiada',
+      'Terapias holísticas',
+      'Masajes holísticos',
+      'Masoterapia',
+    ],
   },
   {
     name: 'Digital',

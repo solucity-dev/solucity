@@ -237,73 +237,99 @@ export async function handleMercadoPagoWebhook(
     return;
   }
 
-  await prisma.subscription.update({
-    where: { id: sub.id },
-    data: {
-      provider: 'MERCADOPAGO',
-      lastPaymentStatus: status || null,
-    },
+  if (status !== 'approved') {
+    await prisma.subscription.update({
+      where: { id: sub.id },
+      data: {
+        provider: 'MERCADOPAGO',
+        lastPaymentStatus: status || null,
+      },
+    });
+
+    return;
+  }
+
+  const activation = await prisma.$transaction(async (tx) => {
+    const fresh = await tx.subscription.findUnique({
+      where: { id: sub.id },
+      select: {
+        id: true,
+        status: true,
+        currentPeriodEnd: true,
+        lastPaymentId: true,
+      },
+    });
+
+    if (!fresh) return { kind: 'missing' as const };
+
+    // Si ya procesamos ESTE payment y ya quedó activa, no hacemos nada.
+    if (fresh.lastPaymentId === paymentId && fresh.status === 'ACTIVE') {
+      return { kind: 'deduped' as const };
+    }
+
+    // Si admin la canceló manualmente, registramos el pago pero no la reactivamos.
+    if (fresh.status === 'CANCELLED') {
+      await tx.subscription.update({
+        where: { id: fresh.id },
+        data: {
+          provider: 'MERCADOPAGO',
+          lastPaymentId: paymentId,
+          lastPaymentStatus: 'approved',
+        },
+      });
+
+      return { kind: 'cancelled' as const };
+    }
+
+    const now = new Date();
+    const currentEnd = fresh.currentPeriodEnd ?? null;
+    const base = currentEnd && currentEnd > now ? currentEnd : now;
+    const newEnd = addOneCalendarMonth(base);
+
+    await tx.subscription.update({
+      where: { id: fresh.id },
+      data: {
+        provider: 'MERCADOPAGO',
+        lastPaymentId: paymentId,
+        lastPaymentStatus: 'approved',
+        status: 'ACTIVE',
+        currentPeriodStart: base,
+        currentPeriodEnd: newEnd,
+        trialEnd: null,
+      },
+    });
+
+    return {
+      kind: 'activated' as const,
+      newEnd,
+    };
   });
 
-  if (status !== 'approved') return;
+  if (activation.kind === 'missing') {
+    console.warn('[MP webhook] subscription disappeared before activation', {
+      paymentId,
+      subscriptionId: sub.id,
+    });
+    return;
+  }
 
-  // ✅ IDEMPOTENCIA ROBUSTA: si ya guardamos este paymentId, no procesar 2 veces (race-safe)
-  const mark = await prisma.subscription.updateMany({
-    where: {
-      id: sub.id,
-      NOT: { lastPaymentId: paymentId },
-    },
-    data: {
-      lastPaymentId: paymentId,
-      lastPaymentStatus: 'approved',
-      provider: 'MERCADOPAGO',
-    },
-  });
-
-  if (mark.count === 0) {
+  if (activation.kind === 'deduped') {
     console.log('[MP webhook] deduped paymentId=', paymentId, 'subId=', sub.id);
     return;
   }
 
-  // ✅ Releer estado actual para calcular sobre datos frescos
-  const fresh = await prisma.subscription.findUnique({
-    where: { id: sub.id },
-    select: {
-      status: true,
-      currentPeriodEnd: true,
-    },
-  });
-
-  if (!fresh) return;
-
-  // ⛔ Si admin la canceló manualmente, registramos el pago pero no reactivamos automáticamente
-  if (fresh.status === 'CANCELLED') {
+  if (activation.kind === 'cancelled') {
     if (process.env.NODE_ENV !== 'production') {
       console.log('[MP webhook] approved payment ignored because subscription is CANCELLED', {
         userId,
         subscriptionId: sub.id,
         paymentId,
-        currentStatus: fresh.status,
       });
     }
-
     return;
   }
 
-  const now = new Date();
-  const currentEnd = fresh.currentPeriodEnd ?? null;
-  const base = currentEnd && currentEnd > now ? currentEnd : now;
-  const newEnd = addOneCalendarMonth(base);
-
-  await prisma.subscription.update({
-    where: { id: sub.id },
-    data: {
-      status: 'ACTIVE',
-      currentPeriodStart: base,
-      currentPeriodEnd: newEnd,
-      trialEnd: null,
-    },
-  });
+  const newEnd = activation.newEnd;
 
   if (userId) {
     const specialist = await prisma.specialistProfile.findUnique({

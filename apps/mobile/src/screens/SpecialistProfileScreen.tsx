@@ -394,7 +394,7 @@ export default function SpecialistProfileScreen() {
               style={{ flex: 1 }}
               contentContainerStyle={{
                 paddingHorizontal: 16,
-                paddingBottom: Platform.OS === 'web' ? 120 : ctaBottom + 90,
+                paddingBottom: Platform.OS === 'web' ? 140 : ctaBottom + 140,
               }}
               showsVerticalScrollIndicator={false}
             >

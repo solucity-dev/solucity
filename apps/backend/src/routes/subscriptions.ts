@@ -137,15 +137,44 @@ router.post('/pay/link', auth, async (req: AuthReq, res: Response) => {
  */
 router.post('/mercadopago/webhook', async (req: Request, res: Response) => {
   try {
+    const topic = String(
+      (req.query as any)?.type ||
+        (req.query as any)?.topic ||
+        (req.body as any)?.type ||
+        (req.body as any)?.topic ||
+        '',
+    ).toLowerCase();
+
+    // Solo procesamos webhooks de payment.
+    // merchant_order puede llegar primero y trae un id que NO es paymentId.
+    if (topic && topic !== 'payment') {
+      dbg(debugPayments, '[MP webhook] ignored non-payment topic', {
+        topic,
+        safeQuery: req.query && Object.keys(req.query).length ? '[query present]' : '[no query]',
+        safeBody: req.body && Object.keys(req.body).length ? '[body present]' : '[no body]',
+      });
+
+      return res.status(200).send('ok_ignored_non_payment');
+    }
+
     const paymentId =
       (req.query as any)?.['data.id'] ||
-      (req.query as any)?.id ||
       (req.body as any)?.data?.id ||
+      (req.query as any)?.id ||
       (req.body as any)?.id;
 
-    if (!paymentId) return res.status(200).send('ok_no_payment_id');
+    if (!paymentId) {
+      dbg(debugPayments, '[MP webhook] missing paymentId', {
+        topic,
+        safeQuery: req.query && Object.keys(req.query).length ? '[query present]' : '[no query]',
+        safeBody: req.body && Object.keys(req.body).length ? '[body present]' : '[no body]',
+      });
+
+      return res.status(200).send('ok_no_payment_id');
+    }
 
     dbg(debugPayments, '[MP webhook] incoming', {
+      topic: topic || null,
       paymentId: String(paymentId),
       safeQuery: req.query && Object.keys(req.query).length ? '[query present]' : '[no query]',
       safeBody: req.body && Object.keys(req.body).length ? '[body present]' : '[no body]',
@@ -155,7 +184,6 @@ router.post('/mercadopago/webhook', async (req: Request, res: Response) => {
     return res.status(200).send('ok');
   } catch (e) {
     dbg(debugPayments, 'POST /subscriptions/mercadopago/webhook error', errMsg(e));
-    // Mercado Pago espera 200 para no reintentar eternamente
     return res.status(200).send('ok');
   }
 });

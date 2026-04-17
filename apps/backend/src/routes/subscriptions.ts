@@ -138,7 +138,10 @@ router.post('/pay/link', auth, async (req: AuthReq, res: Response) => {
 router.post('/mercadopago/webhook', async (req: Request, res: Response) => {
   try {
     const paymentId =
-      (req.query as any)?.['data.id'] || (req.body as any)?.data?.id || (req.body as any)?.id;
+      (req.query as any)?.['data.id'] ||
+      (req.query as any)?.id ||
+      (req.body as any)?.data?.id ||
+      (req.body as any)?.id;
 
     if (!paymentId) return res.status(200).send('ok_no_payment_id');
 
@@ -180,9 +183,8 @@ router.get('/return/success', async (req: Request, res: Response) => {
 
     // 🔁 Robustez: si viene paymentId, intentamos sincronizar igual que el webhook
     if (paymentId) {
-      await handleMercadoPagoWebhook(paymentId);
+      await handleMercadoPagoWebhook(paymentId, externalRef);
     }
-
     const deepLink = process.env.PUBLIC_APP_DEEPLINK || 'solucity://subscription';
 
     return res.status(200).setHeader('Content-Type', 'text/html; charset=utf-8')

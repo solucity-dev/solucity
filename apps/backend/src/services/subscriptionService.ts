@@ -199,27 +199,43 @@ export async function createSubscriptionPaymentLink(userId: string) {
   };
 }
 
-export async function handleMercadoPagoWebhook(paymentId: string) {
+export async function handleMercadoPagoWebhook(
+  paymentId: string,
+  externalReferenceFallback?: string,
+) {
   const payment = await mpGetPayment(paymentId);
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('[MP payment]', {
-      paymentId,
-      status: payment?.status,
-      external_reference: payment?.external_reference,
-      preference_id: payment?.preference_id,
-    });
-  }
+  console.log('[MP payment]', {
+    paymentId,
+    status: payment?.status,
+    external_reference: payment?.external_reference,
+    preference_id: payment?.preference_id,
+  });
 
   const status = String(payment?.status || '');
-  const externalRef = String(payment?.external_reference || '');
+  const externalRef = String(payment?.external_reference || externalReferenceFallback || '');
 
-  if (!externalRef) return;
+  console.log('[MP webhook resolved refs]', {
+    paymentId,
+    status,
+    externalRef,
+    externalReferenceFallback: externalReferenceFallback || null,
+  });
+  if (!externalRef) {
+    console.warn('MP webhook sin external_reference', { paymentId });
+    return;
+  }
 
   const found = await getUserIdFromSubscription(externalRef);
   const sub = found.sub;
   const userId = found.userId;
 
-  if (!sub) return;
+  if (!sub) {
+    console.warn('[MP webhook] subscription not found for externalRef', {
+      paymentId,
+      externalRef,
+    });
+    return;
+  }
 
   await prisma.subscription.update({
     where: { id: sub.id },
@@ -245,9 +261,7 @@ export async function handleMercadoPagoWebhook(paymentId: string) {
   });
 
   if (mark.count === 0) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[MP webhook] deduped paymentId=', paymentId, 'subId=', sub.id);
-    }
+    console.log('[MP webhook] deduped paymentId=', paymentId, 'subId=', sub.id);
     return;
   }
 

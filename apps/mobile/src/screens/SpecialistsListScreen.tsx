@@ -18,6 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import AppLogo from '../components/AppLogo';
+import { trackEvent } from '../lib/analytics';
 import { API_URL, api } from '../lib/api';
 import { resolveUploadUrl } from '../lib/resolveUploadUrl';
 
@@ -416,6 +417,42 @@ export default function SpecialistsListScreen() {
     return label.length ? label : 'Tarifa';
   };
 
+  const handleRequestSpecialist = (s: SpecialistRow) => {
+    trackEvent({
+      eventType: 'tap_hire_from_card',
+      screen: 'SpecialistsListScreen',
+      categorySlug: String(dbCategorySlug ?? ''),
+      specialistId: String(s.specialistId),
+      metadata: {
+        source: 'specialists_list_card',
+        specialistName: s.businessName?.trim() || s.name || 'Especialista',
+        title: params?.title ?? null,
+        visitPrice: s.visitPrice ?? null,
+        pricingLabel: s.pricingLabel ?? null,
+      },
+    });
+
+    nav.navigate('CreateOrder', {
+      specialistId: s.specialistId,
+      specialistName: s.businessName?.trim() || s.name || 'Especialista',
+      visitPrice: s.visitPrice ?? null,
+      pricingLabel: s.pricingLabel ?? null,
+      categorySlug: dbCategorySlug,
+    } as any);
+  };
+
+  useEffect(() => {
+    trackEvent({
+      eventType: 'view_specialists_list',
+      screen: 'SpecialistsListScreen',
+      categorySlug: String(dbCategorySlug ?? ''),
+      metadata: {
+        title: params?.title ?? null,
+        source: 'specialists_list_screen',
+      },
+    });
+  }, [dbCategorySlug, params?.title]);
+
   const FiltersBar = () => (
     <View style={{ paddingHorizontal: 16 }}>
       <View style={styles.filtersRow}>
@@ -583,21 +620,43 @@ export default function SpecialistsListScreen() {
             ) : null}
           </View>
 
-          <Pressable
-            style={({ pressed }) => [styles.ctaWide, pressed && { opacity: 0.9 }]}
-            onPress={() => {
-              const coords = lastCoords.current;
-              nav.navigate('SpecialistProfile', {
-                id: s.specialistId,
-                lat: coords?.lat,
-                lng: coords?.lng,
-                categorySlug: dbCategorySlug,
-              } as any);
-            }}
-          >
-            <Text style={styles.ctaWideText}>Ver perfil</Text>
-            <Ionicons name="chevron-forward" size={18} color="#06494F" />
-          </Pressable>
+          <View style={styles.cardActionsRow}>
+            <Pressable
+              style={({ pressed }) => [styles.ctaPrimaryHalf, pressed && { opacity: 0.9 }]}
+              onPress={() => handleRequestSpecialist(s)}
+            >
+              <Ionicons name="briefcase-outline" size={18} color="#06494F" />
+              <Text style={styles.ctaPrimaryHalfText}>Solicitar ahora</Text>
+            </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [styles.ctaSecondaryHalf, pressed && { opacity: 0.9 }]}
+              onPress={() => {
+                trackEvent({
+                  eventType: 'view_specialist_profile',
+                  screen: 'SpecialistsListScreen',
+                  categorySlug: String(dbCategorySlug ?? ''),
+                  specialistId: String(s.specialistId),
+                  metadata: {
+                    source: 'specialists_list',
+                    title: params?.title ?? null,
+                    specialistName: s.businessName?.trim() || s.name || 'Especialista',
+                  },
+                });
+
+                const coords = lastCoords.current;
+                nav.navigate('SpecialistProfile', {
+                  id: s.specialistId,
+                  lat: coords?.lat,
+                  lng: coords?.lng,
+                  categorySlug: dbCategorySlug,
+                } as any);
+              }}
+            >
+              <Text style={styles.ctaSecondaryHalfText}>Ver perfil</Text>
+              <Ionicons name="chevron-forward" size={18} color="#E9FEFF" />
+            </Pressable>
+          </View>
         </View>
       </View>
     );
@@ -818,4 +877,47 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   ctaWideText: { color: '#06494F', fontWeight: '900', fontSize: 14 },
+  cardActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+
+  ctaPrimaryHalf: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 14,
+    backgroundColor: '#FFD166',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+  },
+
+  ctaPrimaryHalfText: {
+    color: '#06494F',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+
+  ctaSecondaryHalf: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(233,254,255,0.22)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+  },
+
+  ctaSecondaryHalfText: {
+    color: '#E9FEFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
 });

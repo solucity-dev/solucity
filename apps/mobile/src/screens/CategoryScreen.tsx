@@ -2,11 +2,13 @@
 import { Ionicons, MaterialCommunityIcons as MDI } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useEffect } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import AppLogo from '../components/AppLogo';
 import { ROOT_CATEGORY_MAP, SUBCATEGORIES } from '../data/categories';
+import { trackEvent } from '../lib/analytics';
 
 import type { CategorySlug, HomeStackParamList, RootCategoryId } from '../types';
 import type { RouteProp } from '@react-navigation/native';
@@ -27,6 +29,21 @@ export default function CategoryScreen() {
 
   const cat = ROOT_CATEGORY_MAP[rootId];
   const rubros = (SUBCATEGORIES[rootId] || []) as SubcatItem[];
+
+  useEffect(() => {
+    if (!cat) return;
+
+    trackEvent({
+      eventType: 'view_specialists_list',
+      screen: 'CategoryScreen',
+      categorySlug: String(rootId),
+      metadata: {
+        categoryTitle: cat.title,
+        rubrosCount: rubros.length,
+        source: 'category_screen',
+      },
+    });
+  }, [cat, rootId, rubros.length]);
 
   // 🔒 Fallback seguro si llega algo inesperado
   if (!cat) {
@@ -114,12 +131,24 @@ export default function CategoryScreen() {
             {rubros.map((r: SubcatItem) => (
               <Pressable
                 key={r.id}
-                onPress={() =>
+                onPress={() => {
+                  trackEvent({
+                    eventType: 'view_category',
+                    screen: 'CategoryScreen',
+                    categorySlug: String(r.id),
+                    metadata: {
+                      rootCategoryId: String(rootId),
+                      rootCategoryTitle: cat.title,
+                      subcategoryTitle: r.title,
+                      source: 'category_screen',
+                    },
+                  });
+
                   nav.navigate('SpecialistsList', {
                     categorySlug: r.id as CategorySlug,
                     title: r.title,
-                  })
-                }
+                  });
+                }}
                 style={({ pressed }) => [
                   styles.card,
                   pressed && { transform: [{ scale: 0.98 }], opacity: 0.98 },

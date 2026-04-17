@@ -35,6 +35,7 @@ model User {
   specialist       SpecialistProfile?
   termsAcceptances TermsAcceptance[]
   preferences      UserPreference?
+  analyticsEvents  AnalyticsEvent[]
 
   @@index([status])
   @@index([lastLoginAt])
@@ -214,6 +215,30 @@ model OrderEvent {
   order     ServiceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId, createdAt])
+}
+
+model AnalyticsEvent {
+  id            String        @id @default(cuid())
+  userId        String?
+  sessionId     String?
+  eventType     String
+  screen        String?
+  platform      String?
+  categorySlug  String?
+  specialistId  String?
+  orderId       String?
+  metadata      Json?
+  createdAt     DateTime      @default(now())
+
+  user          User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([eventType, createdAt])
+  @@index([userId, createdAt])
+  @@index([sessionId, createdAt])
+  @@index([categorySlug, createdAt])
+  @@index([specialistId, createdAt])
+  @@index([orderId, createdAt])
+  @@index([createdAt])
 }
 
 model Rating {

@@ -21,6 +21,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { ensureInquiryChat } from '../api/chat';
 import { useAuth } from '../auth/AuthProvider';
+import { trackEvent } from '../lib/analytics';
 import { API_URL, api } from '../lib/api';
 import { resolveUploadUrl } from '../lib/resolveUploadUrl';
 
@@ -218,6 +219,18 @@ export default function SpecialistProfileScreen() {
     };
   }, [specialistId]);
 
+  useEffect(() => {
+    trackEvent({
+      eventType: 'view_specialist_profile',
+      screen: 'SpecialistProfileScreen',
+      categorySlug: String(routeCategorySlug ?? ''),
+      specialistId: String(specialistId),
+      metadata: {
+        source: 'specialist_profile_screen',
+      },
+    });
+  }, [routeCategorySlug, specialistId]);
+
   // ✅ unificamos: usar resolveUploadUrl como en la lista
   const resolvedAvatarUrl = useMemo(
     () => resolveUploadUrl(spec?.avatarUrl ?? null),
@@ -302,6 +315,18 @@ export default function SpecialistProfileScreen() {
       setStartingInquiry(true);
 
       const thread = await ensureInquiryChat(spec.id, routeCategorySlug ?? null);
+
+      trackEvent({
+        eventType: 'inquiry_created',
+        screen: 'SpecialistProfileScreen',
+        categorySlug: String(routeCategorySlug ?? ''),
+        specialistId: String(spec.id),
+        metadata: {
+          source: 'specialist_profile',
+          specialistName: spec.businessName?.trim() || spec.name || 'Especialista',
+          threadType: 'INQUIRY',
+        },
+      });
 
       const parent = (nav as any).getParent?.();
 
@@ -651,6 +676,19 @@ export default function SpecialistProfileScreen() {
 
                   const categorySlug = routeCategorySlug;
 
+                  trackEvent({
+                    eventType: 'tap_hire_from_profile',
+                    screen: 'SpecialistProfileScreen',
+                    categorySlug: String(categorySlug ?? ''),
+                    specialistId: String(spec.id),
+                    metadata: {
+                      source: 'specialist_profile_cta',
+                      specialistName: spec.businessName?.trim() || spec.name || 'Especialista',
+                      visitPrice: spec.visitPrice ?? null,
+                      pricingLabel: spec.pricingLabel ?? null,
+                    },
+                  });
+
                   nav.navigate('CreateOrder', {
                     specialistId: spec.id,
                     specialistName: spec.businessName?.trim() || spec.name,
@@ -660,7 +698,7 @@ export default function SpecialistProfileScreen() {
                   } as any);
                 }}
               >
-                <Text style={styles.mainCtaText}>Solicitar contratación</Text>
+                <Text style={styles.mainCtaText}>Solicitar ahora</Text>
               </Pressable>
             </View>
           </View>

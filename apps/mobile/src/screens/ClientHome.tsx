@@ -21,6 +21,7 @@ import { useAuth } from '../auth/AuthProvider';
 import AppLogo from '../components/AppLogo';
 import { ROOT_CATEGORIES, ROOT_CATEGORY_MAP, SUBCATEGORIES } from '../data/categories';
 import { useSyncCustomerLocationOnMount } from '../hooks/useSyncCustomerLocationOnMount';
+import { trackEvent } from '../lib/analytics';
 import { useNotifications } from '../notifications/NotificationsProvider';
 
 import type { HomeStackParamList } from '../types';
@@ -122,6 +123,16 @@ export default function ClientHome() {
   }, [switchingMode, switchFade, switchScale]);
 
   useSyncCustomerLocationOnMount();
+
+  useEffect(() => {
+    trackEvent({
+      eventType: 'view_home',
+      screen: 'ClientHome',
+      metadata: {
+        mode: 'client',
+      },
+    });
+  }, []);
 
   const searchableServices = useMemo<SearchItem[]>(() => {
     return Object.entries(SUBCATEGORIES).flatMap(([categoryId, subs]) =>
@@ -374,7 +385,19 @@ export default function ClientHome() {
             {ROOT_CATEGORIES.map((c) => (
               <Pressable
                 key={c.id}
-                onPress={() => nav.navigate('Category', { id: c.id })}
+                onPress={() => {
+                  trackEvent({
+                    eventType: 'view_category',
+                    screen: 'ClientHome',
+                    categorySlug: String(c.id),
+                    metadata: {
+                      categoryTitle: c.title,
+                      source: 'client_home',
+                    },
+                  });
+
+                  nav.navigate('Category', { id: c.id });
+                }}
                 style={({ pressed }) => [
                   styles.card,
                   pressed && { transform: [{ scale: 0.98 }], opacity: 0.98 },

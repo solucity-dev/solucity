@@ -405,6 +405,86 @@ export default function Dashboard() {
               onClick={() => navigate('/app/inquiries?filter=withoutMessages')}
             />
           </Section>
+
+                    {/* 📈 Analytics */}
+          <Section title="Analytics" subtitle="Actividad y embudo básico de conversión">
+            <MetricCard
+              label="DAU"
+              value={data.analytics?.dau ?? 0}
+              hint="Eventos de hoy"
+              tone="neutral"
+            />
+
+            <MetricCard
+              label="WAU"
+              value={data.analytics?.wau ?? 0}
+              hint="Eventos últimos 7 días"
+              tone="neutral"
+            />
+
+            <MetricCard
+              label="App open"
+              value={data.analytics?.funnel?.appOpen ?? 0}
+              hint="Aperturas registradas"
+              tone="neutral"
+            />
+
+            <MetricCard
+              label="Home"
+              value={data.analytics?.funnel?.viewHome ?? 0}
+              hint="Vistas de inicio"
+              tone="neutral"
+            />
+
+            <MetricCard
+              label="Categoría"
+              value={data.analytics?.funnel?.viewCategory ?? 0}
+              hint="Ingreso a categorías"
+              tone="neutral"
+            />
+
+            <MetricCard
+              label="Lista especialistas"
+              value={data.analytics?.funnel?.viewSpecialistsList ?? 0}
+              hint="Vistas de resultados"
+              tone="neutral"
+            />
+
+            <MetricCard
+              label="Perfil especialista"
+              value={data.analytics?.funnel?.viewSpecialistProfile ?? 0}
+              hint="Perfiles abiertos"
+              tone="good"
+            />
+
+            <MetricCard
+              label="Contratar desde card"
+              value={data.analytics?.funnel?.tapHireFromCard ?? 0}
+              hint="Click desde listado"
+              tone="warn"
+            />
+
+            <MetricCard
+              label="Contratar desde perfil"
+              value={data.analytics?.funnel?.tapHireFromProfile ?? 0}
+              hint="Click desde detalle"
+              tone="warn"
+            />
+
+            <MetricCard
+              label="Consulta creada"
+              value={data.analytics?.funnel?.inquiryCreated ?? 0}
+              hint="Lead generado"
+              tone="good"
+            />
+
+            <MetricCard
+              label="Orden creada"
+              value={data.analytics?.funnel?.orderCreated ?? 0}
+              hint="Conversión final"
+              tone="good"
+            />
+          </Section>
         </div>
       )}
     </div>

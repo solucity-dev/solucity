@@ -16,6 +16,7 @@ import { ensureQaUsers } from './lib/qa';
 import { ensureUploadsStructure, uploadsRoot } from './lib/uploads';
 import { errorHandler, notFound } from './middlewares/error';
 import adminRoutes from './routes/admin.routes';
+import analyticsRouter from './routes/analytics.routes';
 import { categories } from './routes/categories';
 import { chat } from './routes/chat.routes';
 import { customerAvatarRouter } from './routes/customerAvatar.routes';
@@ -163,6 +164,7 @@ app.get('/db', async (_req: Request, res: Response) => {
 
 /** ================== Módulos API ================== **/
 app.use('/categories', categories);
+app.use('/analytics', analyticsRouter);
 app.use('/specialists', specialistsRoutes); // KYC + perfil + specialties
 app.use('/specialists', specialistAvatarRoutes);
 app.use('/customers/me/avatar', customerAvatarRouter);

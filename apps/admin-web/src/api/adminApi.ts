@@ -36,6 +36,21 @@ export type AdminMetrics = {
     backgroundPending: number;
     certificationsPending: number;
   };
+  analytics: {
+    dau: number;
+    wau: number;
+    funnel: {
+      appOpen: number;
+      viewHome: number;
+      viewCategory: number;
+      viewSpecialistsList: number;
+      viewSpecialistProfile: number;
+      tapHireFromCard: number;
+      tapHireFromProfile: number;
+      inquiryCreated: number;
+      orderCreated: number;
+    };
+  };
 };
 
 export async function getAdminMetrics() {

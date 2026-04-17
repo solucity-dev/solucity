@@ -24,6 +24,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import AppLogo from '../components/AppLogo';
 import { LOCALITIES_CORDOBA } from '../data/localitiesCordoba';
+import { trackEvent } from '../lib/analytics';
 import { api } from '../lib/api';
 
 import type { HomeStackParamList } from '../types';
@@ -583,6 +584,23 @@ export default function CreateOrderScreen() {
       });
 
       if (__DEV__) console.log(`✅ [CreateOrder][${reqId}] POST /orders ok ->`, safeJson(r.data));
+
+      trackEvent({
+        eventType: 'order_created',
+        screen: 'CreateOrderScreen',
+        categorySlug: String(categorySlug ?? categorySlugParam ?? ''),
+        specialistId: String(specialistIdParam ?? ''),
+        orderId: String(r.data?.order?.id ?? r.data?.id ?? ''),
+        metadata: {
+          source: 'create_order',
+          specialistName: specialistNameParam ?? 'el especialista',
+          serviceId: serviceId ?? null,
+          placeMode,
+          urgent,
+          mode,
+          attachmentsCount: attachments.length,
+        },
+      });
 
       Alert.alert(
         '¡Pedido enviado!',

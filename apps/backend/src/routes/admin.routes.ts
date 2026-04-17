@@ -463,6 +463,14 @@ adminRouter.get('/metrics', async (_req, res) => {
       },
     };
 
+    const now = new Date();
+
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
     const results = await Promise.allSettled([
       prisma.user.count({ where: activeRealUserWhere }),
       prisma.user.count({ where: { role: 'ADMIN', ...activeRealUserWhere } }),
@@ -533,6 +541,45 @@ adminRouter.get('/metrics', async (_req, res) => {
           messages: { none: {} },
         },
       }),
+
+      // ✅ Analytics
+      prisma.analyticsEvent.count({
+        where: {
+          createdAt: { gte: startOfToday },
+        },
+      }),
+      prisma.analyticsEvent.count({
+        where: {
+          createdAt: { gte: sevenDaysAgo },
+        },
+      }),
+      prisma.analyticsEvent.count({
+        where: { eventType: 'app_open' },
+      }),
+      prisma.analyticsEvent.count({
+        where: { eventType: 'view_home' },
+      }),
+      prisma.analyticsEvent.count({
+        where: { eventType: 'view_category' },
+      }),
+      prisma.analyticsEvent.count({
+        where: { eventType: 'view_specialists_list' },
+      }),
+      prisma.analyticsEvent.count({
+        where: { eventType: 'view_specialist_profile' },
+      }),
+      prisma.analyticsEvent.count({
+        where: { eventType: 'tap_hire_from_card' },
+      }),
+      prisma.analyticsEvent.count({
+        where: { eventType: 'tap_hire_from_profile' },
+      }),
+      prisma.analyticsEvent.count({
+        where: { eventType: 'inquiry_created' },
+      }),
+      prisma.analyticsEvent.count({
+        where: { eventType: 'order_created' },
+      }),
     ]);
 
     const getValue = <T>(index: number, fallback: T): T =>
@@ -567,7 +614,18 @@ adminRouter.get('/metrics', async (_req, res) => {
     const inquiriesWithMessages = getValue(14, 0);
     const inquiriesWithoutMessages = getValue(15, 0);
 
-    const now = new Date();
+    const analyticsDau = getValue(16, 0);
+    const analyticsWau = getValue(17, 0);
+    const appOpen = getValue(18, 0);
+    const viewHome = getValue(19, 0);
+    const viewCategory = getValue(20, 0);
+    const viewSpecialistsList = getValue(21, 0);
+    const viewSpecialistProfile = getValue(22, 0);
+    const tapHireFromCard = getValue(23, 0);
+    const tapHireFromProfile = getValue(24, 0);
+    const inquiryCreated = getValue(25, 0);
+    const analyticsOrderCreated = getValue(26, 0);
+
     const subs = { TRIALING: 0, ACTIVE: 0, PAST_DUE: 0, CANCELLED: 0 };
 
     for (const sub of subsByStatus) {
@@ -628,6 +686,21 @@ adminRouter.get('/metrics', async (_req, res) => {
         kycPending,
         certificationsPending,
         backgroundPending,
+      },
+      analytics: {
+        dau: analyticsDau,
+        wau: analyticsWau,
+        funnel: {
+          appOpen,
+          viewHome,
+          viewCategory,
+          viewSpecialistsList,
+          viewSpecialistProfile,
+          tapHireFromCard,
+          tapHireFromProfile,
+          inquiryCreated,
+          orderCreated: analyticsOrderCreated,
+        },
       },
     });
   } catch (error) {

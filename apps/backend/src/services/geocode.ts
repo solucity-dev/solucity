@@ -112,6 +112,31 @@ export async function geocodeAddress(rawAddress: string): Promise<GeocodeResult 
     return result;
   }
 
+  // 2) Fallback tolerante:
+  // si no encontramos Córdoba explícito en el texto, tomamos el primer hit válido
+  // y dejamos que specialists.routes.ts valide luego si esas coords caen dentro de Córdoba.
+  const validAnyHit = data.find((hit) => isValidLatLng(hit));
+
+  if (validAnyHit) {
+    const result = {
+      formatted: String(validAnyHit.display_name ?? '').trim(),
+      lat: Number(validAnyHit.lat),
+      lng: Number(validAnyHit.lon),
+      placeId: validAnyHit.place_id ? String(validAnyHit.place_id) : null,
+    };
+
+    logGeocode('selected_fallback_hit', result);
+    return result;
+  }
+
+  logGeocode('no_valid_hit', {
+    rawAddress: q,
+    query,
+    candidatesChecked: data.length,
+  });
+
+  return null;
+
   // 2) Si no encontramos Córdoba explícito, no aceptamos nada
   //    para no romper la restricción geográfica actual.
   logGeocode('no_valid_cordoba_hit', {

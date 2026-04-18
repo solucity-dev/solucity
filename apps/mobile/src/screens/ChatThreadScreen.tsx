@@ -2,9 +2,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   BackHandler,
   FlatList,
   KeyboardAvoidingView,
@@ -21,9 +22,10 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { useChat } from '@/hooks/useChat';
+import { api } from '@/lib/api';
 
 type RouteT = RouteProp<ChatStackParamList, 'ChatThread'>;
-type Nav = NativeStackNavigationProp<ChatStackParamList, 'ChatThread'>;
+type Nav = NativeStackNavigationProp<ChatStackParamList>;
 
 export default function ChatThreadScreen() {
   const insets = useSafeAreaInsets();
@@ -32,6 +34,7 @@ export default function ChatThreadScreen() {
   const { mode } = useAuth();
 
   const [text, setText] = useState('');
+  const [customerUserId, setCustomerUserId] = useState<string | null>(null);
 
   const { messages, messagesQuery, sendMessage, sending } = useChat(
     params.orderId
@@ -137,6 +140,50 @@ export default function ChatThreadScreen() {
     });
   }, [nav, params.specialistId, params.categorySlug, businessName, params.title]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function resolveClientUserId() {
+      try {
+        if (!params.orderId || mode !== 'specialist') {
+          if (!cancelled) setCustomerUserId(null);
+          return;
+        }
+
+        const res = await api.get(`/orders/${params.orderId}`);
+        const uid = res?.data?.order?.customer?.userId ?? null;
+
+        if (!cancelled) {
+          setCustomerUserId(uid);
+        }
+      } catch {
+        if (!cancelled) {
+          setCustomerUserId(null);
+        }
+      }
+    }
+
+    resolveClientUserId();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [params.orderId, mode]);
+
+  const handleOpenClientProfile = useCallback(() => {
+    if (mode !== 'specialist') return;
+
+    if (!customerUserId) {
+      Alert.alert('Perfil no disponible', 'No se pudo identificar al cliente.');
+      return;
+    }
+
+    nav.navigate('ClientProfile', {
+      userId: customerUserId,
+      name: title ?? 'Cliente',
+    });
+  }, [mode, customerUserId, nav, title]);
+
   // ✅ Interceptamos el botón físico de "back" en Android
   useFocusEffect(
     useCallback(() => {
@@ -176,18 +223,40 @@ export default function ChatThreadScreen() {
           </Pressable>
 
           {/* Título centrado */}
-          <Text
+          <Pressable
+            onPress={mode === 'specialist' && customerUserId ? handleOpenClientProfile : undefined}
+            disabled={mode !== 'specialist' || !customerUserId}
             style={{
               flex: 1,
-              textAlign: 'center',
-              color: '#E9FEFF',
-              fontSize: 18,
-              fontWeight: '800',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
-            numberOfLines={1}
           >
-            {title}
-          </Text>
+            <Text
+              style={{
+                textAlign: 'center',
+                color: '#E9FEFF',
+                fontSize: 18,
+                fontWeight: '800',
+              }}
+              numberOfLines={1}
+            >
+              {title}
+            </Text>
+
+            {mode === 'specialist' && customerUserId ? (
+              <Text
+                style={{
+                  marginTop: 2,
+                  fontSize: 12,
+                  color: '#D7F3F6',
+                  fontWeight: '600',
+                }}
+              >
+                Ver perfil del cliente
+              </Text>
+            ) : null}
+          </Pressable>
 
           {/* Botón "Ver pedido" si hay orderId, sino un spacer para equilibrar */}
           {params.orderId ? (

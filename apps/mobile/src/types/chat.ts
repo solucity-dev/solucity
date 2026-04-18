@@ -61,4 +61,8 @@ export type ChatStackParamList = {
     specialistId?: string;
     categorySlug?: string | null;
   };
+  ClientProfile: {
+    userId: string;
+    name?: string | null;
+  };
 };

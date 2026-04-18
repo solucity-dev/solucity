@@ -2350,7 +2350,10 @@ orders.get('/:id', auth, async (req, res) => {
       customer: order.customer
         ? {
             id: order.customer.id,
-            name: `${order.customer.user.name ?? 'Cliente'}`,
+            userId: order.customer.userId,
+            name: `${order.customer.user.name ?? 'Cliente'} ${
+              order.customer.user.surname ?? ''
+            }`.trim(),
             avatarUrl: customerAvatar?.avatarUrl ?? null,
           }
         : null,

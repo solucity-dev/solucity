@@ -46,6 +46,7 @@ type OrderDetail = {
 
   customer: {
     id: string;
+    userId?: string | null;
     name: string | null;
     avatarUrl?: string | null;
   } | null;
@@ -958,6 +959,21 @@ export default function OrderDetailScreen() {
     nav.navigate('ChatThread', params);
   };
 
+  const handleOpenClientProfile = useCallback(() => {
+    if (!isSpecialist) return;
+
+    const customerUserId = data?.customer?.userId ?? null;
+    if (!customerUserId) {
+      Alert.alert('Perfil no disponible', 'No se pudo identificar al cliente.');
+      return;
+    }
+
+    nav.navigate('ClientProfile', {
+      userId: customerUserId,
+      name: data?.customer?.name ?? 'Cliente',
+    });
+  }, [isSpecialist, data?.customer?.userId, data?.customer?.name, nav]);
+
   const handleOpenWhatsapp = async () => {
     if (!data?.whatsappContact?.available || !data?.whatsappContact?.phone) {
       Alert.alert(
@@ -1093,6 +1109,24 @@ export default function OrderDetailScreen() {
 
               <View style={{ marginLeft: 12 }}>
                 <Text style={styles.clientName}>{headerName}</Text>
+
+                {isSpecialist && data?.customer?.userId ? (
+                  <Pressable
+                    onPress={handleOpenClientProfile}
+                    style={{
+                      alignSelf: 'flex-start',
+                      marginTop: 6,
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: 999,
+                      backgroundColor: 'rgba(255,255,255,0.18)',
+                    }}
+                  >
+                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+                      Ver perfil del cliente
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
             </View>
 

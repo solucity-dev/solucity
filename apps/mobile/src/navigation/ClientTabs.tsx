@@ -10,6 +10,7 @@ import ChatStack from './ChatStack';
 import AgendaScreen from '../screens/AgendaScreen';
 import CategoryScreen from '../screens/CategoryScreen';
 import ClientHome from '../screens/ClientHome';
+import ClientProfileScreen from '../screens/ClientProfileScreen';
 import CreateOrderScreen from '../screens/CreateOrderScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import OrderDetailScreen from '../screens/OrderDetailScreen';
@@ -49,6 +50,7 @@ function ClientAgendaStackNavigator() {
     <AgendaStack.Navigator screenOptions={{ headerShown: false }}>
       <AgendaStack.Screen name="AgendaMain" component={AgendaScreen} />
       <AgendaStack.Screen name="OrderDetail" component={OrderDetailScreen} />
+      <AgendaStack.Screen name="ClientProfile" component={ClientProfileScreen} />
     </AgendaStack.Navigator>
   );
 }

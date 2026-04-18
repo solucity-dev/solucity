@@ -5,6 +5,7 @@ import type { ChatStackParamList } from '@/types';
 
 import ChatListScreen from '@/screens/ChatListScreen';
 import ChatThreadScreen from '@/screens/ChatThreadScreen';
+import ClientProfileScreen from '@/screens/ClientProfileScreen';
 
 const Stack = createNativeStackNavigator<ChatStackParamList>();
 
@@ -13,6 +14,7 @@ export default function ChatStack() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ChatList" component={ChatListScreen} />
       <Stack.Screen name="ChatThread" component={ChatThreadScreen} />
+      <Stack.Screen name="ClientProfile" component={ClientProfileScreen} />
     </Stack.Navigator>
   );
 }

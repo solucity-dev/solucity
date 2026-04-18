@@ -184,7 +184,19 @@ export type HomeStackParamList = {
 /** Stack interno de la pestaña Chat */
 export type ChatStackParamList = {
   ChatList: undefined;
-  ChatThread: { threadId?: string; orderId?: string; title?: string };
+  ChatThread: {
+    threadId?: string;
+    orderId?: string;
+    title?: string;
+    businessName?: string | null;
+    threadType?: 'ORDER' | 'INQUIRY';
+    specialistId?: string;
+    categorySlug?: string | null;
+  };
+  ClientProfile: {
+    userId: string;
+    name?: string | null;
+  };
 };
 
 /** Stack interno del Home del especialista */
@@ -215,5 +227,10 @@ export type AgendaStackParamList = {
     id: string;
     role?: 'customer' | 'specialist';
     from?: 'notifications' | 'agenda';
+  };
+
+  ClientProfile: {
+    userId: string;
+    name?: string | null;
   };
 };

@@ -19,6 +19,7 @@ import adminRoutes from './routes/admin.routes';
 import analyticsRouter from './routes/analytics.routes';
 import { categories } from './routes/categories';
 import { chat } from './routes/chat.routes';
+import clients from './routes/clients.routes';
 import { customerAvatarRouter } from './routes/customerAvatar.routes';
 import { customerLocationRoutes } from './routes/customerLocation.routes';
 import customersMeRoutes from './routes/customersMe.routes';
@@ -168,6 +169,7 @@ app.use('/analytics', analyticsRouter);
 app.use('/specialists', specialistsRoutes); // KYC + perfil + specialties
 app.use('/specialists', specialistAvatarRoutes);
 app.use('/customers/me/avatar', customerAvatarRouter);
+app.use('/clients', clients);
 app.use('/orders', orders);
 app.use('/auth', registerRoutes);
 app.use('/auth', meRoutes);

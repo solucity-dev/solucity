@@ -2067,9 +2067,11 @@ export default function SpecialistHome() {
       const alreadySelected = prev.includes(mode);
       const next = alreadySelected ? prev.filter((m) => m !== mode) : [...prev, mode];
 
-      const isAddingHome = mode === 'HOME' && !alreadySelected;
+      const normalized = normalizeModes(next);
+      const nextRequiresBackgroundCheck =
+        normalized.includes('HOME') && !normalized.includes('OFFICE');
 
-      if (isAddingHome && !backgroundCheckApproved) {
+      if (nextRequiresBackgroundCheck && !backgroundCheckApproved) {
         setHomeBgRequiredModalOpen(true);
       }
 
@@ -2823,7 +2825,7 @@ export default function SpecialistHome() {
               <Ionicons name="chevron-forward" size={18} color="#E9FEFF" />
             </Pressable>
 
-            {serviceModes.includes('HOME') ? (
+            {requiresBackgroundCheck ? (
               <View style={{ marginTop: 10 }}>
                 <Pressable
                   onPress={() => {
@@ -3358,7 +3360,7 @@ export default function SpecialistHome() {
               </Pressable>
             </View>
 
-            {serviceModes.includes('HOME') && !backgroundCheckApproved ? (
+            {requiresBackgroundCheck && !backgroundCheckApproved ? (
               <View
                 style={{
                   marginTop: 10,

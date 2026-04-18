@@ -431,9 +431,9 @@ function requiresBackgroundCheckByServiceModes(input: any): boolean {
   // sin modalidades explícitas => seguimos exigiendo antecedentes
   if (normalized.length === 0) return true;
 
-  // ✅ nueva regla:
-  // solo requiere antecedentes si ofrece HOME
-  return normalized.includes('HOME');
+  // ✅ nueva regla deseada:
+  // requiere antecedentes solo si ofrece HOME y NO ofrece OFFICE
+  return normalized.includes('HOME') && !normalized.includes('OFFICE');
 }
 
 async function getMaxAllowedRadiusKmForUser(userId: string): Promise<number> {

@@ -1953,9 +1953,11 @@ async function geocodeOfficeAddressWithFallback(params: {
   let geo: any = null;
   let usedFormatted = originalFormatted;
 
-  dbg(debugSpecialists, '[geocodeOfficeAddressWithFallback] candidates', Array.from(candidates));
+  const prioritizedCandidates = Array.from(candidates).slice(0, 4);
 
-  for (const candidate of Array.from(candidates)) {
+  dbg(debugSpecialists, '[geocodeOfficeAddressWithFallback] candidates', prioritizedCandidates);
+
+  for (const candidate of prioritizedCandidates) {
     try {
       dbg(debugSpecialists, '[geocodeOfficeAddressWithFallback] trying candidate', {
         candidate,

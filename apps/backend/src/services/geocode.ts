@@ -71,7 +71,16 @@ export async function geocodeAddress(rawAddress: string): Promise<GeocodeResult 
 
   logGeocode('response_status', { ok: r.ok, status: r.status });
 
-  if (!r.ok) return null;
+  if (!r.ok) {
+    const txt = await r.text().catch(() => '');
+    console.warn('[geocode] non_ok_response', {
+      rawAddress: q,
+      query,
+      status: r.status,
+      body: txt.slice(0, 300),
+    });
+    return null;
+  }
 
   const data: any[] = await r.json();
 
@@ -93,6 +102,10 @@ export async function geocodeAddress(rawAddress: string): Promise<GeocodeResult 
   });
 
   if (!Array.isArray(data) || data.length === 0) {
+    console.warn('[geocode] no_results', {
+      rawAddress: q,
+      query,
+    });
     logGeocode('no_results');
     return null;
   }
